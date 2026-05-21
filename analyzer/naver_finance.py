@@ -74,42 +74,66 @@ def get_stock_price(stock_code: str) -> dict:
         return {}
     try:
         url = f"https://finance.naver.com/item/main.naver?code={stock_code}"
-        headers = {"User-Agent": "Mozilla/5.0"}
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        }
         resp = requests.get(url, headers=headers, timeout=10)
         resp.encoding = "euc-kr"
 
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        price_el = soup.select_one("#chart_area .today .blind")
-        if not price_el:
-            price_el = soup.select_one("p.no_today em span.blind")
+        # 현재가 추출 (여러 셀렉터 시도)
+        price = ""
+        for sel in ["#chart_area .today .blind", "p.no_today em span.blind", ".today .p11 em"]:
+            el = soup.select_one(sel)
+            if el:
+                price = el.get_text(strip=True).replace(",", "")
+                break
 
+        if not price:
+            return {"code": stock_code, "price": "", "change": "", "change_pct": ""}
+
+        # 등락 추출
+        change = ""
+        rate = ""
         change_el = soup.select_one("#chart_area .today .change .blind")
         rate_el = soup.select_one("#chart_area .today .rate .blind")
 
-        if price_el:
-            price = price_el.get_text(strip=True).replace(",", "")
-            change = change_el.get_text(strip=True).replace(",", "") if change_el else ""
-            rate = rate_el.get_text(strip=True) if rate_el else ""
+        if change_el:
+            change = change_el.get_text(strip=True).replace(",", "")
+        if rate_el:
+            rate = rate_el.get_text(strip=True)
 
-            # 상승/하락 방향 확인
-            up_el = soup.select_one("#chart_area .today .ico_up")
-            down_el = soup.select_one("#chart_area .today .ico_down")
+        # 상승/하락 방향 확인 (아이콘 클래스)
+        up_el = soup.select_one("#chart_area .today .ico_up, .blind + .up")
+        down_el = soup.select_one("#chart_area .today .ico_down, .blind + .dn")
 
-            if up_el:
-                change = "+" + change
-                rate = "+" + rate
-            elif down_el:
-                change = "-" + change
-                rate = "-" + rate
+        if up_el or (change and not change.startswith(("-", "+"))):
+            # 방향성 확인이 어려우면 HTML 텍스트에서 추출
+            today_block = soup.select_one("#chart_area .today")
+            if today_block:
+                today_text = today_block.get_text()
+                if "상승" in today_text or "ico_up" in str(today_block):
+                    change = "+" + change if not change.startswith("+") else change
+                    rate = "+" + rate if rate and not rate.startswith("+") else rate
+                elif "하락" in today_text or "ico_down" in str(today_block):
+                    change = "-" + change if not change.startswith("-") else change
+                    rate = "-" + rate if rate and not rate.startswith("-") else rate
+        elif up_el:
+            change = "+" + change if not change.startswith("+") else change
+            rate = "+" + rate if rate and not rate.startswith("+") else rate
+        elif down_el:
+            change = "-" + change if not change.startswith("-") else change
+            rate = "-" + rate if rate and not rate.startswith("-") else rate
 
-            return {
-                "code": stock_code,
-                "price": price,
-                "change": change,
-                "change_pct": rate,
-            }
+        return {
+            "code": stock_code,
+            "price": price,
+            "change": change,
+            "change_pct": rate,
+        }
     except Exception as e:
         print(f"  [주가조회 실패] {stock_code}: {e}")
 

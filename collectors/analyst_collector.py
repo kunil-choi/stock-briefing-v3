@@ -41,14 +41,17 @@ def _build_link(href: str) -> str:
 def is_within_days(date_str: str, days: int = REPORT_DAYS) -> bool:
     try:
         date_str = date_str.strip().replace(" ", "")
-        if len(date_str) == 8:
+        # 형식 자동 감지: "26.05.21" 또는 "2026.05.21"
+        if len(date_str) == 8:  # "26.05.21" 형식
             report_date = datetime.strptime(date_str, "%y.%m.%d")
-        elif len(date_str) == 10:
+        elif len(date_str) == 10:  # "2026.05.21" 형식
             report_date = datetime.strptime(date_str, "%Y.%m.%d")
+        elif len(date_str) == 8 and "." not in date_str:  # "20260521" 형식
+            report_date = datetime.strptime(date_str, "%Y%m%d")
         else:
-            return True
+            return True  # 파싱 불가 시 포함
         cutoff = datetime.now() - timedelta(days=days)
-        return report_date >= cutoff.replace(hour=0, minute=0, second=0)
+        return report_date >= cutoff.replace(hour=0, minute=0, second=0, microsecond=0)
     except Exception:
         return True
 
@@ -90,10 +93,18 @@ def collect_naver_research() -> list:
                 broker = cols[2].get_text(strip=True)
                 analyst = cols[3].get_text(strip=True) if len(cols) > 3 else ""
 
-                # 목표주가 및 투자의견 추출 시도
+                # 목표주가 및 투자의견 추출 (컬럼 구조에 따라 다를 수 있음)
                 target_price = ""
                 opinion = ""
-                title_text = cols[1].get_text(strip=True)
+                # 컬럼 5번 (목표주가), 컬럼 6번 (투자의견) 시도
+                if len(cols) > 5:
+                    tp_text = cols[5].get_text(strip=True).replace(",", "").replace("원", "")
+                    if tp_text.isdigit() and len(tp_text) >= 4:
+                        target_price = tp_text
+                if len(cols) > 6:
+                    op_text = cols[6].get_text(strip=True)
+                    if op_text in ["매수", "BUY", "중립", "HOLD", "매도", "SELL", "비중확대", "시장수익률"]:
+                        opinion = op_text
                 
                 # 링크 추출
                 link_tag = cols[1].find("a")

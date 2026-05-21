@@ -400,6 +400,8 @@ def _build_full_html(
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI 주식 브리핑 v3 - {briefing_date}</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard-dynamic-subset.min.css">
 <style>
 {css}
 </style>
@@ -559,6 +561,7 @@ body {
     transition: all 0.2s;
 }
 .nav-tab:hover { background: #667eea20; border-color: #667eea60; }
+.nav-tab.active { background: #667eea30; border-color: #667eea; color: #fff; }
 .nav-admin {
     background: #1a1a2e;
     color: #ffd43b;
