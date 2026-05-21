@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 주식 브리핑 v3 - 2026-05-21</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont,
+    'Segoe UI', Roboto, sans-serif;
+    background: #0a0a14;
+    color: #e0e0e0;
+    line-height: 1.6;
+}
+.container { max-width: 860px; margin: 0 auto; padding: 20px; }
+
+/* 헤더 */
+.header {
+    text-align: center;
+    padding: 30px 0;
+    border-bottom: 1px solid #1e1e2e;
+    margin-bottom: 30px;
+}
+.header-top {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+}
+.header h1 { font-size: 1.8em; color: #fff; }
+.version-badge {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 0.6em;
+    vertical-align: middle;
+}
+.refresh-btn {
+    background: #1e1e2e;
+    color: #667eea;
+    border: 1px solid #667eea40;
+    padding: 6px 14px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.82em;
+}
+.header .date { color: #888; font-size: 0.95em; }
+.header .desc { color: #aaa; font-size: 0.85em; margin-top: 8px; }
+
+/* 네비게이션 탭 */
+.nav-tabs {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 16px;
+}
+.nav-tab {
+    display: inline-block;
+    background: #141420;
+    color: #a8b4ff;
+    padding: 6px 14px;
+    border-radius: 20px;
+    border: 1px solid #667eea30;
+    font-size: 0.82em;
+    text-decoration: none;
+    transition: all 0.2s;
+}
+.nav-tab:hover { background: #667eea20; }
+.nav-admin { background: #1a1a2e; color: #ffd43b; border-color: #ffd43b30; }
+
+/* 섹션 */
+.section { margin-bottom: 40px; }
+.section-title {
+    font-size: 1.3em;
+    color: #fff;
+    margin-bottom: 10px;
+    padding-left: 12px;
+    border-left: 3px solid #667eea;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.section-sub {
+    font-size: 0.7em;
+    color: #a8b4ff;
+    font-weight: 400;
+}
+.section-desc {
+    color: #888;
+    font-size: 0.84em;
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    background: #141420;
+    border-radius: 8px;
+    border-left: 2px solid #667eea40;
+}
+.section-notice {
+    color: #ffd43b;
+    font-size: 0.84em;
+    margin-bottom: 16px;
+    padding: 10px 14px;
+    background: #1a1a2e;
+    border-radius: 8px;
+    border-left: 2px solid #ffd43b60;
+}
+
+/* 시장 요약 */
+.summary-block {
+    background: #141420;
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 12px;
+    border: 1px solid #1e1e2e;
+}
+.summary-subtitle { color: #667eea; font-size: 1.05em; margin-bottom: 8px; }
+.summary-text { color: #ccc; font-size: 0.92em; }
+
+/* 종목 카드 */
+.stock-card {
+    background: #141420;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
+    border: 1px solid #1e1e2e;
+    transition: border-color 0.3s;
+}
+.stock-card:hover { border-color: #667eea60; }
+.analyst-card { border-left: 3px solid #51cf66; }
+.stock-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+.stock-rank {
+    background: #667eea;
+    color: #fff;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.85em;
+    font-weight: 700;
+}
+.stock-name { font-size: 1.15em; font-weight: 700; color: #fff; }
+.stock-signal {
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 0.8em;
+    font-weight: 600;
+}
+.signal-positive { background: #ff6b6b20; color: #ff6b6b; border: 1px solid #ff6b6b40; }
+.signal-negative { background: #339af020; color: #339af0; border: 1px solid #339af040; }
+.signal-neutral { background: #ffd43b20; color: #ffd43b; border: 1px solid #ffd43b40; }
+.krx-code {
+    background: #1e1e2e;
+    color: #888;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 0.75em;
+    font-family: monospace;
+    border: 1px solid #333;
+}
+.info-block { margin-bottom: 12px; }
+.info-block h4 {
+    color: #a8b4ff;
+    font-size: 0.9em;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.info-block p { color: #bbb; font-size: 0.88em; }
+.chart-icon {
+    color: #667eea; font-size: 0.85em; padding: 3px 8px;
+    border-radius: 6px; background: #667eea15;
+    border: 1px solid #667eea30; margin-left: 4px;
+    text-decoration: none; display: inline-block;
+}
+.chart-icon:hover { background: #667eea30; }
+.reasons-section { margin-top: 12px; }
+.reasons-section h4 { color: #a8b4ff; font-size: 0.9em; margin-bottom: 8px; }
+.reason-item {
+    background: #1a1a2e;
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 6px;
+}
+.reason-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+.reason-source { color: #667eea; font-size: 0.82em; font-weight: 600; }
+.source-link { color: #51cf66; font-size: 0.78em; text-decoration: none; }
+.reason-detail { color: #aaa; font-size: 0.85em; }
+
+/* 애널리스트 */
+.analyst-info {
+    display: flex; flex-wrap: wrap; gap: 8px;
+    margin-bottom: 12px; padding: 8px 12px;
+    background: #1a1a2e; border-radius: 8px;
+    border: 1px solid #51cf6630;
+}
+.analyst-broker { color: #51cf66; font-size: 0.85em; font-weight: 600; }
+.analyst-name { color: #a8b4ff; font-size: 0.82em; }
+.analyst-target { color: #ffd43b; font-size: 0.82em; font-weight: 600; }
+.analyst-opinion { padding: 2px 8px; border-radius: 6px; font-size: 0.8em; font-weight: 700; }
+.opinion-buy { background: #ff6b6b20; color: #ff6b6b; }
+.opinion-hold { background: #ffd43b20; color: #ffd43b; }
+
+/* 섹션 3 그룹 */
+.analyst-group { margin-bottom: 24px; }
+.analyst-group-title { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.group-badge { padding: 4px 12px; border-radius: 12px; font-size: 0.85em; font-weight: 700; }
+.badge-simultaneous { background: #ff6b6b20; color: #ff6b6b; border: 1px solid #ff6b6b40; }
+.badge-new-coverage { background: #51cf6620; color: #51cf66; border: 1px solid #51cf6640; }
+.badge-first-mention { background: #ffd43b20; color: #ffd43b; border: 1px solid #ffd43b40; }
+.group-desc { color: #888; font-size: 0.82em; }
+
+/* 투자전략 */
+.strategy-block {
+    background: linear-gradient(135deg, #141420, #1a1a2e);
+    border: 1px solid #667eea30;
+    border-radius: 12px;
+    padding: 20px;
+}
+.strategy-block p { color: #ccc; font-size: 0.92em; line-height: 1.8; }
+
+/* 아카이브 */
+.archive-link {
+    display: inline-block; color: #667eea; text-decoration: none;
+    padding: 4px 10px; margin: 3px; border: 1px solid #667eea30;
+    border-radius: 6px; font-size: 0.82em;
+}
+.archive-link:hover { background: #667eea20; }
+
+/* 면책 */
+.disclaimer {
+    text-align: center; color: #666; font-size: 0.78em;
+    margin-top: 30px; padding: 15px; border-top: 1px solid #1e1e2e;
+}
+
+@media (max-width: 600px) {
+    .container { padding: 12px; }
+    .header h1 { font-size: 1.4em; }
+    .nav-tabs { gap: 4px; }
+    .nav-tab { padding: 5px 10px; font-size: 0.78em; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+    <!-- 헤더 -->
+    <div class="header">
+        <div class="header-top">
+            <h1>&#x1F4CA; AI 주식 브리핑 <span class="version-badge">v3</span></h1>
+            <button class="refresh-btn" onclick="location.reload()">&#x1F504; 새로고침</button>
+        </div>
+        <div class="date">최종 업데이트: 2026년 05월 21일 06:00</div>
+        <div class="desc">유튜브·미디어 채널 언급 종목 | 증권TV 전문가 추천 | 증권사 애널리스트 리포트를 통합 분석합니다.</div>
+        <div class="nav-tabs">
+            <a href="#section-market" class="nav-tab">🌍 시장 요약</a>
+            <a href="#section1" class="nav-tab">📺 섹션 1</a>
+            <a href="#section2" class="nav-tab">📡 섹션 2</a>
+            <a href="#section3" class="nav-tab">📋 섹션 3</a>
+            <a href="#section-strategy" class="nav-tab">💰 투자전략</a>
+            <a href="admin/index.html" class="nav-tab nav-admin">⚙️ 관리자</a>
+        </div>
+    </div>
+
+    <!-- 시장 요약 -->
+    <div class="section" id="section-market">
+        <h2 class="section-title">&#x1F30D; 시장 요약</h2>
+        <div class="summary-block">
+            <h3 class="summary-subtitle">AI 반도체 슈퍼사이클 지속 — 엔비디아發 수혜 기대</h3>
+            <p class="summary-text">엔비디아가 2026년 1분기 실적을 시장 예상치 대비 크게 상회하며 발표했다. Blackwell 아키텍처 기반 H200·B200 GPU 수요가 폭발적으로 증가하는 가운데 SK하이닉스의 HBM3E 독점 공급 지위가 재확인됐다. 국내 AI 반도체 수혜주 전반에 대한 기대감이 높아지고 있으며 삼성전자의 HBM4 공급 경쟁 참여 여부도 주목된다. [출처: 매일경제, 한국경제]</p>
+        </div>
+        <div class="summary-block">
+            <h3 class="summary-subtitle">K-방산 수출 모멘텀 지속 — 유럽 재무장 수혜</h3>
+            <p class="summary-text">NATO 회원국들의 국방예산 증가와 함께 한국산 방산 장비 수출이 가속화되고 있다. 한화에어로스페이스의 천무 다연장로켓 및 K9 자주포 수출 협상이 복수의 유럽 국가와 동시에 진행 중인 것으로 알려졌다. LIG넥스원·현대로템·한국항공우주 등 방산 섹터 전반이 수혜를 받고 있다. [출처: 이데일리, 서울경제]</p>
+        </div>
+        <div class="summary-block">
+            <h3 class="summary-subtitle">원·달러 환율 안정 — 외국인 수급 개선 기대</h3>
+            <p class="summary-text">원·달러 환율이 1,380원대로 안정세를 보이면서 외국인 투자자들의 국내 증시 순매수세가 이어지고 있다. 미국 FOMC 의사록에서 연내 금리 인하 가능성이 재확인되면서 신흥국 증시 전반의 자금 유입 기대가 높아졌다. 코스피는 2,800선 안착을 시도하고 있으며 코스닥은 바이오·AI 섹터 중심으로 강세를 보이고 있다. [출처: 머니투데이, 연합뉴스]</p>
+        </div>
+    </div>
+
+    <!-- 섹션 1: 유튜브·미디어 채널 언급 종목 -->
+    <div class="section" id="section1">
+        <h2 class="section-title">&#x1F4FA; 섹션 1 <span class="section-sub">유튜브·미디어 채널 언급 종목 분석</span></h2>
+        <div class="section-desc">
+            지난 24시간 이내 방송사·개인유튜브·증권사 채널에서 언급된 KOSPI/KOSDAQ 상장 종목을 분석합니다.
+            각 종목마다 출처 채널과 핵심 언급 내용을 표시합니다.
+        </div>
+
+        <!-- 종목 카드 1 -->
+        <div class="stock-card" data-krx="000660">
+            <div class="stock-header">
+                <span class="stock-rank">#1</span>
+                <span class="stock-name">SK하이닉스</span>
+                <span class="stock-signal signal-positive">긍정</span>
+                <span class="krx-code" data-code="000660">000660</span>
+            </div>
+            <div class="info-block">
+                <h4>&#x1F4CB; 종목 요약</h4>
+                <p>HBM(고대역폭메모리) 세계 1위 기업으로 엔비디아에 HBM3E를 독점 공급 중이다. AI 데이터센터 투자 확대에 따른 최대 수혜주로 꼽히며, Blackwell 세대로의 전환에서도 HBM 공급 우위를 유지하고 있다. 2026년 HBM4 전환 수요를 선점하기 위한 기술 투자가 진행 중이며, 마이크로소프트·구글·아마존 등 빅테크 데이터센터 투자 확대가 중장기 성장 동력이다.</p>
+            </div>
+            <div class="info-block">
+                <h4>&#x1F4C8; 최근 2주간 주가 흐름 (230,000원 ▲8,500 (+3.84%) | 2주 변동: +11.2%)
+                    <a href="https://finance.naver.com/item/main.naver?code=000660" target="_blank" class="chart-icon">&#x1F4C8; 차트보기</a>
+                </h4>
+                <p>엔비디아 실적 발표 후 동반 상승세를 보이며 52주 신고가에 근접했다. 외국인 투자자가 2주 연속 순매수를 기록하며 수급이 개선됐고, HBM3E 공급 가격 인상 소식이 긍정적으로 작용했다.</p>
+            </div>
+            <div class="info-block">
+                <h4>&#x1F680; 상승 촉매</h4>
+                <p>엔비디아 Blackwell GPU 수요 폭발 → HBM3E 추가 수주 기대. 2026년 HBM4 전환 시 가격 프리미엄 확대. 마이크로소프트·구글 데이터센터 투자 확대. 마이크론 대비 기술 우위 유지로 시장점유율 방어.</p>
+            </div>
+            <div class="info-block">
+                <h4>&#x26A0;&#xFE0F; 리스크</h4>
+                <p>삼성전자 HBM4 양산 성공 시 공급 경쟁 심화. 엔비디아 중국 수출 규제 강화 시 수요 감소 가능성. 고점 부근에서의 차익 실현 매도 압력. 글로벌 경기 둔화 시 IT 투자 축소 우려.</p>
+            </div>
+            <div class="reasons-section">
+                <h4>&#x1F4E2; 채널별 언급 내용</h4>
+                <div class="reason-item">
+                    <div class="reason-header">
+                        <span class="reason-source">[경제방송] 한국경제TV</span>
+                        <a href="https://www.youtube.com/@hkwowtv" target="_blank" class="source-link">&#x1F517; 바로보기</a>
+                    </div>
+                    <p class="reason-detail">엔비디아 실적 호조 후 국내 HBM 수혜주 집중 분석. SK하이닉스의 HBM3E 독점 공급 유지 및 HBM4 전환 전략을 핵심 투자 포인트로 제시.</p>
+                </div>
+                <div class="reason-item">
+                    <div class="reason-header">
+                        <span class="reason-source">[개인유튜브] 삼프로TV</span>
+                        <a href="https://www.youtube.com/@3protv" target="_blank" class="source-link">&#x1F517; 바로보기</a>
+                    </div>
+                    <p class="reason-detail">AI 반도체 슈퍼사이클이 2027년까지 지속될 것으로 전망. SK하이닉스를 국내 AI 수혜주 1순위로 지목하며 중장기 비중 확대 의견 제시.</p>
+                </div>
+                <div class="reason-item">
+                    <div class="reason-header">
+                        <span class="reason-source">[뉴스] 매일경제</span>
+                    </div>
+                    <p class="reason-detail">SK하이닉스, 엔비디아와 HBM3E 공급 계약 연장 및 물량 확대 협의 중. 2026년 하반기 HBM4 양산 계획 확인.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 종목 카드 2 -->
+        <div class="stock-card" data-krx="012450">
+            <div class="stock-header">
+                <span class="stock-rank">#2</span>
+                <span class="stock-name">한화에어로스페이스</span>
+                <span class="stock-signal signal-positive">긍정</span>
+                <span class="krx-code" data-code="012450">012450</span>
+            </div>
+            <div class="info-block">
+                <h4>&#x1F4CB; 종목 요약</h4>
+                <p>한국 최대 방산 기업으로 K9 자주포, 천무 다연장로켓, 항공엔진을 생산한다. 유럽 재무장 트렌드의 최대 수혜주로 꼽히며, 폴란드·루마니아·에스토니아 등 다수의 수출 계약이 진행 중이다. 방산 외에도 항공우주 사업과 한화오션(조선·해양 방산) 시너지도 주목받고 있다.</p>
+            </div>
+            <div class="info-block">
+                <h4>&#x1F4C8; 최근 2주간 주가 흐름 (420,000원 ▲15,000 (+3.70%) | 2주 변동: +8.5%)
+                    <a href="https://finance.naver.com/item/main.naver?code=012450" target="_blank" class="chart-icon">&#x1F4C8; 차트보기</a>
+                </h4>
+                <p>유럽 방산 예산 증액 뉴스에 반응하며 견조한 상승세를 유지하고 있다. 기관 투자자의 꾸준한 순매수세가 지속 중이며, K-방산 ETF 편입 비중 확대도 수급에 긍정적이다.</p>
+            </div>
+            <div class="info-block">
+                <h4>&#x1F680; 상승 촉매</h4>
+                <p>NATO 회원국 국방예산 GDP 2% 이상 확대 의무화 → K방산 수주 기회 확대. 폴란드 K9 자주포 2차 계약 및 천무 계약 체결 기대. 미국-유럽 방산 협력 다변화 수혜. 한화오션과의 해양 방산 시너지 본격화.</p>
+            </div>
+            <div class="info-block">
+                <h4>&#x26A0;&#xFE0F; 리스크</h4>
+                <p>지정학적 긴장 완화 시 방산 섹터 전반 조정 가능성. 수출 협상 지연 및 계약 취소 리스크. 원자재 가격 상승에 따른 마진 압박. 주가 급등에 따른 밸류에이션 부담.</p>
+            </div>
+            <div class="reasons-section">
+                <h4>&#x1F4E2; 채널별 언급 내용</h4>
+                <div class="reason-item">
+                    <div class="reason-header">
+                        <span class="reason-source">[경제방송] 매일경제TV</span>
+                        <a href="https://www.youtube.com/@MKeconomy_TV" target="_blank" class="source-link">&#x1F517; 바로보기</a>
+                    </div>
+                    <p class="reason-detail">K-방산 수출 전략 특집 방송에서 한화에어로스페이스를 핵심 수혜주로 집중 조명. 유럽 복수 국가와 동시 진행 중인 K9·천무 수출 협상 현황 분석.</p>
+                </div>
+                <div class="reason-item">
+                    <div class="reason-header">
+                        <span class="reason-source">[증권사] 삼성증권 Samsung POP</span>
+                        <a href="https://www.youtube.com/@samsungpop" target="_blank" class="source-link">&#x1F517; 바로보기</a>
+                    </div>
+                    <p class="reason-detail">한화에어로스페이스 목표주가 500,000원 유지. 2026년 방산 수주잔고 역대 최고치 경신 전망 및 중장기 성장 가시성 높다는 분석.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 섹션 2: 증권TV 전문가 출연 추천 종목 -->
+    <div class="section" id="section2">
+        <h2 class="section-title">&#x1F4E1; 섹션 2 <span class="section-sub">증권TV 전문가 출연 추천 종목</span></h2>
+        <div class="section-notice">
+            ※ 본 섹션은 전일(2026년 05월 20일) 방송 기준입니다.
+            오전 방송이 오후에 업로드되는 특성을 고려하여 전일 방송 데이터를 기준으로 합니다.
+        </div>
+
+        <div class="stock-card" data-krx="005380">
+            <div class="stock-header">
+                <span class="stock-rank">#1</span>
+                <span class="stock-name">현대차</span>
+                <span class="stock-signal signal-positive">긍정</span>
+                <span class="krx-code" data-code="005380">005380</span>
+            </div>
+            <div class="info-block">
+                <h4>&#x1F4CB; 종목 요약</h4>
+                <p>국내 최대 완성차 기업으로 전기차·수소차·피지컬AI·로봇 사업을 영위한다. 보스턴다이내믹스를 통한 휴머노이드 로봇 사업이 새로운 성장 동력으로 부각됐다. PER 7배대의 저평가 구간에서 전문가들의 중장기 매수 의견이 집중되고 있다.</p>
+            </div>
+            <div class="info-block">
+                <h4>&#x1F4C8; 최근 2주간 주가 흐름 (285,000원 ▲5,500 (+1.97%) | 2주 변동: +6.3%)
+                    <a href="https://finance.naver.com/item/main.naver?code=005380" target="_blank" class="chart-icon">&#x1F4C8; 차트보기</a>
+                </h4>
+                <p>피지컬AI 및 로봇 사업 부각으로 재평가 움직임이 나타나고 있다. 자동차 섹터 대비 낮은 PER이 밸류에이션 매력으로 작용하며 기관 매수세가 유입 중이다.</p>
+            </div>
+            <div class="info-block">
+                <h4>&#x1F680; 상승 촉매</h4>
+                <p>보스턴다이내믹스 아틀라스 휴머노이드 로봇 양산 준비 본격화. HMG 퓨처콤플렉스 R&D 메카 구축. 미국·유럽 전기차 시장 점유율 확대. PER 7배대 극단적 저평가 구간.</p>
+            </div>
+            <div class="info-block">
+                <h4>&#x26A0;&#xFE0F; 리스크</h4>
+                <p>전기차 캐즘 지속 가능성. 글로벌 관세 분쟁 재발 우려. 로봇 사업 수익화까지 장기 시간 소요.</p>
+            </div>
+            <div class="reasons-section">
+                <h4>&#x1F4E2; 채널별 언급 내용</h4>
+                <div class="reason-item">
+                    <div class="reason-header">
+                        <span class="reason-source">[증권TV] 한국경제TV (염승환 이사)</span>
+                        <a href="https://www.youtube.com/@hkwowtv" target="_blank" class="source-link">&#x1F517; 바로보기</a>
+                    </div>
+                    <p class="reason-detail">현대차를 피지컬AI 시대의 핵심 수혜주로 제시. PER 7배대 저평가 구간에서 장기 보유를 권고. 보스턴다이내믹스 로봇 사업의 2027~2028년 수익화 전망.</p>
+                </div>
+                <div class="reason-item">
+                    <div class="reason-header">
+                        <span class="reason-source">[증권TV] 매일경제TV (박세익 본부장)</span>
+                        <a href="https://www.youtube.com/@MKeconomy_TV" target="_blank" class="source-link">&#x1F517; 바로보기</a>
+                    </div>
+                    <p class="reason-detail">글로벌 완성차 중 로봇 생태계 수직계열화가 가장 진전된 기업으로 현대차 평가. 중장기 포트폴리오 5% 비중 유지 권고.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 섹션 3: 증권사 애널리스트 리포트 -->
+    <div class="section" id="section3">
+        <h2 class="section-title">&#x1F4C4; 섹션 3 <span class="section-sub">증권사 애널리스트 리포트 분석</span></h2>
+        <div class="section-desc">
+            지난 24시간 이내 발행된 국내 증권사 애널리스트 리포트를 수집하여 분류합니다.
+            섹션 1·2의 유튜브 언급 횟수 집계와 완전히 분리된 독립 섹션입니다.
+        </div>
+
+        <!-- ① 증권사 동시 언급 -->
+        <div class="analyst-group">
+            <div class="analyst-group-title">
+                <span class="group-badge badge-simultaneous">① 증권사 동시 언급</span>
+                <span class="group-desc">24시간 내 복수의 증권사가 동일 종목 리포트 발행</span>
+            </div>
+            <div class="stock-card analyst-card" data-krx="000660">
+                <div class="stock-header">
+                    <span class="stock-rank">#1</span>
+                    <span class="stock-name">SK하이닉스</span>
+                    <span class="stock-signal signal-positive">긍정</span>
+                    <span class="krx-code" data-code="000660">000660</span>
+                </div>
+                <div class="analyst-info">
+                    <span class="analyst-broker">NH투자증권 · KB증권 · 미래에셋증권</span>
+                    <span class="analyst-target">목표가: 280,000원</span>
+                    <span class="analyst-opinion opinion-buy">BUY</span>
+                </div>
+                <div class="info-block">
+                    <h4>&#x1F4CB; 종목 요약</h4>
+                    <p>HBM 세계 1위 기업으로 AI 반도체 수요 급증의 최대 수혜주. 3개 증권사가 동시에 목표주가를 상향하며 강력한 매수 의견을 제시했다. 2026년 HBM3E 공급 확대 및 HBM4 전환 수요 선점이 핵심 투자 근거다.</p>
+                </div>
+                <div class="info-block">
+                    <h4>&#x1F4C8; 최근 2주간 주가 흐름 (230,000원 ▲8,500 (+3.84%) | 2주 변동: +11.2%)
+                        <a href="https://finance.naver.com/item/main.naver?code=000660" target="_blank" class="chart-icon">&#x1F4C8; 차트보기</a>
+                    </h4>
+                    <p>엔비디아 실적 발표 후 국내 HBM 수혜주 전반이 강세를 보이며 SK하이닉스가 코스피 상승을 주도하고 있다.</p>
+                </div>
+                <div class="info-block">
+                    <h4>&#x1F680; 상승 촉매</h4>
+                    <p>HBM3E 공급 단가 인상. 2026년 HBM4 전환 수요 선점. 글로벌 AI 투자 사이클 장기화. 마이크론 대비 기술적 우위.</p>
+                </div>
+                <div class="info-block">
+                    <h4>&#x26A0;&#xFE0F; 리스크</h4>
+                    <p>삼성전자 HBM4 경쟁 심화. 메모리 업황 사이클 하강 위험. 고점 부근 밸류에이션 부담.</p>
+                </div>
+                <div class="reasons-section">
+                    <h4>&#x1F4E2; 채널별 언급 내용</h4>
+                    <div class="reason-item">
+                        <div class="reason-header">
+                            <span class="reason-source">[애널리스트] NH투자증권 (도현우)</span>
+                        </div>
+                        <p class="reason-detail">목표주가 270,000→280,000원 상향. HBM3E 공급가 인상으로 2026년 영업이익 추정치 15% 상향 조정. 투자의견 BUY 유지.</p>
+                    </div>
+                    <div class="reason-item">
+                        <div class="reason-header">
+                            <span class="reason-source">[애널리스트] KB증권 (김동원)</span>
+                        </div>
+                        <p class="reason-detail">엔비디아 Blackwell 수요 확인으로 HBM 성장 가시성 증가. 목표주가 280,000원으로 상향. BUY 유지.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ③ 신규 커버리지 -->
+        <div class="analyst-group">
+            <div class="analyst-group-title">
+                <span class="group-badge badge-new-coverage">③ 신규 커버리지</span>
+                <span class="group-desc">해당 증권사가 해당 종목 커버리지 최초 개시</span>
+            </div>
+            <div class="stock-card analyst-card" data-krx="403870">
+                <div class="stock-header">
+                    <span class="stock-rank">#1</span>
+                    <span class="stock-name">HPSP</span>
+                    <span class="stock-signal signal-positive">긍정</span>
+                    <span class="krx-code" data-code="403870">403870</span>
+                </div>
+                <div class="analyst-info">
+                    <span class="analyst-broker">신한투자증권</span>
+                    <span class="analyst-name">담당: 오강호</span>
+                    <span class="analyst-target">목표가: 85,000원</span>
+                    <span class="analyst-opinion opinion-buy">BUY</span>
+                </div>
+                <div class="info-block">
+                    <h4>&#x1F4CB; 종목 요약</h4>
+                    <p>반도체 고압 어닐링 장비 세계 1위 기업으로 삼성전자·SK하이닉스·TSMC에 장비를 공급한다. AI 반도체 미세화 공정에서 고압 어닐링의 중요성이 높아지며 주목받고 있다. 신한투자증권이 신규 커버리지를 개시하며 목표주가 85,000원에 BUY 의견을 제시했다.</p>
+                </div>
+                <div class="info-block">
+                    <h4>&#x1F4C8; 최근 2주간 주가 흐름 (68,000원 ▲3,200 (+4.94%) | 2주 변동: +15.3%)
+                        <a href="https://finance.naver.com/item/main.naver?code=403870" target="_blank" class="chart-icon">&#x1F4C8; 차트보기</a>
+                    </h4>
+                    <p>반도체 장비 섹터 강세에 동반 상승하며 신규 커버리지 개시 기대감이 선반영된 모습이다.</p>
+                </div>
+                <div class="info-block">
+                    <h4>&#x1F680; 상승 촉매</h4>
+                    <p>HBM·GAA 공정 확대로 고압 어닐링 장비 수요 급증. TSMC 2나노 공정 채택으로 해외 매출 다변화. 신규 커버리지 개시로 기관 투자자 인지도 상승 기대.</p>
+                </div>
+                <div class="info-block">
+                    <h4>&#x26A0;&#xFE0F; 리스크</h4>
+                    <p>반도체 투자 사이클 하강 시 장비 수주 감소. 중국 반도체 규제 강화로 수출 차질 가능성. 소형주 특성상 변동성 높음.</p>
+                </div>
+                <div class="reasons-section">
+                    <h4>&#x1F4E2; 채널별 언급 내용</h4>
+                    <div class="reason-item">
+                        <div class="reason-header">
+                            <span class="reason-source">[애널리스트] 신한투자증권 (오강호) — 신규 커버리지 개시</span>
+                        </div>
+                        <p class="reason-detail">신규 커버리지 개시. 고압 어닐링 장비 세계 독보적 1위 기업으로 AI 반도체 공정 고도화에 따른 최대 수혜주로 제시. 목표주가 85,000원, BUY.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 종합 투자전략 -->
+    <div class="section" id="section-strategy">
+        <h2 class="section-title">&#x1F4B0; 종합 투자전략</h2>
+        <div class="section-desc">섹션 1(유튜브·미디어) + 섹션 2(증권TV) + 섹션 3(애널리스트 리포트) 통합 교차 분석</div>
+        <div class="strategy-block">
+            <p>오늘의 핵심 전략은 <strong style="color:#ff6b6b;">AI 반도체 + K-방산 투 트랙 포트폴리오</strong> 구성이다.
+
+<br><br>
+<strong style="color:#a8b4ff;">① 교차 근거 — SK하이닉스 (섹션 1 + 섹션 3 동시 포착)</strong><br>
+SK하이닉스는 섹션 1 유튜브·방송 채널에서 가장 많이 언급된 종목이자, 섹션 3에서 NH투자증권·KB증권·미래에셋증권 3개 증권사가 동시에 목표주가를 상향한 종목이다. 유튜브 긍정 언급과 애널리스트 동시 매수 의견이 교차하는 이례적인 상황이므로 포트폴리오 비중 10~15% 수준의 핵심 보유를 권고한다. 단, 고점 부근이므로 장중 2~3% 조정 시 분할 매수 접근이 유효하다.
+
+<br><br>
+<strong style="color:#a8b4ff;">② 증권TV 전문가 추천 — 현대차 (섹션 2 단독 포착)</strong><br>
+현대차는 섹션 2 증권TV에서 복수의 전문가가 피지컬AI 재평가 종목으로 제시했다. PER 7배대 저평가 구간이 방어적 하방 지지선 역할을 한다는 논리가 설득력 있다. 전체 포트폴리오의 5~8% 수준으로 중장기 보유하되, 로봇 관련 뉴스 플로우를 모니터링하며 추가 비중 결정을 권고한다.
+
+<br><br>
+<strong style="color:#a8b4ff;">③ 신규 커버리지 주목 — HPSP (섹션 3 단독 포착)</strong><br>
+HPSP는 섹션 3에서 신한투자증권이 신규 커버리지를 개시한 종목으로, 고압 어닐링 장비 세계 1위라는 독보적 지위가 AI 반도체 수혜와 직결된다. 섹션 1·2에서는 아직 언급이 없는 소형주이므로 전체 포트폴리오의 3~5% 이내로 소규모 선취매를 고려할 수 있다.
+
+<br><br>
+<strong style="color:#ffd43b;">⚠️ 주요 리스크 요인:</strong> ① 미국 FOMC 금리 결정 변수, ② 엔비디아 중국 수출 규제 추가 강화 가능성, ③ 원·달러 환율 급변 시 외국인 매도 전환.</p>
+        </div>
+    </div>
+
+    <!-- 면책 고지 -->
+    <div class="disclaimer">
+        &#x26A0;&#xFE0F; 본 브리핑은 AI가 자동 생성한 참고 자료이며, 투자 권유가 아닙니다.<br>
+        투자 판단의 책임은 투자자 본인에게 있습니다.
+    </div>
+
+</div>
+
+<script>
+// 네비게이션 탭 활성화
+document.addEventListener('DOMContentLoaded', function() {
+    const tabs = document.querySelectorAll('.nav-tab');
+    const sections = document.querySelectorAll('.section[id]');
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const id = entry.target.id;
+                tabs.forEach(tab => {
+                    tab.classList.remove('active');
+                    if (tab.getAttribute('href') === '#' + id) {
+                        tab.classList.add('active');
+                    }
+                });
+            }
+        });
+    }, { threshold: 0.3 });
+
+    sections.forEach(s => observer.observe(s));
+});
+</script>
+</body>
+</html>

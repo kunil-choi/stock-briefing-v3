@@ -1,0 +1,14 @@
+# .gitignore
+.env
+*.pyc
+__pycache__/
+*.pyo
+data/raw_*.json
+data/stock_names_cache.json
+.DS_Store
+*.log
+venv/
+.venv/
+dist/
+build/
+*.egg-info/
