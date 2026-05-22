@@ -38,6 +38,10 @@
       border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: .95rem;
     }
     .form-group input:focus { outline: none; border-color: var(--accent); }
+    .form-group select {
+      width: 100%; padding: 10px 14px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: .95rem;
+    }
     .btn-login {
       width: 100%; padding: 12px; background: var(--accent);
       border: none; border-radius: 8px; color: #fff;
@@ -69,20 +73,21 @@
     .btn-secondary:hover { border-color: var(--accent); }
     .btn-sm { padding: 5px 12px; font-size: .8rem; }
 
-    /* Update 버튼 깜빡이기 */
+    /* ── 업데이트 버튼 깜빡이기 ── */
     @keyframes blink {
       0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(245,158,11,.7); }
       50%       { opacity: .5; box-shadow: 0 0 0 8px rgba(245,158,11,0); }
     }
     .btn-update-blink {
       background: var(--yellow) !important;
+      color: #000 !important;
       animation: blink 1.2s infinite;
     }
 
     /* ── Tabs ── */
     .tabs {
       display: flex; gap: 4px; padding: 16px 28px 0;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--border); background: var(--surface);
     }
     .tab-btn {
       padding: 10px 20px; background: none; border: none;
@@ -98,9 +103,7 @@
     .tab-panel.active { display: block; }
 
     /* ── Stats bar ── */
-    .stats-bar {
-      display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap;
-    }
+    .stats-bar { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
     .stat-card {
       background: var(--surface); border: 1px solid var(--border);
       border-radius: 10px; padding: 14px 22px; flex: 1; min-width: 130px;
@@ -123,8 +126,7 @@
     .channel-card.status-inactive { border-left: 4px solid var(--red); }
     .channel-card.status-pending  { border-left: 4px solid var(--yellow); }
 
-    .card-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
-    .card-rank   { font-size: .8rem; color: var(--muted); min-width: 28px; }
+    .card-header { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
     .card-name   { font-weight: 600; font-size: .98rem; flex: 1; }
     .badge {
       font-size: .72rem; padding: 3px 9px; border-radius: 20px; font-weight: 600;
@@ -134,9 +136,9 @@
     .badge-pending  { background: #451a03; color: var(--yellow); }
     .badge-verified { background: #1e3a5f; color: var(--accent); font-size: .7rem; padding: 2px 7px; }
 
-    .card-meta { font-size: .82rem; color: var(--muted); margin-bottom: 10px; line-height: 1.6; }
-    .card-meta span { display: inline-block; margin-right: 14px; }
-    .card-note { font-size: .8rem; color: #6b7fa0; margin-bottom: 12px; }
+    .card-meta { font-size: .82rem; color: var(--muted); margin-bottom: 10px; line-height: 1.8; }
+    .card-meta span { display: inline-block; margin-right: 12px; }
+    .card-note { font-size: .8rem; color: #6b7fa0; margin-bottom: 12px; font-style: italic; }
     .card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 
     /* ── Add channel panel ── */
@@ -187,17 +189,21 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Candidate diff panel ── */
+    /* ── Diff panel ── */
     .diff-section { margin-bottom: 24px; }
     .diff-section h4 { color: var(--muted); font-size: .85rem; margin-bottom: 10px; }
     .diff-item {
       background: var(--surface2); border: 1px solid var(--border);
       border-radius: 8px; padding: 12px 16px; margin-bottom: 8px;
-      display: flex; align-items: center; gap: 12px;
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
     }
     .diff-item .di-name { flex: 1; font-weight: 600; }
     .diff-item .di-subs { font-size: .82rem; color: var(--muted); }
     .diff-item .di-flag { font-size: .78rem; color: var(--red); }
+
+    /* ── URL 링크 ── */
+    .card-url a { font-size: .78rem; color: var(--accent); text-decoration: none; }
+    .card-url a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -208,13 +214,15 @@
     <h2>🔐 관리자 로그인</h2>
     <div class="form-group">
       <label>관리자 비밀번호</label>
-      <input type="password" id="inp-password" placeholder="비밀번호 입력">
+      <input type="password" id="inp-password" placeholder="비밀번호 입력"
+             onkeydown="if(event.key==='Enter') doLogin()">
     </div>
     <div class="form-group">
       <label>GitHub Personal Access Token
-        <span style="color:var(--muted);font-weight:400"> (repo 권한 필요)</span>
+        <span style="color:var(--muted);font-weight:400"> (repo 쓰기 권한 필요)</span>
       </label>
-      <input type="password" id="inp-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx">
+      <input type="password" id="inp-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+             onkeydown="if(event.key==='Enter') doLogin()">
     </div>
     <div class="form-group">
       <label>YouTube Data API Key
@@ -241,27 +249,34 @@
 
 <!-- ===================== TABS ===================== -->
 <div class="tabs">
-  <button class="tab-btn active" onclick="switchTab('general')">일반 유튜버 <span id="cnt-general"></span></button>
-  <button class="tab-btn" onclick="switchTab('broadcast')">경제방송 <span id="cnt-broadcast"></span></button>
-  <button class="tab-btn" onclick="switchTab('newspaper')">신문사 <span id="cnt-newspaper"></span></button>
-  <button class="tab-btn" onclick="switchTab('securities')">증권사 <span id="cnt-securities"></span></button>
-  <button class="tab-btn" onclick="switchTab('add')">➕ 채널 추가</button>
+  <button class="tab-btn active" onclick="switchTab('youtuber', this)">
+    일반 유튜버 <span id="cnt-youtuber"></span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('broadcast', this)">
+    경제방송/신문사 <span id="cnt-broadcast"></span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('securities', this)">
+    증권사 <span id="cnt-securities"></span>
+  </button>
+  <button class="tab-btn" onclick="switchTab('add', this)">
+    ➕ 채널 추가
+  </button>
 </div>
 
 <!-- ===================== MAIN CONTENT ===================== -->
 <div id="main-content">
 
-  <!-- General -->
-  <div class="tab-panel active" id="panel-general">
-    <div class="stats-bar" id="stats-general"></div>
+  <!-- 일반 유튜버 -->
+  <div class="tab-panel active" id="panel-youtuber">
+    <div class="stats-bar" id="stats-youtuber"></div>
     <div style="display:flex;gap:10px;margin-bottom:16px">
-      <button class="btn btn-secondary btn-sm" onclick="verifyAll('general')">🔍 전체 검증</button>
-      <button class="btn btn-secondary btn-sm" onclick="approveAll('general')">✅ 전체 승인</button>
+      <button class="btn btn-secondary btn-sm" onclick="verifyAll('youtuber')">🔍 전체 검증</button>
+      <button class="btn btn-secondary btn-sm" onclick="approveAll('youtuber')">✅ 전체 승인</button>
     </div>
-    <div class="channel-grid" id="grid-general"></div>
+    <div class="channel-grid" id="grid-youtuber"></div>
   </div>
 
-  <!-- Broadcast -->
+  <!-- 경제방송/신문사 -->
   <div class="tab-panel" id="panel-broadcast">
     <div class="stats-bar" id="stats-broadcast"></div>
     <div style="display:flex;gap:10px;margin-bottom:16px">
@@ -271,17 +286,7 @@
     <div class="channel-grid" id="grid-broadcast"></div>
   </div>
 
-  <!-- Newspaper -->
-  <div class="tab-panel" id="panel-newspaper">
-    <div class="stats-bar" id="stats-newspaper"></div>
-    <div style="display:flex;gap:10px;margin-bottom:16px">
-      <button class="btn btn-secondary btn-sm" onclick="verifyAll('newspaper')">🔍 전체 검증</button>
-      <button class="btn btn-secondary btn-sm" onclick="approveAll('newspaper')">✅ 전체 승인</button>
-    </div>
-    <div class="channel-grid" id="grid-newspaper"></div>
-  </div>
-
-  <!-- Securities -->
+  <!-- 증권사 -->
   <div class="tab-panel" id="panel-securities">
     <div class="stats-bar" id="stats-securities"></div>
     <div style="display:flex;gap:10px;margin-bottom:16px">
@@ -291,57 +296,73 @@
     <div class="channel-grid" id="grid-securities"></div>
   </div>
 
-  <!-- Add -->
+  <!-- 채널 추가 -->
   <div class="tab-panel" id="panel-add">
     <div class="add-form">
       <h3>채널 직접 추가</h3>
       <div class="form-group">
-        <label>유형</label>
-        <select id="add-type" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">
-          <option value="general">일반 유튜버</option>
-          <option value="broadcast">경제방송</option>
-          <option value="newspaper">신문사</option>
+        <label>추가할 섹션</label>
+        <select id="add-section">
+          <option value="youtuber">일반 유튜버</option>
+          <option value="broadcast">경제방송/신문사</option>
           <option value="securities">증권사</option>
         </select>
+      </div>
+      <div class="form-group">
+        <label>채널명 <span style="color:var(--red)">*</span></label>
+        <input type="text" id="add-name" placeholder="예: 슈카월드">
       </div>
       <div class="form-group">
         <label>채널 URL 또는 @핸들</label>
         <input type="text" id="add-url" placeholder="https://www.youtube.com/@example 또는 @example">
       </div>
       <div class="form-group">
-        <label>채널명</label>
-        <input type="text" id="add-name" placeholder="채널명">
+        <label>채널 ID (UC...)</label>
+        <input type="text" id="add-id" placeholder="UCxxxxxxxxxxxxxxxxxxxxxxxx (24자리)">
       </div>
       <div class="form-group">
         <label>메모 (선택)</label>
         <input type="text" id="add-note" placeholder="예: 미국주식 전문">
       </div>
-      <div style="display:flex;gap:10px;margin-top:8px">
-        <button class="btn btn-primary" onclick="fetchAndAddChannel()">🔍 API 조회 후 추가</button>
-        <button class="btn btn-secondary" onclick="manualAddChannel()">수동 추가</button>
+      <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="fetchAndAddChannel()">🔍 YouTube API 조회 후 추가</button>
+        <button class="btn btn-secondary" onclick="manualAddChannel()">✏️ 수동 추가</button>
       </div>
+      <p style="font-size:.8rem;color:var(--muted);margin-top:12px">
+        * YouTube API Key를 입력한 경우 채널 ID로 구독자 수를 자동 조회합니다.
+      </p>
     </div>
   </div>
 
-</div>
+</div><!-- /main-content -->
 
 <!-- ===================== EDIT MODAL ===================== -->
 <div class="modal-overlay" id="edit-modal">
   <div class="modal">
-    <h3>채널 편집</h3>
+    <h3>✏️ 채널 편집</h3>
     <input type="hidden" id="edit-section">
-    <input type="hidden" id="edit-index">
-    <div class="form-group"><label>채널명</label><input type="text" id="edit-name"></div>
-    <div class="form-group"><label>채널 ID</label><input type="text" id="edit-id" placeholder="UCxxxxxxxx"></div>
-    <div class="form-group"><label>URL</label><input type="text" id="edit-url"></div>
-    <div class="form-group"><label>구독자 수</label><input type="number" id="edit-subs"></div>
-    <div class="form-group"><label>메모</label><input type="text" id="edit-note"></div>
+    <input type="hidden" id="edit-key">
+    <div class="form-group"><label>채널명</label>
+      <input type="text" id="edit-name">
+    </div>
+    <div class="form-group"><label>채널 ID (UC...)</label>
+      <input type="text" id="edit-id" placeholder="UCxxxxxxxxxxxxxxxxxxxxxxxx">
+    </div>
+    <div class="form-group"><label>URL</label>
+      <input type="text" id="edit-url">
+    </div>
+    <div class="form-group"><label>구독자 수</label>
+      <input type="number" id="edit-subs">
+    </div>
+    <div class="form-group"><label>메모</label>
+      <input type="text" id="edit-note">
+    </div>
     <div class="form-group">
       <label>상태</label>
-      <select id="edit-status" style="width:100%;padding:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">
-        <option value="pending">pending</option>
-        <option value="active">active</option>
-        <option value="inactive">inactive</option>
+      <select id="edit-status">
+        <option value="pending">pending – 검토중</option>
+        <option value="active">active – 활성</option>
+        <option value="inactive">inactive – 비활성</option>
       </select>
     </div>
     <div class="modal-footer">
@@ -353,15 +374,18 @@
 
 <!-- ===================== UPDATE MODAL ===================== -->
 <div class="modal-overlay" id="update-modal">
-  <div class="modal" style="width:680px">
+  <div class="modal" style="width:660px;max-width:95vw">
     <h3>📋 채널 목록 업데이트</h3>
     <p style="color:var(--muted);font-size:.88rem;margin-bottom:20px">
       외부 후보 목록과 비교하고, YouTube API로 기존 채널을 재검증합니다.
     </p>
-    <div id="update-content"><div class="spinner"></div> 로딩 중...</div>
+    <div id="update-content">
+      <div class="spinner"></div> 로딩 중...
+    </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeUpdateModal()">닫기</button>
-      <button class="btn btn-success" id="btn-apply-update" style="display:none" onclick="applyUpdate()">적용 후 저장</button>
+      <button class="btn btn-success" id="btn-apply-update"
+              style="display:none" onclick="applyUpdate()">✅ 적용 후 저장</button>
     </div>
   </div>
 </div>
@@ -371,21 +395,25 @@
 
 <!-- ===================== SCRIPT ===================== -->
 <script>
-/* ── Constants ── */
-const REPO           = 'kunil-choi/stock-briefing-v3';
-const CHANNELS_FILE  = 'channels.json';
-const CANDIDATES_FILE= 'data/channel_candidates.json';
-const ADMIN_PASSWORD = 'stock2026!';
-const MIN_VIEWS      = 10000;
+/* ─────────────────────────────────────────────
+   상수 – GitHub Actions가 ADMIN_PASSWORD를
+   %%ADMIN_PASSWORD%% 플레이스홀더로 자동 치환합니다.
+───────────────────────────────────────────── */
+const REPO            = 'kunil-choi/stock-briefing-v3';
+const CHANNELS_FILE   = 'channels.json';
+const CANDIDATES_FILE = 'data/channel_candidates.json';
+const ADMIN_PASSWORD  = '%%ADMIN_PASSWORD%%';
+const MIN_VIEWS       = 10000;
 
-/* ── State ── */
-let githubToken = '';
-let ytApiKey    = '';
+/* ── 상태 ── */
+let githubToken  = '';
+let ytApiKey     = '';
 let channelsData = null;
 let channelsSha  = '';
-let updateBtnBlinked = false;
 
-/* ── Login / Logout ── */
+/* ════════════════════════════════════════════
+   로그인 / 로그아웃
+════════════════════════════════════════════ */
 function doLogin() {
   const pw    = document.getElementById('inp-password').value;
   const token = document.getElementById('inp-token').value.trim();
@@ -395,429 +423,579 @@ function doLogin() {
     document.getElementById('login-error').style.display = 'block';
     return;
   }
-  if (!token) { alert('GitHub Token을 입력해주세요.'); return; }
+  if (!token) {
+    alert('GitHub Personal Access Token을 입력해주세요.');
+    return;
+  }
 
   githubToken = token;
   ytApiKey    = ytkey;
   document.getElementById('login-overlay').style.display = 'none';
+  document.getElementById('login-error').style.display   = 'none';
+
   loadChannels();
-  checkMonthlyBlinkState();
+  checkMonthlyBlink();
 }
 
 function doLogout() {
-  githubToken = '';
+  githubToken  = '';
+  ytApiKey     = '';
   channelsData = null;
   document.getElementById('login-overlay').style.display = 'flex';
+  document.getElementById('inp-password').value = '';
 }
 
-/* ── Monthly blink logic ── */
-function checkMonthlyBlinkState() {
-  const today     = new Date();
-  const storageKey= `update_done_${today.getFullYear()}_${today.getMonth()+1}`;
-  const done      = localStorage.getItem(storageKey);
-  const isFirst   = today.getDate() === 1;
+/* ════════════════════════════════════════════
+   매월 1일 깜빡임 체크
+════════════════════════════════════════════ */
+function checkMonthlyBlink() {
+  const today      = new Date();
+  const storageKey = `update_done_${today.getFullYear()}_${today.getMonth() + 1}`;
+  const done       = localStorage.getItem(storageKey);
 
-  if (isFirst && !done) {
+  if (today.getDate() === 1 && !done) {
     document.getElementById('btn-update').classList.add('btn-update-blink');
-    updateBtnBlinked = true;
   }
 }
 
 function markUpdateDone() {
-  const today     = new Date();
-  const storageKey= `update_done_${today.getFullYear()}_${today.getMonth()+1}`;
+  const today      = new Date();
+  const storageKey = `update_done_${today.getFullYear()}_${today.getMonth() + 1}`;
   localStorage.setItem(storageKey, 'true');
   document.getElementById('btn-update').classList.remove('btn-update-blink');
 }
 
-/* ── GitHub API ── */
+/* ════════════════════════════════════════════
+   GitHub API
+════════════════════════════════════════════ */
 async function ghGet(path) {
-  const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`, {
-    headers: { Authorization: `token ${githubToken}`, Accept: 'application/vnd.github.v3+json' }
-  });
-  if (!res.ok) throw new Error(`GitHub GET 실패: ${res.status}`);
+  const res = await fetch(
+    `https://api.github.com/repos/${REPO}/contents/${path}`,
+    { headers: { Authorization: `token ${githubToken}`, Accept: 'application/vnd.github.v3+json' } }
+  );
+  if (!res.ok) throw new Error(`GitHub GET 실패 (${res.status}): ${path}`);
   return res.json();
 }
 
 async function ghPut(path, content, sha, message) {
-  const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`, {
-    method: 'PUT',
-    headers: { Authorization: `token ${githubToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      message, content: btoa(unescape(encodeURIComponent(content))), sha
-    })
-  });
-  if (!res.ok) throw new Error(`GitHub PUT 실패: ${res.status}`);
+  const res = await fetch(
+    `https://api.github.com/repos/${REPO}/contents/${path}`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `token ${githubToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message,
+        content: btoa(unescape(encodeURIComponent(content))),
+        sha,
+      }),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(`GitHub PUT 실패 (${res.status}): ${err.message || ''}`);
+  }
   return res.json();
 }
 
-/* ── Load channels.json ── */
+/* ════════════════════════════════════════════
+   channels.json 로드
+════════════════════════════════════════════ */
 async function loadChannels() {
   try {
     showToast('channels.json 로딩 중...', 'info');
-    const file = await ghGet(CHANNELS_FILE);
+    const file   = await ghGet(CHANNELS_FILE);
     channelsSha  = file.sha;
     channelsData = JSON.parse(decodeURIComponent(escape(atob(file.content))));
+
+    /* 구조 보정: 없는 섹션은 빈 객체로 초기화 */
+    ['broadcast', 'youtuber', 'securities'].forEach(s => {
+      if (!channelsData[s]) channelsData[s] = {};
+    });
+
     renderAll();
-    showToast('채널 데이터 로드 완료', 'success');
-  } catch(e) {
+    showToast('채널 데이터 로드 완료 ✅', 'success');
+  } catch (e) {
     showToast('로드 실패: ' + e.message, 'error');
   }
 }
 
-/* ── Render ── */
+/* ════════════════════════════════════════════
+   렌더링
+════════════════════════════════════════════ */
 function renderAll() {
-  renderSection('general',   channelsData.general_youtubers);
-  renderSection('broadcast', channelsData.media_channels.broadcast);
-  renderSection('newspaper', channelsData.media_channels.newspaper);
-  renderSection('securities',channelsData.media_channels.securities);
+  renderSection('youtuber');
+  renderSection('broadcast');
+  renderSection('securities');
 }
 
-function renderSection(section, list) {
-  const grid  = document.getElementById('grid-'+section);
-  const stats = document.getElementById('stats-'+section);
-  const cnt   = document.getElementById('cnt-'+section);
-  if (!grid || !list) return;
+function renderSection(section) {
+  const list   = channelsData[section] || {};
+  const keys   = Object.keys(list);
+  const grid   = document.getElementById('grid-'  + section);
+  const stats  = document.getElementById('stats-' + section);
+  const cnt    = document.getElementById('cnt-'   + section);
+  if (!grid) return;
 
-  const active   = list.filter(c=>c.status==='active').length;
-  const inactive = list.filter(c=>c.status==='inactive').length;
-  const pending  = list.filter(c=>c.status==='pending').length;
+  const active   = keys.filter(k => list[k].status === 'active').length;
+  const inactive = keys.filter(k => list[k].status === 'inactive').length;
+  const pending  = keys.filter(k => list[k].status === 'pending').length;
 
-  cnt.textContent   = `(${list.length})`;
-  stats.innerHTML   = `
-    <div class="stat-card"><div class="val">${list.length}</div><div class="lbl">전체 채널</div></div>
+  cnt.textContent = `(${keys.length})`;
+
+  stats.innerHTML = `
+    <div class="stat-card"><div class="val">${keys.length}</div><div class="lbl">전체 채널</div></div>
     <div class="stat-card"><div class="val" style="color:var(--green)">${active}</div><div class="lbl">활성</div></div>
     <div class="stat-card"><div class="val" style="color:var(--yellow)">${pending}</div><div class="lbl">검토중</div></div>
     <div class="stat-card"><div class="val" style="color:var(--red)">${inactive}</div><div class="lbl">비활성</div></div>
   `;
 
-  grid.innerHTML = list.map((ch, i) => `
-    <div class="channel-card status-${ch.status}">
-      <div class="card-header">
-        ${ch.rank ? `<span class="card-rank">#${ch.rank}</span>` : ''}
-        <span class="card-name">${ch.name}</span>
-        <span class="badge badge-${ch.status}">${statusLabel(ch.status)}</span>
-        ${ch.id_confirmed ? '<span class="badge badge-verified">ID✓</span>' : ''}
+  grid.innerHTML = keys.map(chName => {
+    const ch     = list[chName];
+    const status = ch.status || 'pending';
+    return `
+      <div class="channel-card status-${status}">
+        <div class="card-header">
+          <span class="card-name">${chName}</span>
+          <span class="badge badge-${status}">${statusLabel(status)}</span>
+          ${ch.id_confirmed ? '<span class="badge badge-verified">ID✓</span>' : ''}
+        </div>
+        <div class="card-meta">
+          <span>👥 ${fmtNum(ch.subscribers)}</span>
+          ${ch.max_views      ? `<span>👁️ ${fmtNum(ch.max_views)}</span>` : ''}
+          ${ch.verified_at    ? `<span style="font-size:.74rem">검증: ${ch.verified_at}</span>` : ''}
+        </div>
+        ${ch.url  ? `<div class="card-url"><a href="${ch.url}" target="_blank">🔗 ${ch.url.replace('https://www.youtube.com/','')}</a></div>` : ''}
+        ${ch.note ? `<div class="card-note">📝 ${ch.note}</div>` : ''}
+        <div class="card-actions" style="margin-top:10px">
+          ${status !== 'active'   ? `<button class="btn btn-success btn-sm" onclick="setStatus('${section}','${escKey(chName)}','active')">✅ 승인</button>` : ''}
+          ${status !== 'inactive' ? `<button class="btn btn-danger  btn-sm" onclick="setStatus('${section}','${escKey(chName)}','inactive')">🚫 비활성</button>` : ''}
+          <button class="btn btn-secondary btn-sm" onclick="verifyOne('${section}','${escKey(chName)}')">🔍 검증</button>
+          <button class="btn btn-secondary btn-sm" onclick="openEditModal('${section}','${escKey(chName)}')">✏️ 편집</button>
+          <button class="btn btn-danger    btn-sm" onclick="removeChannel('${section}','${escKey(chName)}')">🗑️</button>
+        </div>
       </div>
-      <div class="card-meta">
-        <span>👥 ${fmtSubs(ch.subscribers)}</span>
-        ${ch.max_views ? `<span>👁️ ${fmtSubs(ch.max_views)}</span>` : ''}
-        ${ch.verified_at ? `<span style="font-size:.75rem">검증: ${ch.verified_at}</span>` : ''}
-      </div>
-      ${ch.note ? `<div class="card-note">📝 ${ch.note}</div>` : ''}
-      <div class="card-actions">
-        ${ch.status !== 'active'   ? `<button class="btn btn-success btn-sm" onclick="setStatus('${section}',${i},'active')">✅ 승인</button>` : ''}
-        ${ch.status !== 'inactive' ? `<button class="btn btn-danger btn-sm"  onclick="setStatus('${section}',${i},'inactive')">🚫 비활성</button>` : ''}
-        <button class="btn btn-secondary btn-sm" onclick="verifyChannel('${section}',${i})">🔍 검증</button>
-        <button class="btn btn-secondary btn-sm" onclick="openEditModal('${section}',${i})">✏️ 편집</button>
-        <button class="btn btn-danger btn-sm"    onclick="removeChannel('${section}',${i})">🗑️</button>
-      </div>
-    </div>
-  `).join('');
+    `;
+  }).join('');
 }
 
 function statusLabel(s) {
-  return s==='active' ? '활성' : s==='inactive' ? '비활성' : '검토중';
+  return s === 'active' ? '활성' : s === 'inactive' ? '비활성' : '검토중';
 }
-function fmtSubs(n) {
-  if (!n) return '-';
-  if (n>=1000000) return (n/1000000).toFixed(1)+'M';
-  if (n>=1000)    return (n/1000).toFixed(0)+'K';
-  return n;
+function fmtNum(n) {
+  if (!n || n === 0) return '-';
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000)    return Math.round(n / 1000) + 'K';
+  return String(n);
 }
-
-/* ── Get / set list reference ── */
-function getList(section) {
-  if (section==='general')    return channelsData.general_youtubers;
-  if (section==='broadcast')  return channelsData.media_channels.broadcast;
-  if (section==='newspaper')  return channelsData.media_channels.newspaper;
-  if (section==='securities') return channelsData.media_channels.securities;
-  return [];
+/* 채널명에 따옴표 포함 시 escape */
+function escKey(k) {
+  return k.replace(/'/g, "\\'");
 }
 
-/* ── Status actions ── */
-function setStatus(section, i, status) {
-  getList(section)[i].status = status;
-  renderAll();
+/* ════════════════════════════════════════════
+   상태 변경 / 삭제
+════════════════════════════════════════════ */
+function setStatus(section, key, status) {
+  if (channelsData[section] && channelsData[section][key]) {
+    channelsData[section][key].status = status;
+    renderSection(section);
+  }
 }
+
 function approveAll(section) {
-  getList(section).forEach(ch => { if(ch.status==='pending') ch.status='active'; });
-  renderAll();
-  showToast('전체 승인 완료 (pending → active)', 'success');
-}
-function removeChannel(section, i) {
-  if (!confirm('채널을 삭제하시겠습니까?')) return;
-  getList(section).splice(i, 1);
-  renderAll();
-  showToast('채널 삭제됨', 'info');
+  const list = channelsData[section] || {};
+  Object.values(list).forEach(ch => { if (ch.status === 'pending') ch.status = 'active'; });
+  renderSection(section);
+  showToast(`${section} 전체 승인 완료`, 'success');
 }
 
-/* ── YouTube API verification ── */
-async function verifyChannel(section, i) {
-  const ch = getList(section)[i];
-  if (!ch.id) { showToast(`${ch.name}: 채널 ID가 없어 검증 불가`, 'error'); return; }
-  if (!ytApiKey) { showToast('YouTube API Key가 없습니다.', 'error'); return; }
+function removeChannel(section, key) {
+  if (!confirm(`"${key}" 채널을 삭제하시겠습니까?`)) return;
+  delete channelsData[section][key];
+  renderSection(section);
+  showToast(`채널 삭제됨: ${key}`, 'info');
+}
 
-  showToast(`${ch.name} 검증 중...`, 'info');
+/* ════════════════════════════════════════════
+   YouTube API 검증
+════════════════════════════════════════════ */
+async function verifyOne(section, chName) {
+  const ch = channelsData[section][chName];
+  if (!ch || !ch.id) {
+    showToast(`${chName}: 채널 ID가 없어 검증 불가 (편집에서 ID 입력 후 재시도)`, 'error');
+    return;
+  }
+  if (!ytApiKey) {
+    showToast('YouTube API Key가 없습니다. 로그아웃 후 재로그인 시 입력해 주세요.', 'error');
+    return;
+  }
+
+  showToast(`${chName} 검증 중...`, 'info');
   try {
-    // 구독자 수
-    const chRes  = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${ch.id}&key=${ytApiKey}`);
+    /* 구독자 수 조회 */
+    const chRes  = await fetch(
+      `https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${ch.id}&key=${ytApiKey}`
+    );
     const chData = await chRes.json();
     const stats  = chData.items?.[0]?.statistics;
     if (stats) {
-      ch.subscribers    = parseInt(stats.subscriberCount)||ch.subscribers;
+      ch.subscribers    = parseInt(stats.subscriberCount) || ch.subscribers;
       ch.id_confirmed   = true;
     }
 
-    // 최근 영상 최고 조회수
-    const vidRes  = await fetch(`https://www.googleapis.com/youtube/v3/search?part=id&channelId=${ch.id}&order=date&maxResults=10&type=video&key=${ytApiKey}`);
+    /* 최근 영상 최고 조회수 */
+    const vidRes  = await fetch(
+      `https://www.googleapis.com/youtube/v3/search?part=id&channelId=${ch.id}&order=date&maxResults=10&type=video&key=${ytApiKey}`
+    );
     const vidData = await vidRes.json();
-    const vids    = (vidData.items||[]).map(v=>v.id.videoId).filter(Boolean);
+    const vids    = (vidData.items || []).map(v => v.id?.videoId).filter(Boolean);
 
     if (vids.length > 0) {
-      const statsRes  = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${vids.join(',')}&key=${ytApiKey}`);
-      const statsData = await statsRes.json();
-      const views     = (statsData.items||[]).map(v=>parseInt(v.statistics?.viewCount||0));
-      ch.max_views    = Math.max(...views);
+      const stRes   = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${vids.join(',')}&key=${ytApiKey}`
+      );
+      const stData  = await stRes.json();
+      const views   = (stData.items || []).map(v => parseInt(v.statistics?.viewCount || 0));
+      ch.max_views  = Math.max(...views);
+
       if (ch.max_views < MIN_VIEWS) {
         ch.status = 'inactive';
-        showToast(`${ch.name}: 최고 조회수 ${fmtSubs(ch.max_views)} → 비활성 처리`, 'error');
+        showToast(`${chName}: 최고조회수 ${fmtNum(ch.max_views)} → 기준 미달, 비활성 처리`, 'error');
       } else {
-        showToast(`${ch.name}: 검증 완료 ✅ (최고조회수: ${fmtSubs(ch.max_views)})`, 'success');
+        showToast(`${chName}: 검증 완료 ✅ (최고조회수: ${fmtNum(ch.max_views)})`, 'success');
       }
+    } else {
+      showToast(`${chName}: 최근 영상 없음`, 'info');
     }
+
     ch.verified_at = new Date().toISOString().split('T')[0];
-    renderAll();
-  } catch(e) {
-    showToast(`검증 오류: ${e.message}`, 'error');
+    renderSection(section);
+
+  } catch (e) {
+    showToast(`검증 오류 (${chName}): ${e.message}`, 'error');
   }
 }
 
 async function verifyAll(section) {
-  const list = getList(section);
-  showToast(`${list.length}개 채널 순차 검증 시작...`, 'info');
-  for (let i=0; i<list.length; i++) {
-    if (list[i].id) await verifyChannel(section, i);
+  const list = channelsData[section] || {};
+  const keys = Object.keys(list).filter(k => list[k].id);
+  if (keys.length === 0) {
+    showToast('검증 가능한 채널(ID 있음)이 없습니다.', 'info');
+    return;
+  }
+  showToast(`${keys.length}개 채널 순차 검증 시작...`, 'info');
+  for (const key of keys) {
+    await verifyOne(section, key);
   }
   showToast('전체 검증 완료', 'success');
 }
 
-/* ── Add channel ── */
+/* ════════════════════════════════════════════
+   채널 추가
+════════════════════════════════════════════ */
 async function fetchAndAddChannel() {
-  const url   = document.getElementById('add-url').value.trim();
-  const name  = document.getElementById('add-name').value.trim();
-  const note  = document.getElementById('add-note').value.trim();
-  const type  = document.getElementById('add-type').value;
-  if (!url || !name) { showToast('URL과 채널명을 입력하세요.', 'error'); return; }
+  const name    = document.getElementById('add-name').value.trim();
+  const url     = document.getElementById('add-url').value.trim();
+  const idInput = document.getElementById('add-id').value.trim();
+  const note    = document.getElementById('add-note').value.trim();
+  const section = document.getElementById('add-section').value;
 
-  const handle = url.replace(/.*@/, '@').replace(/\/$/, '');
-  let channelId = '';
+  if (!name) { showToast('채널명을 입력하세요.', 'error'); return; }
 
-  if (ytApiKey) {
+  let channelId   = idInput;
+  let subscribers = 0;
+  let confirmed   = false;
+
+  if (channelId && ytApiKey) {
     try {
       showToast('채널 정보 조회 중...', 'info');
-      const res  = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=id,statistics&forHandle=${encodeURIComponent(handle.replace('@',''))}&key=${ytApiKey}`);
+      const res  = await fetch(
+        `https://www.googleapis.com/youtube/v3/channels?part=id,statistics&id=${channelId}&key=${ytApiKey}`
+      );
       const data = await res.json();
       const item = data.items?.[0];
       if (item) {
-        channelId = item.id;
-        const subs = parseInt(item.statistics?.subscriberCount||0);
-        addToList(type, { name, id: channelId, id_confirmed: true, url, subscribers: subs, status: 'pending', note });
-        showToast(`${name} 추가 완료 (구독자: ${fmtSubs(subs)})`, 'success');
-        return;
+        channelId   = item.id;
+        subscribers = parseInt(item.statistics?.subscriberCount || 0);
+        confirmed   = true;
       }
-    } catch(e) { /* fallthrough */ }
+    } catch (e) {
+      showToast('API 조회 실패, 수동 추가로 전환됩니다.', 'info');
+    }
   }
-  addToList(type, { name, id: '', id_confirmed: false, url, subscribers: 0, status: 'pending', note });
-  showToast(`${name} 수동 추가됨 (API 조회 실패)`, 'info');
+
+  channelsData[section][name] = {
+    id:           channelId,
+    id_confirmed: confirmed,
+    url:          url,
+    subscribers:  subscribers,
+    status:       'pending',
+    note:         note,
+  };
+
+  renderSection(section);
+  showToast(`${name} 추가 완료 (구독자: ${fmtNum(subscribers)})`, 'success');
+
+  /* 입력 필드 초기화 */
+  ['add-name','add-url','add-id','add-note'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
 }
 
 function manualAddChannel() {
-  const url  = document.getElementById('add-url').value.trim();
-  const name = document.getElementById('add-name').value.trim();
-  const note = document.getElementById('add-note').value.trim();
-  const type = document.getElementById('add-type').value;
+  const name    = document.getElementById('add-name').value.trim();
+  const url     = document.getElementById('add-url').value.trim();
+  const idInput = document.getElementById('add-id').value.trim();
+  const note    = document.getElementById('add-note').value.trim();
+  const section = document.getElementById('add-section').value;
+
   if (!name) { showToast('채널명을 입력하세요.', 'error'); return; }
-  addToList(type, { name, id: '', id_confirmed: false, url, subscribers: 0, status: 'pending', note });
-  showToast(`${name} 추가됨`, 'success');
+
+  channelsData[section][name] = {
+    id:           idInput,
+    id_confirmed: idInput.startsWith('UC') && idInput.length === 24,
+    url:          url,
+    subscribers:  0,
+    status:       'pending',
+    note:         note,
+  };
+
+  renderSection(section);
+  showToast(`${name} 수동 추가됨`, 'success');
+
+  ['add-name','add-url','add-id','add-note'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
 }
 
-function addToList(type, ch) {
-  getList(type).push(ch);
-  renderAll();
-  document.getElementById('add-url').value  = '';
-  document.getElementById('add-name').value = '';
-  document.getElementById('add-note').value = '';
-}
-
-/* ── Edit modal ── */
-function openEditModal(section, i) {
-  const ch = getList(section)[i];
+/* ════════════════════════════════════════════
+   편집 모달
+════════════════════════════════════════════ */
+function openEditModal(section, key) {
+  const ch = channelsData[section][key];
   document.getElementById('edit-section').value = section;
-  document.getElementById('edit-index').value   = i;
-  document.getElementById('edit-name').value    = ch.name;
-  document.getElementById('edit-id').value      = ch.id||'';
-  document.getElementById('edit-url').value     = ch.url||'';
-  document.getElementById('edit-subs').value    = ch.subscribers||0;
-  document.getElementById('edit-note').value    = ch.note||'';
-  document.getElementById('edit-status').value  = ch.status;
+  document.getElementById('edit-key').value     = key;
+  document.getElementById('edit-name').value    = key;
+  document.getElementById('edit-id').value      = ch.id    || '';
+  document.getElementById('edit-url').value     = ch.url   || '';
+  document.getElementById('edit-subs').value    = ch.subscribers || 0;
+  document.getElementById('edit-note').value    = ch.note  || '';
+  document.getElementById('edit-status').value  = ch.status || 'pending';
   document.getElementById('edit-modal').classList.add('open');
 }
+
 function closeEditModal() {
   document.getElementById('edit-modal').classList.remove('open');
 }
+
 function saveEditModal() {
-  const section = document.getElementById('edit-section').value;
-  const i       = parseInt(document.getElementById('edit-index').value);
-  const ch      = getList(section)[i];
-  ch.name        = document.getElementById('edit-name').value;
-  ch.id          = document.getElementById('edit-id').value;
-  ch.id_confirmed= !!ch.id;
-  ch.url         = document.getElementById('edit-url').value;
-  ch.subscribers = parseInt(document.getElementById('edit-subs').value)||0;
-  ch.note        = document.getElementById('edit-note').value;
-  ch.status      = document.getElementById('edit-status').value;
+  const section  = document.getElementById('edit-section').value;
+  const oldKey   = document.getElementById('edit-key').value;
+  const newName  = document.getElementById('edit-name').value.trim();
+  const newId    = document.getElementById('edit-id').value.trim();
+
+  if (!newName) { showToast('채널명을 입력하세요.', 'error'); return; }
+
+  const ch = channelsData[section][oldKey];
+  ch.id           = newId;
+  ch.id_confirmed = newId.startsWith('UC') && newId.length === 24;
+  ch.url          = document.getElementById('edit-url').value.trim();
+  ch.subscribers  = parseInt(document.getElementById('edit-subs').value) || 0;
+  ch.note         = document.getElementById('edit-note').value.trim();
+  ch.status       = document.getElementById('edit-status').value;
+
+  /* 채널명(key)이 바뀐 경우 */
+  if (newName !== oldKey) {
+    channelsData[section][newName] = ch;
+    delete channelsData[section][oldKey];
+  }
+
   closeEditModal();
-  renderAll();
-  showToast('편집 저장됨', 'success');
+  renderSection(section);
+  showToast('편집 저장됨 ✅', 'success');
 }
 
-/* ── Save to GitHub ── */
+/* ════════════════════════════════════════════
+   GitHub 저장
+════════════════════════════════════════════ */
 async function saveChannels() {
-  if (!channelsData) { showToast('데이터가 없습니다.', 'error'); return; }
+  if (!channelsData) { showToast('로드된 데이터가 없습니다.', 'error'); return; }
   try {
-    showToast('저장 중...', 'info');
+    showToast('GitHub에 저장 중...', 'info');
+    channelsData.meta = channelsData.meta || {};
     channelsData.meta.last_updated = new Date().toISOString().split('T')[0];
-    const content  = JSON.stringify(channelsData, null, 2);
-    const result   = await ghPut(CHANNELS_FILE, content, channelsSha, `admin: update channels.json ${channelsData.meta.last_updated}`);
-    channelsSha    = result.content.sha;
+
+    const content = JSON.stringify(channelsData, null, 2);
+    const result  = await ghPut(
+      CHANNELS_FILE,
+      content,
+      channelsSha,
+      `admin: update channels.json ${channelsData.meta.last_updated}`
+    );
+    channelsSha = result.content.sha;
     showToast('channels.json 저장 완료 ✅', 'success');
-  } catch(e) {
+  } catch (e) {
     showToast('저장 실패: ' + e.message, 'error');
   }
 }
 
-/* ── Monthly update modal ── */
+/* ════════════════════════════════════════════
+   월간 업데이트 모달
+════════════════════════════════════════════ */
 async function runMonthlyUpdate() {
   document.getElementById('update-modal').classList.add('open');
-  document.getElementById('update-content').innerHTML = '<div class="spinner"></div> 후보 파일 및 채널 재검증 중...';
+  document.getElementById('update-content').innerHTML =
+    '<div class="spinner"></div> 후보 파일 및 채널 재검증 중...';
   document.getElementById('btn-apply-update').style.display = 'none';
 
+  /* 1. 후보 파일 로드 */
   let candidates = [];
   try {
     const file = await ghGet(CANDIDATES_FILE);
     candidates  = JSON.parse(decodeURIComponent(escape(atob(file.content))));
-  } catch(e) {
-    candidates  = [];
+  } catch (e) {
+    candidates = [];
   }
 
-  // 현재 채널 ID 목록
-  const allIds = new Set([
-    ...channelsData.general_youtubers,
-    ...channelsData.media_channels.broadcast,
-    ...channelsData.media_channels.newspaper,
-    ...channelsData.media_channels.securities,
-  ].map(c=>c.id).filter(Boolean));
+  /* 2. 현재 등록된 채널 ID 목록 */
+  const allIds = new Set();
+  ['broadcast','youtuber','securities'].forEach(s => {
+    Object.values(channelsData[s] || {}).forEach(ch => {
+      if (ch.id) allIds.add(ch.id);
+    });
+  });
 
   const newCandidates = candidates.filter(c => c.id && !allIds.has(c.id));
 
-  // 기존 채널 중 구독자 미달 (API 없으면 표시만)
+  /* 3. 기준 미달 채널 탐지 (YouTube API 있을 때만) */
   let belowThreshold = [];
   if (ytApiKey) {
-    const allChannels = [
-      ...channelsData.general_youtubers.map(c=>({...c,_section:'general'})),
-      ...channelsData.media_channels.broadcast.map(c=>({...c,_section:'broadcast'})),
-      ...channelsData.media_channels.newspaper.map(c=>({...c,_section:'newspaper'})),
-      ...channelsData.media_channels.securities.map(c=>({...c,_section:'securities'})),
-    ].filter(c=>c.id);
+    const allChannels = [];
+    ['broadcast','youtuber','securities'].forEach(s => {
+      Object.entries(channelsData[s] || {}).forEach(([name, ch]) => {
+        if (ch.id) allChannels.push({ name, id: ch.id, _section: s });
+      });
+    });
 
-    for (const ch of allChannels.slice(0,10)) { // 과금 방지: 처음 10개만 샘플
+    /* 과금 방지: 최대 10개 샘플 */
+    for (const ch of allChannels.slice(0, 10)) {
       try {
-        const r = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${ch.id}&key=${ytApiKey}`);
+        const r = await fetch(
+          `https://www.googleapis.com/youtube/v3/channels?part=statistics&id=${ch.id}&key=${ytApiKey}`
+        );
         const d = await r.json();
         const s = d.items?.[0]?.statistics;
-        if (s && parseInt(s.subscriberCount||0) < 10000) belowThreshold.push(ch);
-      } catch(e) { /* skip */ }
+        if (s && parseInt(s.subscriberCount || 0) < 10000) {
+          belowThreshold.push(ch);
+        }
+      } catch (e) { /* skip */ }
     }
   }
 
+  /* 4. 결과 렌더링 */
   let html = '';
 
   if (newCandidates.length > 0) {
-    html += `<div class="diff-section"><h4>🆕 신규 후보 채널 (${newCandidates.length}개)</h4>`;
-    html += newCandidates.map(c=>`
+    html += `<div class="diff-section">
+      <h4>🆕 신규 후보 채널 (${newCandidates.length}개)</h4>`;
+    html += newCandidates.map(c => `
       <div class="diff-item">
-        <span class="di-name">${c.name}</span>
-        <span class="di-subs">👥 ${fmtSubs(c.subscribers)}</span>
+        <span class="di-name">${c.name || c.id}</span>
+        <span class="di-subs">👥 ${fmtNum(c.subscribers)}</span>
         <span class="badge badge-pending">신규</span>
       </div>`).join('');
     html += '</div>';
   } else {
-    html += `<div class="diff-section"><p style="color:var(--muted)">신규 후보 채널 없음 (candidates 파일 비어있거나 모두 등록됨)</p></div>`;
+    html += `<div class="diff-section">
+      <p style="color:var(--muted);font-size:.88rem">
+        신규 후보 채널 없음<br>
+        <span style="font-size:.8rem">(data/channel_candidates.json 파일이 없거나 모두 등록됨)</span>
+      </p></div>`;
   }
 
   if (belowThreshold.length > 0) {
-    html += `<div class="diff-section"><h4>⚠️ 조회수 미달 채널</h4>`;
-    html += belowThreshold.map(c=>`
+    html += `<div class="diff-section">
+      <h4>⚠️ 구독자 1만 미만 채널 (비활성 권고)</h4>`;
+    html += belowThreshold.map(c => `
       <div class="diff-item">
         <span class="di-name">${c.name}</span>
-        <span class="di-subs">👥 ${fmtSubs(c.subscribers)}</span>
-        <span class="di-flag">기준 미달 → 비활성 권고</span>
+        <span class="di-flag">구독자 기준 미달 → 비활성 권고</span>
       </div>`).join('');
     html += '</div>';
   }
 
-  if (newCandidates.length === 0 && belowThreshold.length === 0 && !ytApiKey) {
-    html += `<p style="color:var(--muted)">YouTube API Key가 없어 검증이 제한됩니다. 로그인 시 API Key를 입력하면 자동 검증이 가능합니다.</p>`;
+  if (!ytApiKey) {
+    html += `<div style="background:var(--surface2);border-radius:8px;padding:14px;margin-top:8px;font-size:.85rem;color:var(--muted)">
+      ℹ️ YouTube API Key를 입력하면 기존 채널 자동 재검증이 가능합니다.
+    </div>`;
   }
 
   document.getElementById('update-content').innerHTML = html;
   document.getElementById('btn-apply-update').style.display = 'inline-block';
 
-  // 적용할 데이터 임시 저장
-  window._pendingCandidates    = newCandidates;
-  window._pendingBelowThreshold= belowThreshold;
+  window._pendingNewCandidates     = newCandidates;
+  window._pendingBelowThreshold    = belowThreshold;
 }
 
 function applyUpdate() {
-  const newCandidates = window._pendingCandidates || [];
+  const newCandidates  = window._pendingNewCandidates  || [];
+  const belowThreshold = window._pendingBelowThreshold || [];
+
+  /* 신규 후보 → youtuber에 pending으로 추가 */
   newCandidates.forEach(c => {
-    channelsData.general_youtubers.push({ ...c, status: 'pending' });
+    const name = c.name || c.id;
+    if (!channelsData.youtuber[name]) {
+      channelsData.youtuber[name] = {
+        id:           c.id || '',
+        id_confirmed: !!(c.id && c.id.startsWith('UC') && c.id.length === 24),
+        url:          c.url || '',
+        subscribers:  c.subscribers || 0,
+        status:       'pending',
+        note:         c.note || '',
+      };
+    }
   });
 
-  const belowThreshold = window._pendingBelowThreshold || [];
-  ['general','broadcast','newspaper','securities'].forEach(section => {
-    getList(section).forEach(ch => {
-      if (belowThreshold.find(b=>b.id===ch.id)) ch.status = 'inactive';
-    });
+  /* 미달 채널 비활성 */
+  belowThreshold.forEach(c => {
+    if (channelsData[c._section] && channelsData[c._section][c.name]) {
+      channelsData[c._section][c.name].status = 'inactive';
+    }
   });
 
   renderAll();
   markUpdateDone();
   closeUpdateModal();
-  showToast(`업데이트 적용 완료 (신규 ${newCandidates.length}개 추가)`, 'success');
+  showToast(`업데이트 적용 완료 – 신규 ${newCandidates.length}개 추가`, 'success');
 }
 
 function closeUpdateModal() {
   document.getElementById('update-modal').classList.remove('open');
 }
 
-/* ── Tabs ── */
-function switchTab(name) {
-  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('panel-'+name).classList.add('active');
-  event.target.classList.add('active');
+/* ════════════════════════════════════════════
+   탭 전환
+════════════════════════════════════════════ */
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+  if (btn) btn.classList.add('active');
 }
 
-/* ── Toast ── */
-function showToast(msg, type='info') {
-  const c    = document.getElementById('toast-container');
-  const div  = document.createElement('div');
-  div.className = `toast ${type}`;
-  div.textContent= msg;
+/* ════════════════════════════════════════════
+   토스트 알림
+════════════════════════════════════════════ */
+function showToast(msg, type) {
+  const c   = document.getElementById('toast-container');
+  const div = document.createElement('div');
+  div.className   = `toast ${type || 'info'}`;
+  div.textContent = msg;
   c.appendChild(div);
-  setTimeout(()=>div.remove(), 3500);
+  setTimeout(() => div.remove(), 3800);
 }
 </script>
 </body>
