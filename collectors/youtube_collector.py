@@ -51,7 +51,6 @@ EXPERT_KEYWORDS = [
     "오늘의 증시", "장전", "장후", "시장분석",
 ]
 
-# 채널 재검사용 키워드
 AD_KEYWORDS = [
     "리딩방", "유료", "수익인증", "따라하면", "대박", "비공개",
     "카카오톡", "텔레그램", "가입", "구독료", "VIP", "프리미엄",
@@ -192,13 +191,16 @@ def has_popular_panelist(title: str, description: str) -> list:
 
 
 def load_channels_safe() -> dict:
-    """channels.json 안전 로드 (실패 시 빈 구조 반환)"""
+    """
+    channels.json 안전 로드.
+    v3 구조: {"broadcast": {...}, "youtuber": {...}, "securities": {...}}
+    """
     try:
         with open("channels.json", "r", encoding="utf-8") as f:
             data = json.load(f)
         return {
-            "broadcast":  data.get("broadcast", {}),
-            "youtuber":   data.get("youtuber", {}),
+            "broadcast":  data.get("broadcast",  {}),
+            "youtuber":   data.get("youtuber",   {}),
             "securities": data.get("securities", {}),
         }
     except Exception as e:
@@ -224,10 +226,10 @@ def verify_channel(channel_id: str, api_key: str, hours: int = 72) -> dict:
             "reason": f"최근 {hours}시간 영상 없음",
         }
 
-    total        = len(videos)
-    stock_count  = 0
-    ad_count     = 0
-    info_count   = 0
+    total       = len(videos)
+    stock_count = 0
+    ad_count    = 0
+    info_count  = 0
 
     for v in videos:
         sn    = v.get("snippet", {})
@@ -246,7 +248,6 @@ def verify_channel(channel_id: str, api_key: str, hours: int = 72) -> dict:
     ad_ratio    = ad_count    / total if total else 0
     info_ratio  = info_count  / total if total else 0
 
-    # 점수 계산 (0~100)
     score = int(stock_ratio * 50 + info_ratio * 30 - ad_ratio * 40)
     score = max(0, min(100, score))
 
@@ -258,7 +259,7 @@ def verify_channel(channel_id: str, api_key: str, hours: int = 72) -> dict:
         reason = f"주식 관련 영상 적음 ({stock_count}/{total}개), 광고성 {ad_count}/{total}개"
     else:
         status = "inactive"
-        reason = f"관련 영상 부족 또는 광고성 콘텐츠 다수"
+        reason = "관련 영상 부족 또는 광고성 콘텐츠 다수"
 
     return {"status": status, "score": score, "reason": reason}
 
@@ -336,10 +337,11 @@ def collect_section1_youtube() -> list:
                 cid    = str(ch_info)
                 status = "active"
 
+            # ID 없는 채널 또는 비활성 채널 건너뜀
             if not cid or status == "inactive":
                 continue
 
-            # handle → channel ID 변환
+            # handle → channel ID 변환 (UC...24자 아닌 경우만)
             resolved_id = resolve_channel_id(cid, API_KEY)
 
             print(f"  [{source_type}] {ch_name} 수집 중...")
@@ -347,20 +349,23 @@ def collect_section1_youtube() -> list:
                 resolved_id, API_KEY, hours=hours, max_results=15
             )
 
-            for v in videos:
+            stock_videos = [
+                v for v in videos
+                if is_stock_related(
+                    v.get("snippet", {}).get("title", ""),
+                    v.get("snippet", {}).get("description", ""),
+                )
+            ]
+
+            for v in stock_videos:
                 sn    = v.get("snippet", {})
                 title = sn.get("title", "")
                 desc  = sn.get("description", "")
                 vid   = v.get("id", {}).get("videoId", "")
 
-                if not is_stock_related(title, desc):
-                    continue
-
-                # 자막 추출 (실패해도 계속 진행)
                 transcript = get_transcript(vid, max_chars=800)
                 summary    = transcript if transcript else desc[:400]
-
-                panelists = has_popular_panelist(title, desc)
+                panelists  = has_popular_panelist(title, desc)
 
                 results.append({
                     "source_type":    source_type,
@@ -374,7 +379,7 @@ def collect_section1_youtube() -> list:
                     "has_transcript": bool(transcript),
                 })
 
-            print(f"    → {len([v for v in videos if is_stock_related(v.get('snippet',{}).get('title',''), v.get('snippet',{}).get('description',''))])}건 수집")
+            print(f"    → {len(stock_videos)}건 수집")
 
     print(f"  [섹션1 합계] {len(results)}건")
     return results
@@ -397,9 +402,9 @@ def collect_section2_securities_tv() -> list:
     results = []
 
     for ch in SECURITIES_TV_CHANNELS:
-        ch_id    = ch.get("id", "")
-        ch_name  = ch.get("name", ch_id)
-        hours    = SECURITIES_TV_HOURS
+        ch_id   = ch.get("id", "")
+        ch_name = ch.get("name", ch_id)
+        hours   = SECURITIES_TV_HOURS
 
         if not ch_id:
             continue
@@ -411,21 +416,21 @@ def collect_section2_securities_tv() -> list:
             resolved_id, API_KEY, hours=hours, max_results=20
         )
 
+        # ✅ 수정: 채널별 건수를 별도 카운터로 출력
+        channel_count = 0
+
         for v in videos:
             sn    = v.get("snippet", {})
             title = sn.get("title", "")
             desc  = sn.get("description", "")
             vid   = v.get("id", {}).get("videoId", "")
 
-            # 전문가 프로그램 키워드 또는 주식 관련 키워드 확인
             if not (is_expert_program(title, desc) or is_stock_related(title, desc)):
                 continue
 
             transcript = get_transcript(vid, max_chars=800)
             summary    = transcript if transcript else desc[:400]
-
-            # 패널리스트(전문가) 이름 추출
-            panelists = has_popular_panelist(title, desc + " " + summary)
+            panelists  = has_popular_panelist(title, desc + " " + summary)
 
             results.append({
                 "source_type":    "증권TV",
@@ -438,8 +443,10 @@ def collect_section2_securities_tv() -> list:
                 "expert_name":    ", ".join(panelists) if panelists else "",
                 "has_transcript": bool(transcript),
             })
+            channel_count += 1
 
-        print(f"    → {len(results)}건 누적")
+        # ✅ 수정: 채널별 건수 출력 (누적 전체 건수 아님)
+        print(f"    → {channel_count}건 수집")
 
     print(f"  [섹션2 합계] {len(results)}건")
     return results
