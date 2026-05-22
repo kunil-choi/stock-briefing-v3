@@ -71,13 +71,19 @@ def analyze_and_generate_html(
     """
     전체 데이터를 분석하여 HTML 생성
     """
-    import anthropic
-
     if not api_key:
         print("[AI 분석] API 키가 없습니다. 더미 데이터로 HTML 생성...")
         return _generate_fallback_html()
 
-    client = anthropic.Anthropic(api_key=api_key)
+    # api_key를 환경변수에 설정 (api_client.py에서 os.getenv로 읽음)
+    import os
+    os.environ["ANTHROPIC_API_KEY"] = api_key
+
+    # client는 api_key 전달용 래퍼 객체로만 사용
+    class _Client:
+        def __init__(self, key):
+            self.api_key = key
+    client = _Client(api_key)
     model = "claude-sonnet-4-5"
 
     now_kst = datetime.now(KST)

@@ -36,7 +36,7 @@ def load_stock_names() -> dict:
 
     for market_id, market_name in [("STK", "코스피"), ("KSQ", "코스닥")]:
         try:
-            url = "http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
+            url = "https://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
             params = {
                 "bld": "dbms/MDC/STAT/standard/MDCSTAT01901",
                 "mktId": market_id,
@@ -44,7 +44,12 @@ def load_stock_names() -> dict:
                 "money": "1",
                 "csvxls_isNo": "false",
             }
-            res = requests.post(url, data=params, headers=headers, timeout=15)
+            session = requests.Session()
+            res = session.post(url, data=params, headers=headers, timeout=20, allow_redirects=True)
+            res.raise_for_status()
+            if not res.text or res.text.strip() == "":
+                print(f"  [{market_name}] KRX 응답 비어있음, 건너뜀")
+                continue
             data = res.json()
             items = data.get("OutBlock_1", [])
             for item in items:
