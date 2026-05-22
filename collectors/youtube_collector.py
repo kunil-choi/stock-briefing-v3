@@ -1,452 +1,345 @@
-# collectors/youtube_collector.py
 """
-YouTube 수집기 - v3
-섹션 1: 방송사 + 개인유튜버 + 증권사유튜브 채널 (24시간 기준)
-섹션 2: 증권TV 전문가 채널 (48시간 기준)
-채널 재검사: YouTube Data API 기반 실제 콘텐츠 품질 검증
+유튜브 수집기 - v3
+방송, 유튜버, 증권사 채널에서 주식 관련 영상 수집
 """
 import os
 import json
-import requests
-from datetime import datetime, timezone, timedelta
+import time
+from datetime import datetime, timedelta, timezone
+from urllib.parse import quote  # ← requests.utils.quote 대신 표준 라이브러리 사용
 
-try:
-    from youtube_transcript_api import YouTubeTranscriptApi
-except ImportError:
-    YouTubeTranscriptApi = None
+from googleapiclient.discovery import build
+from youtube_transcript_api import YouTubeTranscriptApi
 
 from config import (
-    YOUTUBE_API_KEY,
-    POPULAR_PANELISTS,
-    YOUTUBER_HOURS,
-    BROADCAST_HOURS,
-    SECURITIES_TV_HOURS,
-    SECURITIES_TV_CHANNELS,
+    YOUTUBE_API_KEY, SECURITIES_TV_CHANNELS, POPULAR_PANELISTS,
+    BROADCAST_HOURS, YOUTUBER_HOURS, SECURITIES_TV_HOURS, load_channels
 )
 
-API_KEY = YOUTUBE_API_KEY
 KST = timezone(timedelta(hours=9))
 
-# ══════════════════════════════════════════════════════════════
-#  키워드 목록
-# ══════════════════════════════════════════════════════════════
-
+# 키워드 정의
 STOCK_KEYWORDS = [
-    "주식", "종목", "매수", "매도", "코스피", "코스닥", "상장", "실적",
-    "반도체", "배터리", "2차전지", "바이오", "AI", "로봇", "방산", "원전",
-    "ETF", "배당", "테마주", "급등", "목표가", "투자", "증시", "시황",
-    "포트폴리오", "리밸런싱", "금리", "환율", "채권", "국채", "달러",
-    "인플레이션", "경기", "FOMC", "연준", "GDP", "CPI",
-    "엔비디아", "테슬라", "삼성전자", "SK하이닉스",
-    "S&P", "나스닥", "다우", "미국장", "뉴욕증시",
-    "상승", "하락", "전망", "분석", "추천", "리포트", "브리핑",
-    "경제", "금융", "거시", "글로벌", "시장", "성공예감",
-    "추천종목", "매매전략", "수익", "급락",
+    "주식", "증시", "코스피", "코스닥", "나스닥", "S&P", "투자", "ETF", "펀드",
+    "채권", "금리", "환율", "원달러", "경제", "재테크", "시황", "종목", "매수",
+    "매도", "포트폴리오", "배당", "반도체", "2차전지", "AI", "인공지능"
 ]
 
 EXPERT_KEYWORDS = [
-    "추천종목", "매매전략", "포트폴리오", "시황", "전문가",
-    "투자전략", "종목분석", "주도주", "성장주", "가치주",
-    "매수종목", "관심종목", "핵심종목", "대장주",
-    "오늘의 증시", "장전", "장후", "시장분석",
+    "전문가", "애널리스트", "펀드매니저", "대표", "소장", "연구원", "교수",
+    "이사", "본부장", "팀장", "대담", "인터뷰", "특집"
 ]
 
 AD_KEYWORDS = [
-    "리딩방", "유료", "수익인증", "따라하면", "대박", "비공개",
-    "카카오톡", "텔레그램", "가입", "구독료", "VIP", "프리미엄",
-    "신청", "모집", "한정", "100% 수익", "검증된", "비법",
+    "협찬", "광고", "프로모션", "이벤트", "할인", "모집", "신청", "등록"
 ]
 
 INFO_KEYWORDS = [
-    "분석", "전망", "실적", "재무", "밸류에이션", "리포트",
-    "리뷰", "점검", "이슈", "뉴스", "경제", "시황", "전략",
+    "강의", "교육", "기초", "입문", "초보", "배우기", "공부", "정리"
 ]
 
 
-# ══════════════════════════════════════════════════════════════
-#  YouTube API 유틸리티
-# ══════════════════════════════════════════════════════════════
+def get_youtube_client():
+    """YouTube API 클라이언트 생성"""
+    if not YOUTUBE_API_KEY:
+        return None
+    return build("youtube", "v3", developerKey=YOUTUBE_API_KEY)
+
 
 def get_uploads_playlist_id(channel_id: str) -> str:
-    """채널 ID (UC...) → 업로드 재생목록 ID (UU...)"""
-    if channel_id and channel_id.startswith("UC"):
+    """채널 ID(UCxxx)를 업로드 플레이리스트 ID(UUxxx)로 변환"""
+    if channel_id.startswith("UC"):
         return "UU" + channel_id[2:]
-    return None
+    return channel_id
 
 
-def resolve_channel_id(channel_id_or_handle: str, api_key: str) -> str:
-    """@handle 또는 채널 URL의 handle을 실제 채널 ID로 변환"""
-    cid = channel_id_or_handle.strip()
+def resolve_channel_id(youtube, handle_or_id: str) -> str:
+    """
+    @handle 또는 채널 URL을 채널 ID(UCxxx)로 변환
+    이미 UCxxx 형태면 그대로 반환
+    """
+    if handle_or_id.startswith("UC"):
+        return handle_or_id
 
-    # 이미 UC...24자 형식이면 그대로 반환
-    if cid.startswith("UC") and len(cid) == 24:
-        return cid
-
-    handle = cid.lstrip("@")
-    url = "https://www.googleapis.com/youtube/v3/channels"
-    params = {"part": "id", "forHandle": handle, "key": api_key}
+    # @handle 처리
+    handle = handle_or_id.lstrip("@")
     try:
-        resp = requests.get(url, params=params, timeout=10)
-        data = resp.json()
-        if data.get("items"):
-            resolved = data["items"][0]["id"]
-            print(f"  [ID변환] @{handle} → {resolved}")
-            return resolved
+        response = youtube.channels().list(
+            part="id",
+            forHandle=handle
+        ).execute()
+        items = response.get("items", [])
+        if items:
+            return items[0]["id"]
     except Exception as e:
-        print(f"  [ID변환 실패] @{handle}: {e}")
-    return cid
+        print(f"  ⚠️ handle 변환 실패 ({handle_or_id}): {e}")
+    return ""
 
 
-def get_recent_videos_via_playlist(
-    channel_id: str,
-    api_key: str,
-    hours: int = 24,
-    max_results: int = 15,
-) -> list:
-    """업로드 재생목록에서 최근 N시간 영상 목록 반환"""
+def get_recent_videos_via_playlist(youtube, channel_id: str, hours: int = 24, max_results: int = 10) -> list:
+    """
+    채널의 업로드 플레이리스트에서 최근 영상 가져오기
+    """
     playlist_id = get_uploads_playlist_id(channel_id)
-    if not playlist_id:
-        return []
-
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-    url = "https://www.googleapis.com/youtube/v3/playlistItems"
-    params = {
-        "part": "snippet",
-        "playlistId": playlist_id,
-        "maxResults": max_results,
-        "key": api_key,
-    }
+    cutoff = datetime.now(KST) - timedelta(hours=hours)
 
     try:
-        resp = requests.get(url, params=params, timeout=15)
-        data = resp.json()
-
-        if "error" in data:
-            err = data["error"]
-            print(f"    API 오류: {err.get('code')} - {err.get('message','')[:80]}")
-            return []
-
-        items = data.get("items", [])
-        recent = []
-        for item in items:
-            snippet = item.get("snippet", {})
-            published_str = snippet.get("publishedAt", "")
-            if not published_str:
-                continue
-            try:
-                pub_dt = datetime.fromisoformat(published_str.replace("Z", "+00:00"))
-                if pub_dt >= cutoff:
-                    video_id = snippet.get("resourceId", {}).get("videoId", "")
-                    recent.append({
-                        "id": {"videoId": video_id},
-                        "snippet": {
-                            "title":        snippet.get("title", ""),
-                            "description":  snippet.get("description", "")[:300],
-                            "publishedAt":  published_str,
-                            "channelId":    snippet.get("channelId", ""),
-                            "channelTitle": snippet.get("channelTitle", ""),
-                        },
-                    })
-                else:
-                    break
-            except Exception:
-                continue
-        return recent
-
+        response = youtube.playlistItems().list(
+            part="snippet",
+            playlistId=playlist_id,
+            maxResults=max_results
+        ).execute()
     except Exception as e:
-        print(f"    요청 실패: {e}")
+        print(f"  ⚠️ 플레이리스트 조회 실패 ({channel_id}): {e}")
         return []
 
+    videos = []
+    for item in response.get("items", []):
+        snippet = item.get("snippet", {})
+        published_str = snippet.get("publishedAt", "")
+        try:
+            published = datetime.fromisoformat(published_str.replace("Z", "+00:00"))
+            published_kst = published.astimezone(KST)
+            if published_kst >= cutoff:
+                video_id = snippet.get("resourceId", {}).get("videoId", "")
+                videos.append({
+                    "video_id": video_id,
+                    "title": snippet.get("title", ""),
+                    "channel": snippet.get("channelTitle", ""),
+                    "published": published_str,
+                    "description": snippet.get("description", "")[:500],
+                    "thumbnail": snippet.get("thumbnails", {}).get("medium", {}).get("url", ""),
+                    "url": f"https://www.youtube.com/watch?v={video_id}"
+                })
+        except Exception:
+            continue
 
-def get_transcript(video_id: str, max_chars: int = 1000) -> str:
-    """YouTube 자막(한국어) 추출. 실패 시 빈 문자열 반환"""
-    if not YouTubeTranscriptApi or not video_id:
-        return ""
+    return videos
+
+
+def get_transcript(video_id: str, languages: list = None) -> str:
+    """자막 가져오기"""
+    if languages is None:
+        languages = ["ko", "en"]
     try:
-        transcript_list = YouTubeTranscriptApi.get_transcript(
-            video_id, languages=["ko", "ko-KR"]
-        )
-        text = " ".join(t.get("text", "") for t in transcript_list)
-        return text[:max_chars]
+        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=languages)
+        text = " ".join([t["text"] for t in transcript_list[:100]])
+        return text[:2000]
     except Exception:
         return ""
 
 
-def is_stock_related(title: str, description: str) -> bool:
-    """제목/설명에 주식 관련 키워드가 포함되어 있는지 확인"""
+def is_stock_related(title: str, description: str = "") -> bool:
+    """주식/경제 관련 영상인지 판단"""
     text = (title + " " + description).lower()
     return any(kw in text for kw in STOCK_KEYWORDS)
 
 
-def is_expert_program(title: str, description: str) -> bool:
-    """증권TV 전문가 프로그램 관련 키워드 확인"""
+def is_expert_program(title: str, description: str = "") -> bool:
+    """전문가 출연 프로그램인지 판단"""
     text = title + " " + description
     return any(kw in text for kw in EXPERT_KEYWORDS)
 
 
-def has_popular_panelist(title: str, description: str) -> list:
-    """인기 패널리스트 언급 여부 확인 후 이름 목록 반환"""
+def has_popular_panelist(title: str, description: str = "") -> bool:
+    """인기 패널리스트 등장 여부"""
     text = title + " " + description
-    return [p for p in POPULAR_PANELISTS if p in text]
+    return any(p in text for p in POPULAR_PANELISTS)
 
 
 def load_channels_safe() -> dict:
+    """안전하게 channels.json 로드"""
+    return load_channels()
+
+
+def verify_channel(youtube, channel_id: str, min_views: int = 10000) -> dict:
     """
-    channels.json 안전 로드.
-    v3 구조: {"broadcast": {...}, "youtuber": {...}, "securities": {...}}
+    채널 검증: 최근 영상 10개의 평균 조회수가 min_views 이상인지 확인
     """
+    if not channel_id or not channel_id.startswith("UC"):
+        return {"verified": False, "reason": "유효하지 않은 채널 ID"}
+
+    playlist_id = get_uploads_playlist_id(channel_id)
     try:
-        with open("channels.json", "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return {
-            "broadcast":  data.get("broadcast",  {}),
-            "youtuber":   data.get("youtuber",   {}),
-            "securities": data.get("securities", {}),
-        }
+        pl_resp = youtube.playlistItems().list(
+            part="snippet",
+            playlistId=playlist_id,
+            maxResults=10
+        ).execute()
     except Exception as e:
-        print(f"  [channels.json 로드 실패] {e}")
-        return {"broadcast": {}, "youtuber": {}, "securities": {}}
+        return {"verified": False, "reason": str(e)}
+
+    video_ids = [
+        item["snippet"]["resourceId"]["videoId"]
+        for item in pl_resp.get("items", [])
+        if item.get("snippet", {}).get("resourceId", {}).get("videoId")
+    ]
+    if not video_ids:
+        return {"verified": False, "reason": "영상 없음"}
+
+    try:
+        stats_resp = youtube.videos().list(
+            part="statistics",
+            id=",".join(video_ids)
+        ).execute()
+    except Exception as e:
+        return {"verified": False, "reason": str(e)}
+
+    views = []
+    for item in stats_resp.get("items", []):
+        vc = item.get("statistics", {}).get("viewCount", "0")
+        try:
+            views.append(int(vc))
+        except ValueError:
+            pass
+
+    if not views:
+        return {"verified": False, "reason": "조회수 데이터 없음"}
+
+    avg_views = sum(views) / len(views)
+    max_views = max(views)
+    verified = max_views >= min_views
+
+    return {
+        "verified": verified,
+        "avg_views": int(avg_views),
+        "max_views": max_views,
+        "checked_count": len(views),
+        "reason": f"최대조회수 {max_views:,}" if verified else f"최대조회수 {max_views:,} (기준 미달)"
+    }
 
 
-# ══════════════════════════════════════════════════════════════
-#  채널 재검사 (YouTube API 기반)
-# ══════════════════════════════════════════════════════════════
+def verify_all_channels(youtube, min_views: int = 10000) -> dict:
+    """모든 채널 검증 후 data/verify_result.json에 저장"""
+    channels_data = load_channels_safe()
+    results = {}
 
-def verify_channel(channel_id: str, api_key: str, hours: int = 72) -> dict:
-    """
-    채널 최근 영상 품질 검사.
-    반환: {"status": "active"|"warning"|"inactive", "score": int, "reason": str}
-    """
-    videos = get_recent_videos_via_playlist(channel_id, api_key, hours=hours, max_results=10)
-
-    if not videos:
-        return {
-            "status": "inactive",
-            "score":  0,
-            "reason": f"최근 {hours}시간 영상 없음",
-        }
-
-    total       = len(videos)
-    stock_count = 0
-    ad_count    = 0
-    info_count  = 0
-
-    for v in videos:
-        sn    = v.get("snippet", {})
-        title = sn.get("title", "")
-        desc  = sn.get("description", "")
-        text  = title + " " + desc
-
-        if is_stock_related(title, desc):
-            stock_count += 1
-        if any(kw in text for kw in AD_KEYWORDS):
-            ad_count += 1
-        if any(kw in text for kw in INFO_KEYWORDS):
-            info_count += 1
-
-    stock_ratio = stock_count / total if total else 0
-    ad_ratio    = ad_count    / total if total else 0
-    info_ratio  = info_count  / total if total else 0
-
-    score = int(stock_ratio * 50 + info_ratio * 30 - ad_ratio * 40)
-    score = max(0, min(100, score))
-
-    if score >= 50:
-        status = "active"
-        reason = f"주식 관련 영상 {stock_count}/{total}개, 정보성 {info_count}/{total}개"
-    elif score >= 20:
-        status = "warning"
-        reason = f"주식 관련 영상 적음 ({stock_count}/{total}개), 광고성 {ad_count}/{total}개"
-    else:
-        status = "inactive"
-        reason = "관련 영상 부족 또는 광고성 콘텐츠 다수"
-
-    return {"status": status, "score": score, "reason": reason}
-
-
-def verify_all_channels(api_key: str) -> dict:
-    """
-    channels.json 의 모든 채널을 재검사하고 결과를 반환 + 저장.
-    반환: {"broadcast": {...}, "youtuber": {...}, "securities": {...}}
-    """
-    channels = load_channels_safe()
-    results  = {"broadcast": {}, "youtuber": {}, "securities": {}}
-
-    for category, ch_dict in channels.items():
-        items = ch_dict if isinstance(ch_dict, dict) else {}
-        for name, info in items.items():
-            cid = info.get("id", "") if isinstance(info, dict) else ""
-            if not cid:
+    for category in ["broadcast", "youtuber", "securities"]:
+        for ch in channels_data.get(category, []):
+            ch_id = ch.get("id", "")
+            ch_name = ch.get("name", "")
+            if not ch_id:
+                results[ch_name] = {"verified": False, "reason": "채널 ID 없음"}
                 continue
-            print(f"  [재검사] {name} ({cid})...")
-            result = verify_channel(cid, api_key)
-            results[category][name] = {
-                **info,
-                "verify_status": result["status"],
-                "verify_score":  result["score"],
-                "verify_reason": result["reason"],
-                "verify_date":   datetime.now(KST).strftime("%Y-%m-%d"),
-            }
+            print(f"  검증 중: {ch_name} ({ch_id})")
+            result = verify_channel(youtube, ch_id, min_views)
+            results[ch_name] = result
+            time.sleep(0.1)  # API 레이트 리밋 방지
 
-    _save_verify_result(results)
+    os.makedirs("data", exist_ok=True)
+    with open("data/verify_result.json", "w", encoding="utf-8") as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
+
+    print(f"✅ 검증 완료: {len(results)}개 채널")
     return results
 
 
-def _save_verify_result(results: dict) -> None:
-    """재검사 결과를 data/verify_result.json 에 저장"""
-    os.makedirs("data", exist_ok=True)
-    path = "data/verify_result.json"
-    try:
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(results, f, ensure_ascii=False, indent=2)
-        print(f"  [재검사] 결과 저장: {path}")
-    except Exception as e:
-        print(f"  [재검사] 저장 실패: {e}")
-
-
-# ══════════════════════════════════════════════════════════════
-#  섹션 1: 유튜브·미디어 채널 수집
-# ══════════════════════════════════════════════════════════════
-
-def collect_section1_youtube() -> list:
+def collect_section1_youtube(youtube) -> list:
     """
-    섹션 1용 데이터 수집.
-    방송사(BROADCAST_HOURS) + 개인유튜버(YOUTUBER_HOURS) + 증권사유튜브(YOUTUBER_HOURS)
-    주식 관련 영상만 필터링하여 반환.
+    섹션1 유튜브 수집:
+    broadcast, youtuber, securities 카테고리에서 주식 관련 영상 수집
     """
-    if not API_KEY:
-        print("  [섹션1] YouTube API 키 없음")
+    if not youtube:
+        print("  ⚠️ YouTube API 키 없음, 건너뜀")
         return []
 
-    channels = load_channels_safe()
-    results  = []
+    channels_data = load_channels_safe()
+    all_videos = []
 
-    channel_groups = [
-        ("broadcast",  channels.get("broadcast",  {}), BROADCAST_HOURS,  "경제방송"),
-        ("youtuber",   channels.get("youtuber",   {}), YOUTUBER_HOURS,   "개인유튜브"),
-        ("securities", channels.get("securities", {}), YOUTUBER_HOURS,   "증권사유튜브"),
+    categories = [
+        ("broadcast", BROADCAST_HOURS),
+        ("youtuber", YOUTUBER_HOURS),
+        ("securities", SECURITIES_TV_HOURS),
     ]
 
-    for group_key, ch_dict, hours, source_type in channel_groups:
-        items = ch_dict if isinstance(ch_dict, dict) else {}
-        for ch_name, ch_info in items.items():
-            if isinstance(ch_info, dict):
-                cid    = ch_info.get("id", "")
-                status = ch_info.get("status", "active")
-            else:
-                cid    = str(ch_info)
-                status = "active"
+    for category, hours in categories:
+        ch_list = channels_data.get(category, [])
+        print(f"\n  [{category}] {len(ch_list)}개 채널 처리 중...")
+        cat_count = 0
 
-            # ID 없는 채널 또는 비활성 채널 건너뜀
-            if not cid or status == "inactive":
+        for ch in ch_list:
+            ch_id = ch.get("id", "")
+            ch_name = ch.get("name", "")
+            ch_url = ch.get("url", "")
+
+            # ID가 없으면 URL에서 handle 추출하여 resolve 시도
+            if not ch_id and ch_url:
+                handle = ch_url.split("@")[-1] if "@" in ch_url else ""
+                if handle:
+                    ch_id = resolve_channel_id(youtube, handle)
+
+            if not ch_id:
+                print(f"    ⚠️ {ch_name}: 채널 ID 없음, 건너뜀")
                 continue
 
-            # handle → channel ID 변환 (UC...24자 아닌 경우만)
-            resolved_id = resolve_channel_id(cid, API_KEY)
+            try:
+                videos = get_recent_videos_via_playlist(youtube, ch_id, hours=hours)
+                stock_videos = [v for v in videos if is_stock_related(v["title"], v.get("description", ""))]
+                for v in stock_videos:
+                    v["category"] = category
+                    v["channel_name"] = ch_name
+                    v["source"] = "youtube_section1"
+                all_videos.extend(stock_videos)
+                cat_count += len(stock_videos)
+                if stock_videos:
+                    print(f"    ✅ {ch_name}: {len(stock_videos)}개 수집")
+            except Exception as e:
+                print(f"    ❌ {ch_name}: {e}")
 
-            print(f"  [{source_type}] {ch_name} 수집 중...")
-            videos = get_recent_videos_via_playlist(
-                resolved_id, API_KEY, hours=hours, max_results=15
-            )
+        print(f"  [{category}] 소계: {cat_count}개")
 
-            stock_videos = [
-                v for v in videos
-                if is_stock_related(
-                    v.get("snippet", {}).get("title", ""),
-                    v.get("snippet", {}).get("description", ""),
-                )
-            ]
-
-            for v in stock_videos:
-                sn    = v.get("snippet", {})
-                title = sn.get("title", "")
-                desc  = sn.get("description", "")
-                vid   = v.get("id", {}).get("videoId", "")
-
-                transcript = get_transcript(vid, max_chars=800)
-                summary    = transcript if transcript else desc[:400]
-                panelists  = has_popular_panelist(title, desc)
-
-                results.append({
-                    "source_type":    source_type,
-                    "source_name":    ch_name,
-                    "title":          title,
-                    "summary":        summary,
-                    "link":           f"https://www.youtube.com/watch?v={vid}",
-                    "published":      sn.get("publishedAt", ""),
-                    "section":        "section1",
-                    "panelists":      panelists,
-                    "has_transcript": bool(transcript),
-                })
-
-            print(f"    → {len(stock_videos)}건 수집")
-
-    print(f"  [섹션1 합계] {len(results)}건")
-    return results
+    print(f"\n  섹션1 유튜브 총계: {len(all_videos)}개")
+    return all_videos
 
 
-# ══════════════════════════════════════════════════════════════
-#  섹션 2: 증권TV 전문가 채널 수집
-# ══════════════════════════════════════════════════════════════
-
-def collect_section2_securities_tv() -> list:
+def collect_section2_securities_tv(youtube) -> list:
     """
-    섹션 2용 데이터 수집.
-    config.py 의 SECURITIES_TV_CHANNELS 목록 기반.
-    전문가 프로그램 키워드 필터링 적용 (48시간 기준).
+    섹션2 증권TV 수집:
+    SECURITIES_TV_CHANNELS에서 전문가 출연 영상 수집
     """
-    if not API_KEY:
-        print("  [섹션2] YouTube API 키 없음")
+    if not youtube:
+        print("  ⚠️ YouTube API 키 없음, 건너뜀")
         return []
 
-    results = []
+    all_videos = []
+    print(f"\n  [섹션2 증권TV] {len(SECURITIES_TV_CHANNELS)}개 채널 처리 중...")
 
     for ch in SECURITIES_TV_CHANNELS:
-        ch_id   = ch.get("id", "")
-        ch_name = ch.get("name", ch_id)
-        hours   = SECURITIES_TV_HOURS
+        ch_id = ch.get("id", "")
+        ch_name = ch.get("name", "")
+        ch_url = ch.get("url", "")
+
+        # ID가 없으면 URL에서 handle 추출하여 resolve 시도
+        if not ch_id and ch_url:
+            handle = ch_url.split("@")[-1] if "@" in ch_url else ""
+            if handle:
+                ch_id = resolve_channel_id(youtube, handle)
 
         if not ch_id:
+            print(f"    ⚠️ {ch_name}: 채널 ID 없음, 건너뜀")
             continue
 
-        resolved_id = resolve_channel_id(ch_id, API_KEY)
-        print(f"  [증권TV] {ch_name} 수집 중...")
+        try:
+            videos = get_recent_videos_via_playlist(youtube, ch_id, hours=SECURITIES_TV_HOURS)
 
-        videos = get_recent_videos_via_playlist(
-            resolved_id, API_KEY, hours=hours, max_results=20
-        )
+            # 전문가 출연 또는 주식 관련 필터
+            filtered = [
+                v for v in videos
+                if is_expert_program(v["title"], v.get("description", ""))
+                or has_popular_panelist(v["title"], v.get("description", ""))
+                or is_stock_related(v["title"], v.get("description", ""))
+            ]
 
-        # ✅ 수정: 채널별 건수를 별도 카운터로 출력
-        channel_count = 0
+            for v in filtered:
+                v["category"] = "securities_tv"
+                v["channel_name"] = ch_name
+                v["source"] = "youtube_section2"
 
-        for v in videos:
-            sn    = v.get("snippet", {})
-            title = sn.get("title", "")
-            desc  = sn.get("description", "")
-            vid   = v.get("id", {}).get("videoId", "")
+            all_videos.extend(filtered)  # ✅ 수정: 채널별 초기화 없이 누적
+            print(f"    ✅ {ch_name}: {len(filtered)}개 수집")
 
-            if not (is_expert_program(title, desc) or is_stock_related(title, desc)):
-                continue
+        except Exception as e:
+            print(f"    ❌ {ch_name}: {e}")
 
-            transcript = get_transcript(vid, max_chars=800)
-            summary    = transcript if transcript else desc[:400]
-            panelists  = has_popular_panelist(title, desc + " " + summary)
-
-            results.append({
-                "source_type":    "증권TV",
-                "source_name":    ch_name,
-                "title":          title,
-                "summary":        summary,
-                "link":           f"https://www.youtube.com/watch?v={vid}",
-                "published":      sn.get("publishedAt", ""),
-                "section":        "section2",
-                "expert_name":    ", ".join(panelists) if panelists else "",
-                "has_transcript": bool(transcript),
-            })
-            channel_count += 1
-
-        # ✅ 수정: 채널별 건수 출력 (누적 전체 건수 아님)
-        print(f"    → {channel_count}건 수집")
-
-    print(f"  [섹션2 합계] {len(results)}건")
-    return results
+    print(f"\n  섹션2 증권TV 총계: {len(all_videos)}개")
+    return all_videos
