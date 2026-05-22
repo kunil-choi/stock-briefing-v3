@@ -1,11 +1,11 @@
+# analyzer/html_generator.py
 """
 HTML 생성기 - v3
 AI 분석 결과를 HTML 브리핑 페이지로 변환
 """
 import os
-import json
+import re
 from datetime import datetime, timezone, timedelta
-from urllib.parse import quote
 
 KST = timezone(timedelta(hours=9))
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "stock2026!")
@@ -30,7 +30,6 @@ def generate_html(
     """
     now_kst = datetime.now(KST)
 
-    # ── 키 이름 ai_analyzer.py와 일치 ────────────────────────────
     date_str        = analysis_result.get("briefing_date", now_kst.strftime("%Y-%m-%d"))
     market_summary  = analysis_result.get("market_summary", "")
     section1_stocks = analysis_result.get("section1_stocks", [])
@@ -38,16 +37,12 @@ def generate_html(
     section3_stocks = analysis_result.get("section3_stocks", [])
     strategy        = analysis_result.get("investment_strategy", "")
 
-    # ── 아카이브 링크 ─────────────────────────────────────────────
     archive_html = _build_archive_links(archive_dates or [])
+    market_html  = _format_market_summary(market_summary)
+    s1_html      = _render_stock_cards(section1_stocks, section="section1")
+    s2_html      = _render_stock_cards(section2_stocks, section="section2")
+    s3_html      = _render_section3_cards(section3_stocks)
 
-    # ── 각 섹션 HTML ─────────────────────────────────────────────
-    market_html = _format_market_summary(market_summary)
-    s1_html     = _render_stock_cards(section1_stocks, section="section1")
-    s2_html     = _render_stock_cards(section2_stocks, section="section2")
-    s3_html     = _render_section3_cards(section3_stocks)
-
-    # ── 어드민 비밀번호 주입 ─────────────────────────────────────
     _inject_admin_password()
 
     css = _get_css()
@@ -134,13 +129,12 @@ def generate_html(
 def _format_market_summary(summary) -> str:
     """
     시장 요약 HTML 생성.
-    ai_analyzer.py는 summary를 문자열(텍스트)로 전달하므로
-    문자열과 dict 두 가지 형태 모두 처리.
+    ai_analyzer.py는 순수 텍스트 문자열로 전달.
+    dict 형태는 향후 KOSPI/KOSDAQ 수치 카드 확장용.
     """
     if not summary:
         return ""
 
-    # ai_analyzer가 전달하는 형태: 순수 텍스트 문자열
     if isinstance(summary, str):
         formatted = summary.replace("\n", "<br>")
         return f"""
@@ -149,11 +143,11 @@ def _format_market_summary(summary) -> str:
   <div class="market-text">{formatted}</div>
 </div>"""
 
-    # dict 형태 (향후 확장용 — KOSPI/KOSDAQ 수치 제공 시)
-    kospi  = summary.get("kospi",   {})
-    kosdaq = summary.get("kosdaq",  {})
-    usd_krw= summary.get("usd_krw", {})
-    sp500  = summary.get("sp500",   {})
+    # dict 형태 (향후 확장용)
+    kospi   = summary.get("kospi",   {})
+    kosdaq  = summary.get("kosdaq",  {})
+    usd_krw = summary.get("usd_krw", {})
+    sp500   = summary.get("sp500",   {})
 
     def fmt_change(val):
         if val is None:
@@ -192,15 +186,33 @@ def _format_market_summary(summary) -> str:
 
 
 # ══════════════════════════════════════════════════════════════
-#  섹션 1 / 2 카드 렌더링 (AI 분석 결과 종목 카드)
+#  목표가 정제 헬퍼
+# ══════════════════════════════════════════════════════════════
+
+def _fmt_target_price(tp) -> str:
+    """
+    목표가 HTML 뱃지 생성.
+    Claude 또는 수집기가 반환하는 다양한 형태 처리:
+      "85000", "85,000", "85000원", "85,000원", 85000 (int)
+    숫자로 정제되면 콤마 포맷, 아니면 원본 문자열 그대로 표시.
+    """
+    if not tp:
+        return ""
+    tp_clean = re.sub(r"[,원\s]", "", str(tp)).strip()
+    if tp_clean.isdigit():
+        return f'<span class="target-price">목표가 {int(tp_clean):,}원</span>'
+    if tp:
+        return f'<span class="target-price">목표가 {tp}</span>'
+    return ""
+
+
+# ══════════════════════════════════════════════════════════════
+#  섹션 1 / 2 카드 렌더링
 # ══════════════════════════════════════════════════════════════
 
 def _render_stock_cards(stocks: list, section: str = "section1") -> str:
     """
     섹션1(유튜브), 섹션2(증권TV) 공통 종목 카드 렌더링.
-    ai_analyzer가 반환한 종목 객체 구조:
-      name, krx_code, signal, description, price_trend,
-      price_display, catalyst, risk, reasons[]
     """
     if not stocks:
         return ""
@@ -217,26 +229,21 @@ def _render_stock_cards(stocks: list, section: str = "section1") -> str:
         risk          = stock.get("risk", "")
         reasons       = stock.get("reasons", [])
 
-        signal_cls = {"긍정": "positive", "부정": "negative", "중립": "neutral"}.get(signal, "neutral")
+        signal_cls  = {"긍정": "positive", "부정": "negative", "중립": "neutral"}.get(signal, "neutral")
         signal_icon = {"긍정": "▲", "부정": "▼", "중립": "–"}.get(signal, "–")
 
-        # 주가 배지
         price_badge = ""
         if price_display:
             price_badge = f'<span class="price-badge">{price_display}</span>'
         elif krx_code:
             price_badge = f'<span class="price-badge code">{krx_code}</span>'
 
-        # 선정 이유
         reasons_html = _render_reasons(reasons)
 
-        # 주가 흐름 (실제 데이터 prefix 포함)
         trend_html = ""
         if price_trend:
-            trend_lines = price_trend.replace("\n", "<br>")
-            trend_html = f'<div class="price-trend">{trend_lines}</div>'
+            trend_html = f'<div class="price-trend">{price_trend.replace(chr(10), "<br>")}</div>'
 
-        # 촉매/리스크
         detail_html = ""
         if catalyst:
             detail_html += f'<div class="detail-item catalyst">🚀 {catalyst}</div>'
@@ -271,16 +278,10 @@ def _render_stock_cards(stocks: list, section: str = "section1") -> str:
 def _render_section3_cards(stocks: list) -> str:
     """
     섹션3 애널리스트 리포트 종목 카드 렌더링.
-    ai_analyzer가 반환한 종목 객체 구조:
-      name, krx_code, analyst_category, signal,
-      description, price_display, price_trend,
-      catalyst, risk, broker, analyst_name,
-      target_price, opinion, reasons[]
     """
     if not stocks:
         return ""
 
-    # analyst_category 순서: simultaneous → new_coverage → first_in_6months
     order = {"simultaneous": 0, "new_coverage": 1, "first_in_6months": 2}
     sorted_stocks = sorted(stocks, key=lambda s: order.get(s.get("analyst_category", ""), 3))
 
@@ -300,19 +301,17 @@ def _render_section3_cards(stocks: list) -> str:
         risk             = stock.get("risk", "")
         reasons          = stock.get("reasons", [])
 
-        # 카테고리 뱃지
         cat_label = {
-            "simultaneous":    "🔥 복수 증권사 동시 언급",
-            "new_coverage":    "🆕 신규 커버리지",
-            "first_in_6months":"📌 단일 증권사 언급",
+            "simultaneous":     "🔥 복수 증권사 동시 언급",
+            "new_coverage":     "🆕 신규 커버리지",
+            "first_in_6months": "📌 단일 증권사 언급",
         }.get(analyst_category, "")
         cat_cls = {
-            "simultaneous":    "cat-simultaneous",
-            "new_coverage":    "cat-new",
-            "first_in_6months":"cat-first",
+            "simultaneous":     "cat-simultaneous",
+            "new_coverage":     "cat-new",
+            "first_in_6months": "cat-first",
         }.get(analyst_category, "")
 
-        # 의견 클래스
         opinion_cls = ""
         op_upper = opinion.upper()
         if "매수" in opinion or "BUY" in op_upper or "비중확대" in opinion:
@@ -322,20 +321,18 @@ def _render_section3_cards(stocks: list) -> str:
         elif "매도" in opinion or "SELL" in op_upper:
             opinion_cls = "sell"
 
-        # 주가 흐름
         trend_html = ""
         if price_trend:
-            trend_lines = price_trend.replace("\n", "<br>")
-            trend_html = f'<div class="price-trend">{trend_lines}</div>'
+            trend_html = f'<div class="price-trend">{price_trend.replace(chr(10), "<br>")}</div>'
 
-        # 촉매/리스크
         detail_html = ""
         if catalyst:
             detail_html += f'<div class="detail-item catalyst">🚀 {catalyst}</div>'
         if risk:
             detail_html += f'<div class="detail-item risk">⚠️ {risk}</div>'
 
-        reasons_html = _render_reasons(reasons)
+        reasons_html   = _render_reasons(reasons)
+        tp_html        = _fmt_target_price(target_price)   # ← 정제 함수 사용
 
         cards.append(f"""
 <div class="report-card {cat_cls}">
@@ -347,7 +344,7 @@ def _render_section3_cards(stocks: list) -> str:
     </div>
     <div class="report-meta-row">
       {f'<span class="opinion {opinion_cls}">{opinion}</span>' if opinion else ''}
-      {f'<span class="target-price">목표가 {int(target_price):,}원</span>' if target_price and str(target_price).isdigit() else (f'<span class="target-price">목표가 {target_price}</span>' if target_price else '')}
+      {tp_html}
       {f'<span class="price-badge">{price_display}</span>' if price_display else ''}
     </div>
   </div>
@@ -384,7 +381,10 @@ def _render_reasons(reasons: list) -> str:
             src_url  = r.get("source_url", "")
             label    = f"[{src_type}] {src_name}" if src_name else src_type
             if src_url:
-                items_html += f'<li><a href="{src_url}" target="_blank" rel="noopener"><strong>{label}</strong></a>: {detail}</li>'
+                items_html += (
+                    f'<li><a href="{src_url}" target="_blank" rel="noopener">'
+                    f'<strong>{label}</strong></a>: {detail}</li>'
+                )
             else:
                 items_html += f'<li><strong>{label}</strong>: {detail}</li>'
         else:
@@ -397,31 +397,31 @@ def _inject_admin_password() -> None:
     """
     docs/admin/index.html의 %%ADMIN_PASSWORD%% 플레이스홀더를
     실제 비밀번호로 교체.
+    template 분기를 제거하고 output_path 단일 경로로 통일.
+    파일이 없거나 플레이스홀더가 없으면 조용히 종료.
     """
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    admin_dir     = os.path.join(base_dir, "docs", "admin")
-    template_path = os.path.join(admin_dir, "index.html.template")
-    output_path   = os.path.join(admin_dir, "index.html")
+    base_dir    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    output_path = os.path.join(base_dir, "docs", "admin", "index.html")
 
-    if os.path.exists(template_path):
-        with open(template_path, "r", encoding="utf-8") as f:
+    if not os.path.exists(output_path):
+        print("  ⚠️ docs/admin/index.html 없음 — 비밀번호 주입 생략")
+        return
+
+    try:
+        with open(output_path, "r", encoding="utf-8") as f:
             content = f.read()
+
+        if "%%ADMIN_PASSWORD%%" not in content:
+            # 이미 주입된 상태 — 아무것도 하지 않음
+            return
+
         content = content.replace("%%ADMIN_PASSWORD%%", ADMIN_PASSWORD)
         with open(output_path, "w", encoding="utf-8") as f:
             f.write(content)
-        print("  ✅ admin 비밀번호 주입 완료 (템플릿 기반)")
-    elif os.path.exists(output_path):
-        with open(output_path, "r", encoding="utf-8") as f:
-            content = f.read()
-        if "%%ADMIN_PASSWORD%%" in content:
-            content = content.replace("%%ADMIN_PASSWORD%%", ADMIN_PASSWORD)
-            with open(output_path, "w", encoding="utf-8") as f:
-                f.write(content)
-            print("  ✅ admin 비밀번호 주입 완료 (직접 교체)")
-        else:
-            print("  ℹ️ admin 비밀번호: 플레이스홀더 없음 (이미 주입됨)")
-    else:
-        print("  ⚠️ docs/admin/index.html 파일 없음")
+        print("  ✅ admin 비밀번호 주입 완료")
+
+    except Exception as e:
+        print(f"  ⚠️ admin 비밀번호 주입 실패: {e}")
 
 
 def _build_archive_links(dates: list) -> str:
@@ -429,15 +429,14 @@ def _build_archive_links(dates: list) -> str:
     if not dates:
         return ""
 
-    links = []
-    for d in sorted(dates, reverse=True)[:10]:
-        links.append(f'<a href="archive/{d}.html" class="archive-link">{d}</a>')
-
-    links_html = "\n".join(links)
+    links = [
+        f'<a href="archive/{d}.html" class="archive-link">{d}</a>'
+        for d in sorted(dates, reverse=True)[:10]
+    ]
     return f"""
 <div class="archive-bar">
   <span class="archive-label">📁 이전 브리핑:</span>
-  {links_html}
+  {chr(10).join(links)}
 </div>"""
 
 
@@ -471,7 +470,6 @@ body {
   line-height: 1.6;
 }
 
-/* ── 헤더 ── */
 .header {
   background: var(--surface);
   border-bottom: 1px solid var(--border);
@@ -495,7 +493,6 @@ body {
 }
 .admin-btn:hover { opacity: 0.85; }
 
-/* ── 아카이브 바 ── */
 .archive-bar {
   background: var(--surface); padding: 8px 20px;
   border-bottom: 1px solid var(--border);
@@ -510,10 +507,8 @@ body {
 }
 .archive-link:hover { background: var(--surface2); }
 
-/* ── 컨테이너 ── */
 .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
 
-/* ── 시장 요약 (텍스트형) ── */
 .market-summary-text {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -521,13 +516,8 @@ body {
   padding: 20px 24px;
   margin-bottom: 24px;
 }
-.market-text {
-  font-size: 0.92rem;
-  color: var(--text);
-  line-height: 1.9;
-}
+.market-text { font-size: 0.92rem; color: var(--text); line-height: 1.9; }
 
-/* ── 시장 요약 (수치 카드형, 향후 확장) ── */
 .market-summary {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -544,7 +534,6 @@ body {
 .change.down { color: var(--down); }
 .change.flat { color: var(--text-muted); }
 
-/* ── 탭 ── */
 .tab-nav { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
 .tab-btn {
   background: var(--surface); border: 1px solid var(--border);
@@ -560,7 +549,6 @@ body {
   border-left: 3px solid var(--accent); padding-left: 12px;
 }
 
-/* ── 종목 카드 (섹션1/2) ── */
 .stock-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); margin-bottom: 16px;
@@ -620,7 +608,6 @@ body {
 .reasons a  { color: var(--accent); text-decoration: none; }
 .reasons a:hover { text-decoration: underline; }
 
-/* ── 리포트 카드 (섹션3) ── */
 .report-card {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); margin-bottom: 16px;
@@ -661,11 +648,9 @@ body {
   border-bottom: 1px solid var(--border);
 }
 .broker { font-weight: 600; }
-.analyst-name { }
 
 .report-body { padding: 14px 16px; }
 
-/* ── 투자전략 ── */
 .strategy-box {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 24px;
@@ -674,14 +659,12 @@ body {
 
 .empty-msg { color: var(--text-muted); text-align: center; padding: 40px; }
 
-/* ── 푸터 ── */
 .footer {
   text-align: center; padding: 20px;
   color: var(--text-muted); font-size: 0.8rem;
   border-top: 1px solid var(--border); margin-top: 40px;
 }
 
-/* ── 반응형 ── */
 @media (max-width: 600px) {
   .tab-btn { font-size: 0.8rem; padding: 6px 10px; }
   .stock-card-header { flex-direction: column; }
