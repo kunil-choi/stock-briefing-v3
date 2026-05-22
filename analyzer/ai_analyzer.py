@@ -74,8 +74,7 @@ def analyze_and_generate_html(
         print("[AI 분석] API 키가 없습니다. 더미 HTML 생성...")
         return _generate_fallback_html()
 
-    # ── API 키 정제: 앞뒤 공백·개행 제거 ──────────────────────────
-    # GitHub Secrets 붙여넣기 시 발생하는 \n 포함 문제 방지
+    # API 키 정제 (GitHub Secrets 줄바꿈 방지)
     api_key = api_key.strip()
     os.environ["ANTHROPIC_API_KEY"] = api_key
 
@@ -83,15 +82,15 @@ def analyze_and_generate_html(
         def __init__(self, key):
             self.api_key = key
 
-    client   = _Client(api_key)
-    model    = MODEL
-    now_kst  = datetime.now(KST)
+    client  = _Client(api_key)
+    model   = MODEL
+    now_kst = datetime.now(KST)
 
-    # ── 종목 목록 로드 ─────────────────────────────────────────────
+    # 종목 목록 로드
     print("  [종목목록] 로드 중...")
     stock_map = load_stock_names()
 
-    # ── 섹션별 데이터 분류 ────────────────────────────────────────
+    # 섹션별 데이터 분류
     news_data = [d for d in all_data if d.get("source_type") == "뉴스"]
 
     section1_data = [
@@ -118,7 +117,7 @@ def analyze_and_generate_html(
         f"섹션3: {len(section3_data)}건"
     )
 
-    # ── AI 분석 ───────────────────────────────────────────────────
+    # AI 분석
     print("\n[시장 요약 생성 중...]")
     market_summary = _generate_market_summary(
         client, model, news_data + section1_data[:10]
@@ -140,20 +139,20 @@ def analyze_and_generate_html(
         market_summary,
     )
 
-    # ── 실제 2주 주가 데이터 주입 ────────────────────────────────
+    # 실제 2주 주가 데이터 주입
     print("\n[주가 정보 조회 중...]")
     _enrich_stocks_with_price(
         section1_stocks + section2_stocks + section3_stocks,
         stock_map,
     )
 
-    # ── HTML 생성 ─────────────────────────────────────────────────
+    # HTML 생성
     data = {
-        "briefing_date":     now_kst.strftime("%Y-%m-%d"),
-        "market_summary":    market_summary,
-        "section1_stocks":   section1_stocks,
-        "section2_stocks":   section2_stocks,
-        "section3_stocks":   section3_stocks,
+        "briefing_date":       now_kst.strftime("%Y-%m-%d"),
+        "market_summary":      market_summary,
+        "section1_stocks":     section1_stocks,
+        "section2_stocks":     section2_stocks,
+        "section3_stocks":     section3_stocks,
         "investment_strategy": investment_strategy,
     }
 
@@ -167,8 +166,6 @@ def analyze_and_generate_html(
 def _enrich_stocks_with_price(stocks: list, stock_map: dict) -> None:
     """
     종목 리스트에 실제 주가 + 2주 히스토리 정보를 주입.
-    get_stock_full_info() 사용.
-    수정 대상 필드: krx_code, verified_price, price_display, price_trend
     """
     for stock in stocks:
         name = stock.get("name", "")
@@ -187,7 +184,6 @@ def _enrich_stocks_with_price(stocks: list, stock_map: dict) -> None:
 
         stock["krx_code"] = code
 
-        # html_generator 에서 현재가 배지 표시에 사용
         stock["verified_price"] = {
             "code":       info.get("code", code),
             "price":      info.get("price", ""),
@@ -195,15 +191,13 @@ def _enrich_stocks_with_price(stocks: list, stock_map: dict) -> None:
             "change_pct": info.get("change_pct", ""),
         }
 
-        # 카드 헤더 한 줄 표시
         if info.get("price_display"):
             stock["price_display"] = info["price_display"]
 
-        # price_trend 앞에 실제 데이터 서두 추가
-        history_summary  = info.get("history_summary", "")
-        period_change    = info.get("period_change", "")
-        period_high      = info.get("period_high", "")
-        period_low       = info.get("period_low", "")
+        history_summary = info.get("history_summary", "")
+        period_change   = info.get("period_change", "")
+        period_high     = info.get("period_high", "")
+        period_low      = info.get("period_low", "")
 
         if history_summary:
             prefix = f"[실제 데이터] {history_summary}"
@@ -393,6 +387,7 @@ def _analyze_section3(client, model: str, data: list, stock_map: dict) -> list:
         f"[{d.get('analyst_category','unknown')}][{d.get('source_name','')}] "
         f"{d.get('stock_name','')} - {d.get('report_title','')} "
         f"(담당: {d.get('analyst','')})"
+        + (f" | 목표가: {d.get('target_price','')}원" if d.get("target_price") else "")
         for d in data[:30]
     )
 
@@ -415,10 +410,10 @@ def _analyze_section3(client, model: str, data: list, stock_map: dict) -> list:
         '  "price_display": "가격 표시 문자열",\n'
         '  "catalyst": "리포트에서 언급된 상승 촉매",\n'
         '  "risk": "리포트에서 언급된 리스크",\n'
-        '  "broker": "증권사명",\n'
+        '  "broker": "증권사명 (복수인 경우 / 로 구분)",\n'
         '  "analyst_name": "담당 애널리스트명",\n'
-        '  "target_price": "목표주가 숫자만, 없으면 빈 문자열",\n'
-        '  "opinion": "BUY/HOLD/SELL 또는 매수/중립/매도",\n'
+        '  "target_price": "목표주가 숫자만 (예: 85000), 없으면 빈 문자열",\n'
+        '  "opinion": "BUY/HOLD/SELL 또는 매수/중립/매도, 없으면 빈 문자열",\n'
         '  "reasons": [\n'
         "    {\n"
         '      "source_type": "애널리스트",\n'
@@ -438,18 +433,29 @@ def _analyze_section3(client, model: str, data: list, stock_map: dict) -> list:
             [{"role": "user", "content": prompt}],
         )
         stocks = _parse_stocks_json(response)
+
+        # Claude 응답에서 누락된 필드를 원본 데이터로 보완
         for s in stocks:
             s["section"] = "section3"
             stock_name = s.get("name", "")
+
             for d in data:
                 if d.get("stock_name", "") == stock_name:
                     if not s.get("analyst_category"):
                         s["analyst_category"] = d.get("analyst_category", "")
+                    # broker: Claude가 못 채운 경우 source_name으로 보완
                     if not s.get("broker"):
                         s["broker"] = d.get("source_name", "")
                     if not s.get("analyst_name"):
                         s["analyst_name"] = d.get("analyst", "")
+                    # target_price: Claude가 빈 문자열로 반환한 경우 원본으로 보완
+                    if not s.get("target_price"):
+                        s["target_price"] = d.get("target_price", "")
+                    # opinion: Claude가 빈 문자열로 반환한 경우 원본으로 보완
+                    if not s.get("opinion"):
+                        s["opinion"] = d.get("opinion", "")
                     break
+
         return stocks
     except Exception as e:
         print(f"  [섹션 3 오류] {e}")
@@ -484,11 +490,11 @@ def _generate_investment_strategy(
         return "분석할 종목 데이터가 없습니다. 데이터 수집 상태를 확인해 주세요."
 
     s3_simul = ", ".join(
-        s.get("name","") for s in section3_stocks
+        s.get("name", "") for s in section3_stocks
         if s.get("analyst_category") == "simultaneous"
     ) or "없음"
     s3_new = ", ".join(
-        s.get("name","") for s in section3_stocks
+        s.get("name", "") for s in section3_stocks
         if s.get("analyst_category") == "new_coverage"
     ) or "없음"
 
@@ -497,7 +503,7 @@ def _generate_investment_strategy(
         "시장 요약:\n" + market_summary[:300] + "\n\n"
         "섹션 1 (유튜브·미디어 채널 언급 종목): " + (", ".join(s1_names) or "없음") + "\n"
         "- 긍정 종목: " + (
-            ", ".join(s.get("name","") for s in section1_stocks if s.get("signal") == "긍정")
+            ", ".join(s.get("name", "") for s in section1_stocks if s.get("signal") == "긍정")
             or "없음"
         ) + "\n\n"
         "섹션 2 (증권TV 전문가 추천): " + (", ".join(s2_names) or "없음") + "\n\n"
@@ -533,12 +539,10 @@ def _generate_investment_strategy(
 
 def _parse_stocks_json(response: str) -> list:
     """Claude 응답에서 JSON 배열 파싱"""
-    # ```json ... ``` 블록 우선
     m = re.search(r"```json\s*([\s\S]*?)\s*```", response)
     if m:
         json_str = m.group(1)
     else:
-        # 순수 배열 탐색
         m2 = re.search(r"\[[\s\S]*\]", response)
         if m2:
             json_str = m2.group(0)
@@ -563,9 +567,9 @@ def _generate_fallback_html() -> str:
             "설정 방법: GitHub 저장소 Settings → Secrets and variables → Actions 에서 "
             "ANTHROPIC_API_KEY, YOUTUBE_API_KEY, GH_TOKEN 을 등록해 주세요."
         ),
-        "section1_stocks":    [],
-        "section2_stocks":    [],
-        "section3_stocks":    [],
+        "section1_stocks":     [],
+        "section2_stocks":     [],
+        "section3_stocks":     [],
         "investment_strategy": "API 키를 설정하면 AI 투자전략이 자동 생성됩니다.",
     }
     return generate_html(data)
