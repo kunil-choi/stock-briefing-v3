@@ -10,16 +10,6 @@ on:
         description: '강제 실행 여부'
         required: false
         default: 'false'
-  push:
-    branches:
-      - main
-    paths:
-      - 'analyzer/**'
-      - 'collectors/**'
-      - 'channels.json'
-      - 'config.py'
-      - 'main.py'
-      - 'requirements.txt'
 
 permissions:
   contents: write
