@@ -8,6 +8,7 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import time
+from collections import defaultdict
 
 REPORT_DAYS = 1
 
@@ -23,7 +24,6 @@ BROKERS = [
 NAVER_FINANCE_BASE = "https://finance.naver.com"
 NAVER_RESEARCH_BASE = "https://finance.naver.com/research"
 
-# 신규 커버리지를 나타내는 키워드
 COVERAGE_KEYWORDS = ["커버리지", "신규", "개시", "Coverage Initiation", "Initiation"]
 FIRST_MENTION_KEYWORDS = ["첫 분석", "첫 리포트", "처음"]
 
@@ -39,20 +39,36 @@ def _build_link(href: str) -> str:
 
 
 def is_within_days(date_str: str, days: int = REPORT_DAYS) -> bool:
+    """
+    ✅ Bug 3 수정: 날짜 파싱 로직 개선
+    네이버 금융 실제 형식: "26.05.21" (점 포함 7글자, YY.MM.DD)
+    또는 "2026.05.21" (점 포함 10글자, YYYY.MM.DD)
+    """
     try:
         date_str = date_str.strip().replace(" ", "")
-        # 형식 자동 감지: "26.05.21" 또는 "2026.05.21"
-        if len(date_str) == 8:  # "26.05.21" 형식
-            report_date = datetime.strptime(date_str, "%y.%m.%d")
-        elif len(date_str) == 10:  # "2026.05.21" 형식
+
+        if len(date_str) == 10 and date_str.count(".") == 2:
+            # "2026.05.21" 형식
             report_date = datetime.strptime(date_str, "%Y.%m.%d")
-        elif len(date_str) == 8 and "." not in date_str:  # "20260521" 형식
+        elif len(date_str) == 8 and date_str.count(".") == 2:
+            # "26.05.21" 형식 (YY.MM.DD)
+            report_date = datetime.strptime(date_str, "%y.%m.%d")
+        elif len(date_str) == 8 and "." not in date_str:
+            # "20260521" 형식 (YYYYMMDD)
             report_date = datetime.strptime(date_str, "%Y%m%d")
+        elif len(date_str) == 6 and "." not in date_str:
+            # "260521" 형식 (YYMMDD)
+            report_date = datetime.strptime(date_str, "%y%m%d")
         else:
-            return True  # 파싱 불가 시 포함
+            # 파싱 불가 시 포함 처리 (안전)
+            print(f"  [날짜 파싱 불가] '{date_str}' → 포함 처리")
+            return True
+
         cutoff = datetime.now() - timedelta(days=days)
         return report_date >= cutoff.replace(hour=0, minute=0, second=0, microsecond=0)
-    except Exception:
+
+    except Exception as e:
+        print(f"  [날짜 파싱 오류] '{date_str}': {e} → 포함 처리")
         return True
 
 
@@ -66,7 +82,9 @@ def collect_naver_research() -> list:
     results = []
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                      "AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+                      "AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://finance.naver.com/",
+        "Accept-Language": "ko-KR,ko;q=0.9",
     }
 
     for page in range(1, 6):
@@ -93,28 +111,30 @@ def collect_naver_research() -> list:
                 broker = cols[2].get_text(strip=True)
                 analyst = cols[3].get_text(strip=True) if len(cols) > 3 else ""
 
-                # 목표주가 및 투자의견 추출 (컬럼 구조에 따라 다를 수 있음)
                 target_price = ""
                 opinion = ""
-                # 컬럼 5번 (목표주가), 컬럼 6번 (투자의견) 시도
                 if len(cols) > 5:
                     tp_text = cols[5].get_text(strip=True).replace(",", "").replace("원", "")
                     if tp_text.isdigit() and len(tp_text) >= 4:
                         target_price = tp_text
                 if len(cols) > 6:
                     op_text = cols[6].get_text(strip=True)
-                    if op_text in ["매수", "BUY", "중립", "HOLD", "매도", "SELL", "비중확대", "시장수익률"]:
+                    if op_text in ["매수", "BUY", "중립", "HOLD", "매도", "SELL",
+                                   "비중확대", "시장수익률"]:
                         opinion = op_text
-                
-                # 링크 추출
+
                 link_tag = cols[1].find("a")
                 link = _build_link(link_tag.get("href", "")) if link_tag else ""
 
-                # PDF 링크 추출
-                pdf_tag = cols[5].find("a") if len(cols) > 5 else None
-                pdf_link = _build_link(pdf_tag.get("href", "")) if pdf_tag else ""
+                # PDF 링크 (컬럼 5 또는 6)
+                pdf_link = ""
+                for col_idx in [5, 6]:
+                    if len(cols) > col_idx:
+                        pdf_tag = cols[col_idx].find("a")
+                        if pdf_tag and pdf_tag.get("href", "").endswith(".pdf"):
+                            pdf_link = _build_link(pdf_tag.get("href", ""))
+                            break
 
-                # 신규 커버리지 여부 판단
                 new_coverage = is_new_coverage(report_title)
 
                 results.append({
@@ -130,10 +150,14 @@ def collect_naver_research() -> list:
                     "new_coverage": new_coverage,
                     "section": "section3",
                     "title": f"[{broker}] {stock_name} - {report_title}",
-                    "summary": f"증권사: {broker} | 담당: {analyst} | 종목: {stock_name} | 리포트: {report_title}",
+                    "summary": (
+                        f"증권사: {broker} | 담당: {analyst} | "
+                        f"종목: {stock_name} | 리포트: {report_title}"
+                    ),
                 })
 
             if not page_has_recent and page > 1:
+                print(f"  [리서치] 페이지 {page}에 최근 데이터 없음 → 수집 종료")
                 break
 
             time.sleep(0.5)
@@ -151,8 +175,6 @@ def classify_analyst_reports(reports: list) -> dict:
     - first_in_6months: 6개월 내 첫 언급 (오늘 데이터 기준 추정)
     - new_coverage: 신규 커버리지 개시
     """
-    from collections import defaultdict
-
     # 종목별 증권사 그룹핑
     stock_brokers = defaultdict(list)
     for r in reports:
@@ -160,30 +182,25 @@ def classify_analyst_reports(reports: list) -> dict:
         if stock_name:
             stock_brokers[stock_name].append(r)
 
-    simultaneous = []   # ① 복수 증권사 동시 언급
-    new_coverage = []   # ③ 신규 커버리지
-    first_mention = []  # ② 6개월 내 첫 언급 (단일 증권사)
-
+    simultaneous = []
+    new_coverage = []
+    first_mention = []
     seen_stocks = set()
 
     for stock_name, stock_reports in stock_brokers.items():
         unique_brokers = list({r.get("source_name", "") for r in stock_reports})
 
-        # ③ 신규 커버리지 먼저 분류
         for r in stock_reports:
             if r.get("new_coverage", False):
                 new_coverage.append(r)
                 seen_stocks.add(f"{stock_name}_{r.get('source_name', '')}")
 
-        # ① 복수 증권사 동시 언급
         if len(unique_brokers) >= 2:
-            # 대표 리포트 + 전체 증권사 정보 포함
             primary = stock_reports[0].copy()
             primary["simultaneous_brokers"] = unique_brokers
             primary["all_reports"] = stock_reports
             simultaneous.append(primary)
         else:
-            # ② 단일 증권사 (신규 커버리지 아닌 경우)
             for r in stock_reports:
                 key = f"{stock_name}_{r.get('source_name', '')}"
                 if key not in seen_stocks and not r.get("new_coverage", False):
@@ -197,16 +214,16 @@ def classify_analyst_reports(reports: list) -> dict:
 
 
 def collect_analyst() -> list:
-    """
-    애널리스트 리포트 수집 메인 함수
-    반환: 분류 정보가 포함된 리포트 리스트
-    """
+    """애널리스트 리포트 수집 메인 함수"""
     print("\n=== 섹션 3: 애널리스트 리포트 수집 ===")
 
     reports = collect_naver_research()
     print(f"  → 총 {len(reports)}건 수집")
 
-    # 분류 정보 추가
+    if not reports:
+        print("  → 수집된 리포트가 없습니다.")
+        return []
+
     classified = classify_analyst_reports(reports)
 
     for r in classified["simultaneous"]:
@@ -216,14 +233,13 @@ def collect_analyst() -> list:
     for r in classified["new_coverage"]:
         r["analyst_category"] = "new_coverage"
 
-    # 분류된 리포트 통합 (중복 제거)
     all_classified = (
         classified["simultaneous"]
         + classified["new_coverage"]
         + classified["first_in_6months"]
     )
 
-    # 중복 제거 (동일 종목+증권사)
+    # 중복 제거
     seen = set()
     unique_reports = []
     for r in all_classified:
@@ -232,8 +248,10 @@ def collect_analyst() -> list:
             seen.add(key)
             unique_reports.append(r)
 
-    print(f"  → 분류 완료: 동시언급 {len(classified['simultaneous'])}건, "
-          f"신규커버리지 {len(classified['new_coverage'])}건, "
-          f"첫언급 {len(classified['first_in_6months'])}건")
+    print(
+        f"  → 분류 완료: 동시언급 {len(classified['simultaneous'])}건, "
+        f"신규커버리지 {len(classified['new_coverage'])}건, "
+        f"첫언급 {len(classified['first_in_6months'])}건"
+    )
 
     return unique_reports
