@@ -1,465 +1,445 @@
-# analyzer/naver_finance.py
+# collectors/youtube_collector.py
 """
-네이버 금융 주가 조회 - v3
-종목 목록: 네이버 금융 시가총액 목록
-현재가 + 2주간 실제 주가 데이터: 네이버 금융 JSON API 사용
-✅ 수정 3/3: 2주간 실제 주가 흐름 데이터 조회 추가
+YouTube 수집기 - v3
+섹션 1: 방송사 + 개인유튜버 + 증권사유튜브 채널 (24시간 기준)
+섹션 2: 증권TV 전문가 채널 (48시간 기준)
+채널 재검사: YouTube Data API 기반 실제 콘텐츠 품질 검증
 """
-import requests
+import os
 import json
-import re
-import time
-from datetime import datetime, timedelta, timezone
-from bs4 import BeautifulSoup
+import requests
+from datetime import datetime, timezone, timedelta
 
+try:
+    from youtube_transcript_api import YouTubeTranscriptApi
+except ImportError:
+    YouTubeTranscriptApi = None
+
+from config import (
+    YOUTUBE_API_KEY,
+    POPULAR_PANELISTS,
+    YOUTUBER_HOURS,
+    BROADCAST_HOURS,
+    SECURITIES_TV_HOURS,
+    SECURITIES_TV_CHANNELS,
+)
+
+API_KEY = YOUTUBE_API_KEY
 KST = timezone(timedelta(hours=9))
 
-_NAVER_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Referer": "https://finance.naver.com/",
-    "Accept-Language": "ko-KR,ko;q=0.9",
-}
+# ══════════════════════════════════════════════════════════════
+#  키워드 목록
+# ══════════════════════════════════════════════════════════════
+
+STOCK_KEYWORDS = [
+    "주식", "종목", "매수", "매도", "코스피", "코스닥", "상장", "실적",
+    "반도체", "배터리", "2차전지", "바이오", "AI", "로봇", "방산", "원전",
+    "ETF", "배당", "테마주", "급등", "목표가", "투자", "증시", "시황",
+    "포트폴리오", "리밸런싱", "금리", "환율", "채권", "국채", "달러",
+    "인플레이션", "경기", "FOMC", "연준", "GDP", "CPI",
+    "엔비디아", "테슬라", "삼성전자", "SK하이닉스",
+    "S&P", "나스닥", "다우", "미국장", "뉴욕증시",
+    "상승", "하락", "전망", "분석", "추천", "리포트", "브리핑",
+    "경제", "금융", "거시", "글로벌", "시장", "성공예감",
+    "추천종목", "매매전략", "수익", "급락",
+]
+
+EXPERT_KEYWORDS = [
+    "추천종목", "매매전략", "포트폴리오", "시황", "전문가",
+    "투자전략", "종목분석", "주도주", "성장주", "가치주",
+    "매수종목", "관심종목", "핵심종목", "대장주",
+    "오늘의 증시", "장전", "장후", "시장분석",
+]
+
+# 채널 재검사용 키워드
+AD_KEYWORDS = [
+    "리딩방", "유료", "수익인증", "따라하면", "대박", "비공개",
+    "카카오톡", "텔레그램", "가입", "구독료", "VIP", "프리미엄",
+    "신청", "모집", "한정", "100% 수익", "검증된", "비법",
+]
+
+INFO_KEYWORDS = [
+    "분석", "전망", "실적", "재무", "밸류에이션", "리포트",
+    "리뷰", "점검", "이슈", "뉴스", "경제", "시황", "전략",
+]
 
 
-# ══════════════════════════════════════════════
-# 종목 목록 로드
-# ══════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════
+#  YouTube API 유틸리티
+# ══════════════════════════════════════════════════════════════
 
-def load_stock_names() -> dict:
-    """
-    네이버 금융 시가총액 목록에서 종목명→코드 매핑 로드
-    당일 캐시가 있으면 재사용합니다.
-    """
-    import os
-
-    cache_path = "data/stock_names_cache.json"
-    today = datetime.now(KST).strftime("%Y-%m-%d")
-
-    if os.path.exists(cache_path):
-        try:
-            with open(cache_path, "r", encoding="utf-8") as f:
-                cache = json.load(f)
-            if cache.get("date") == today and len(cache.get("stocks", {})) > 100:
-                print(f"  [종목목록] 캐시 사용 ({len(cache['stocks'])}개, {today})")
-                return cache["stocks"]
-        except Exception:
-            pass
-
-    print("  [종목목록] 네이버 금융에서 종목 목록 로드 중...")
-    stock_map = {}
-
-    for sosok, market_name in [(0, "코스피"), (1, "코스닥")]:
-        count = _load_naver_market_stocks(sosok, stock_map, max_pages=10)
-        print(f"  [{market_name}] {count}개 로드")
-
-    if len(stock_map) < 50:
-        print("  [종목목록] 네이버 금융 실패 → 주요 종목 폴백 사용")
-        stock_map = _get_fallback_stocks()
-
-    os.makedirs("data", exist_ok=True)
-    with open(cache_path, "w", encoding="utf-8") as f:
-        json.dump({"date": today, "stocks": stock_map}, f, ensure_ascii=False)
-
-    print(f"  [종목목록] 총 {len(stock_map)}개 로드 완료")
-    return stock_map
+def get_uploads_playlist_id(channel_id: str) -> str:
+    """채널 ID (UC...) → 업로드 재생목록 ID (UU...)"""
+    if channel_id and channel_id.startswith("UC"):
+        return "UU" + channel_id[2:]
+    return None
 
 
-def _load_naver_market_stocks(
-    sosok: int, stock_map: dict, max_pages: int = 10
-) -> int:
-    """네이버 금융 시가총액 목록 수집 (sosok: 0=코스피, 1=코스닥)"""
-    added = 0
-    for page in range(1, max_pages + 1):
-        url = (
-            f"https://finance.naver.com/sise/sise_market_sum.naver"
-            f"?sosok={sosok}&page={page}"
-        )
-        try:
-            r = requests.get(url, headers=_NAVER_HEADERS, timeout=15)
-            r.encoding = "euc-kr"
-            soup = BeautifulSoup(r.text, "html.parser")
+def resolve_channel_id(channel_id_or_handle: str, api_key: str) -> str:
+    """@handle 또는 채널 URL의 handle을 실제 채널 ID로 변환"""
+    cid = channel_id_or_handle.strip()
 
-            rows = soup.select("table.type_2 tbody tr")
-            page_count = 0
-            for row in rows:
-                link = row.select_one("a.tltle")
-                if link and link.get("href"):
-                    href = link["href"]
-                    m = re.search(r"code=(\d{6})", href)
-                    if m:
-                        code = m.group(1)
-                        name = link.get_text(strip=True)
-                        if name and code and name not in stock_map:
-                            stock_map[name] = code
-                            page_count += 1
-                            added += 1
+    # 이미 UC...24자 형식이면 그대로 반환
+    if cid.startswith("UC") and len(cid) == 24:
+        return cid
 
-            if page_count == 0:
-                break
-
-            time.sleep(0.2)
-
-        except Exception as e:
-            print(f"    [네이버 금융 오류] page={page}: {e}")
-            break
-
-    return added
+    handle = cid.lstrip("@")
+    url = "https://www.googleapis.com/youtube/v3/channels"
+    params = {"part": "id", "forHandle": handle, "key": api_key}
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        data = resp.json()
+        if data.get("items"):
+            resolved = data["items"][0]["id"]
+            print(f"  [ID변환] @{handle} → {resolved}")
+            return resolved
+    except Exception as e:
+        print(f"  [ID변환 실패] @{handle}: {e}")
+    return cid
 
 
-# ══════════════════════════════════════════════
-# ✅ 수정 3/3 핵심: 현재가 + 2주간 주가 흐름 통합 조회
-# ══════════════════════════════════════════════
+def get_recent_videos_via_playlist(
+    channel_id: str,
+    api_key: str,
+    hours: int = 24,
+    max_results: int = 15,
+) -> list:
+    """업로드 재생목록에서 최근 N시간 영상 목록 반환"""
+    playlist_id = get_uploads_playlist_id(channel_id)
+    if not playlist_id:
+        return []
 
-def get_stock_price(stock_code: str) -> dict:
-    """
-    네이버 금융 JSON API로 현재가 및 등락 정보 조회
-    반환값:
-    {
-        "code":       str,
-        "price":      str,   # 현재가 (예: "181000")
-        "change":     str,   # 전일 대비 등락 (예: "+10700")
-        "change_pct": str,   # 등락률 (예: "+5.58%")
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    url = "https://www.googleapis.com/youtube/v3/playlistItems"
+    params = {
+        "part": "snippet",
+        "playlistId": playlist_id,
+        "maxResults": max_results,
+        "key": api_key,
     }
-    """
-    if not stock_code or stock_code == "NONE":
-        return {}
 
     try:
-        url = f"https://finance.naver.com/item/sise.nhn?code={stock_code}"
-        resp = requests.get(url, headers=_NAVER_HEADERS, timeout=10)
-        resp.encoding = "euc-kr"
-        soup = BeautifulSoup(resp.text, "html.parser")
+        resp = requests.get(url, params=params, timeout=15)
+        data = resp.json()
 
-        # 현재가: #_nowVal
-        price_el = soup.select_one("#_nowVal")
-        if not price_el:
-            price_el = (
-                soup.select_one(".no_today .blind")
-                or soup.select_one("strong#_nowVal")
-            )
+        if "error" in data:
+            err = data["error"]
+            print(f"    API 오류: {err.get('code')} - {err.get('message','')[:80]}")
+            return []
 
-        if not price_el:
-            return {"code": stock_code, "price": "", "change": "", "change_pct": ""}
-
-        price = price_el.get_text(strip=True).replace(",", "")
-
-        # 전일 대비: #_diff / 등락률: #_rate
-        change = ""
-        rate   = ""
-        change_el = soup.select_one("#_diff")
-        rate_el   = soup.select_one("#_rate")
-
-        if change_el:
-            change = change_el.get_text(strip=True).replace(",", "")
-        if rate_el:
-            rate = rate_el.get_text(strip=True).replace("%", "").strip()
-
-        # 상승/하락 방향 판단
-        sign = ""
-        up_el   = soup.select_one(".no_today .up")
-        down_el = soup.select_one(".no_today .down")
-        if up_el:
-            sign = "+"
-        elif down_el:
-            sign = "-"
-
-        if sign and change and not change.startswith(("+", "-")):
-            change = sign + change
-        if sign and rate and not rate.startswith(("+", "-")):
-            rate = sign + rate
-
-        return {
-            "code":       stock_code,
-            "price":      price,
-            "change":     change,
-            "change_pct": rate + "%" if rate else "",
-        }
+        items = data.get("items", [])
+        recent = []
+        for item in items:
+            snippet = item.get("snippet", {})
+            published_str = snippet.get("publishedAt", "")
+            if not published_str:
+                continue
+            try:
+                pub_dt = datetime.fromisoformat(published_str.replace("Z", "+00:00"))
+                if pub_dt >= cutoff:
+                    video_id = snippet.get("resourceId", {}).get("videoId", "")
+                    recent.append({
+                        "id": {"videoId": video_id},
+                        "snippet": {
+                            "title":        snippet.get("title", ""),
+                            "description":  snippet.get("description", "")[:300],
+                            "publishedAt":  published_str,
+                            "channelId":    snippet.get("channelId", ""),
+                            "channelTitle": snippet.get("channelTitle", ""),
+                        },
+                    })
+                else:
+                    break
+            except Exception:
+                continue
+        return recent
 
     except Exception as e:
-        print(f"  [주가조회 실패] {stock_code}: {e}")
-        return {"code": stock_code, "price": "", "change": "", "change_pct": ""}
+        print(f"    요청 실패: {e}")
+        return []
 
 
-def get_stock_price_history(stock_code: str, days: int = 14) -> dict:
-    """
-    ✅ 수정 3/3: 네이버 금융 일별 시세에서 최근 N일 주가 데이터 조회
-    반환값:
-    {
-        "code":          str,
-        "dates":         list[str],   # 날짜 목록 (최신순)
-        "closes":        list[int],   # 종가 목록 (최신순)
-        "period_change": str,         # 2주간 등락률 (예: "+12.3%")
-        "period_high":   str,         # 2주 최고가
-        "period_low":    str,         # 2주 최저가
-        "start_price":   str,         # 2주 전 시작가
-        "end_price":     str,         # 현재가 (최신 종가)
-        "summary":       str,         # 요약 텍스트
-    }
-    """
-    if not stock_code or stock_code == "NONE":
-        return {}
-
+def get_transcript(video_id: str, max_chars: int = 1000) -> str:
+    """YouTube 자막(한국어) 추출. 실패 시 빈 문자열 반환"""
+    if not YouTubeTranscriptApi or not video_id:
+        return ""
     try:
-        url = (
-            f"https://finance.naver.com/item/sise_day.naver"
-            f"?code={stock_code}&page=1"
+        transcript_list = YouTubeTranscriptApi.get_transcript(
+            video_id, languages=["ko", "ko-KR"]
         )
-        resp = requests.get(url, headers=_NAVER_HEADERS, timeout=10)
-        resp.encoding = "euc-kr"
-        soup = BeautifulSoup(resp.text, "html.parser")
+        text = " ".join(t.get("text", "") for t in transcript_list)
+        return text[:max_chars]
+    except Exception:
+        return ""
 
-        rows = soup.select("table.type2 tr")
 
-        dates  = []
-        closes = []
+def is_stock_related(title: str, description: str) -> bool:
+    """제목/설명에 주식 관련 키워드가 포함되어 있는지 확인"""
+    text = (title + " " + description).lower()
+    return any(kw in text for kw in STOCK_KEYWORDS)
 
-        for row in rows:
-            cols = row.select("td")
-            if len(cols) < 2:
+
+def is_expert_program(title: str, description: str) -> bool:
+    """증권TV 전문가 프로그램 관련 키워드 확인"""
+    text = title + " " + description
+    return any(kw in text for kw in EXPERT_KEYWORDS)
+
+
+def has_popular_panelist(title: str, description: str) -> list:
+    """인기 패널리스트 언급 여부 확인 후 이름 목록 반환"""
+    text = title + " " + description
+    return [p for p in POPULAR_PANELISTS if p in text]
+
+
+def load_channels_safe() -> dict:
+    """channels.json 안전 로드 (실패 시 빈 구조 반환)"""
+    try:
+        with open("channels.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return {
+            "broadcast":  data.get("broadcast", {}),
+            "youtuber":   data.get("youtuber", {}),
+            "securities": data.get("securities", {}),
+        }
+    except Exception as e:
+        print(f"  [channels.json 로드 실패] {e}")
+        return {"broadcast": {}, "youtuber": {}, "securities": {}}
+
+
+# ══════════════════════════════════════════════════════════════
+#  채널 재검사 (YouTube API 기반)
+# ══════════════════════════════════════════════════════════════
+
+def verify_channel(channel_id: str, api_key: str, hours: int = 72) -> dict:
+    """
+    채널 최근 영상 품질 검사.
+    반환: {"status": "active"|"warning"|"inactive", "score": int, "reason": str}
+    """
+    videos = get_recent_videos_via_playlist(channel_id, api_key, hours=hours, max_results=10)
+
+    if not videos:
+        return {
+            "status": "inactive",
+            "score":  0,
+            "reason": f"최근 {hours}시간 영상 없음",
+        }
+
+    total        = len(videos)
+    stock_count  = 0
+    ad_count     = 0
+    info_count   = 0
+
+    for v in videos:
+        sn    = v.get("snippet", {})
+        title = sn.get("title", "")
+        desc  = sn.get("description", "")
+        text  = title + " " + desc
+
+        if is_stock_related(title, desc):
+            stock_count += 1
+        if any(kw in text for kw in AD_KEYWORDS):
+            ad_count += 1
+        if any(kw in text for kw in INFO_KEYWORDS):
+            info_count += 1
+
+    stock_ratio = stock_count / total if total else 0
+    ad_ratio    = ad_count    / total if total else 0
+    info_ratio  = info_count  / total if total else 0
+
+    # 점수 계산 (0~100)
+    score = int(stock_ratio * 50 + info_ratio * 30 - ad_ratio * 40)
+    score = max(0, min(100, score))
+
+    if score >= 50:
+        status = "active"
+        reason = f"주식 관련 영상 {stock_count}/{total}개, 정보성 {info_count}/{total}개"
+    elif score >= 20:
+        status = "warning"
+        reason = f"주식 관련 영상 적음 ({stock_count}/{total}개), 광고성 {ad_count}/{total}개"
+    else:
+        status = "inactive"
+        reason = f"관련 영상 부족 또는 광고성 콘텐츠 다수"
+
+    return {"status": status, "score": score, "reason": reason}
+
+
+def verify_all_channels(api_key: str) -> dict:
+    """
+    channels.json 의 모든 채널을 재검사하고 결과를 반환 + 저장.
+    반환: {"broadcast": {...}, "youtuber": {...}, "securities": {...}}
+    """
+    channels = load_channels_safe()
+    results  = {"broadcast": {}, "youtuber": {}, "securities": {}}
+
+    for category, ch_dict in channels.items():
+        items = ch_dict if isinstance(ch_dict, dict) else {}
+        for name, info in items.items():
+            cid = info.get("id", "") if isinstance(info, dict) else ""
+            if not cid:
                 continue
-
-            date_text  = cols[0].get_text(strip=True)
-            close_text = cols[1].get_text(strip=True).replace(",", "")
-
-            # 날짜 형식 확인 (YYYY.MM.DD)
-            if not re.match(r"\d{4}\.\d{2}\.\d{2}", date_text):
-                continue
-            # 종가 숫자 확인
-            if not close_text.isdigit():
-                continue
-
-            dates.append(date_text)
-            closes.append(int(close_text))
-
-            if len(dates) >= days:
-                break
-
-        if len(closes) < 2:
-            return {
-                "code":          stock_code,
-                "dates":         dates,
-                "closes":        closes,
-                "period_change": "",
-                "period_high":   "",
-                "period_low":    "",
-                "start_price":   "",
-                "end_price":     str(closes[0]) if closes else "",
-                "summary":       "주가 데이터 부족",
+            print(f"  [재검사] {name} ({cid})...")
+            result = verify_channel(cid, api_key)
+            results[category][name] = {
+                **info,
+                "verify_status": result["status"],
+                "verify_score":  result["score"],
+                "verify_reason": result["reason"],
+                "verify_date":   datetime.now(KST).strftime("%Y-%m-%d"),
             }
 
-        # 최신가 = closes[0], 시작가 = closes[-1]
-        end_price   = closes[0]
-        start_price = closes[-1]
-        period_high = max(closes)
-        period_low  = min(closes)
+    _save_verify_result(results)
+    return results
 
-        # 2주간 등락률 계산
-        change_pct = ((end_price - start_price) / start_price) * 100
-        sign = "+" if change_pct >= 0 else ""
-        period_change_str = f"{sign}{change_pct:.1f}%"
 
-        # 방향 표시 문자
-        direction = "▲" if change_pct >= 0 else "▼"
+def _save_verify_result(results: dict) -> None:
+    """재검사 결과를 data/verify_result.json 에 저장"""
+    os.makedirs("data", exist_ok=True)
+    path = "data/verify_result.json"
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(results, f, ensure_ascii=False, indent=2)
+        print(f"  [재검사] 결과 저장: {path}")
+    except Exception as e:
+        print(f"  [재검사] 저장 실패: {e}")
 
-        # 요약 텍스트 생성
-        summary = (
-            f"{start_price:,}원 → {end_price:,}원 "
-            f"({direction} {abs(change_pct):.1f}%, "
-            f"{len(dates)}거래일 기준) | "
-            f"최고 {period_high:,}원 / 최저 {period_low:,}원"
+
+# ══════════════════════════════════════════════════════════════
+#  섹션 1: 유튜브·미디어 채널 수집
+# ══════════════════════════════════════════════════════════════
+
+def collect_section1_youtube() -> list:
+    """
+    섹션 1용 데이터 수집.
+    방송사(BROADCAST_HOURS) + 개인유튜버(YOUTUBER_HOURS) + 증권사유튜브(YOUTUBER_HOURS)
+    주식 관련 영상만 필터링하여 반환.
+    """
+    if not API_KEY:
+        print("  [섹션1] YouTube API 키 없음")
+        return []
+
+    channels = load_channels_safe()
+    results  = []
+
+    channel_groups = [
+        ("broadcast",  channels.get("broadcast",  {}), BROADCAST_HOURS,  "경제방송"),
+        ("youtuber",   channels.get("youtuber",   {}), YOUTUBER_HOURS,   "개인유튜브"),
+        ("securities", channels.get("securities", {}), YOUTUBER_HOURS,   "증권사유튜브"),
+    ]
+
+    for group_key, ch_dict, hours, source_type in channel_groups:
+        items = ch_dict if isinstance(ch_dict, dict) else {}
+        for ch_name, ch_info in items.items():
+            if isinstance(ch_info, dict):
+                cid    = ch_info.get("id", "")
+                status = ch_info.get("status", "active")
+            else:
+                cid    = str(ch_info)
+                status = "active"
+
+            if not cid or status == "inactive":
+                continue
+
+            # handle → channel ID 변환
+            resolved_id = resolve_channel_id(cid, API_KEY)
+
+            print(f"  [{source_type}] {ch_name} 수집 중...")
+            videos = get_recent_videos_via_playlist(
+                resolved_id, API_KEY, hours=hours, max_results=15
+            )
+
+            for v in videos:
+                sn    = v.get("snippet", {})
+                title = sn.get("title", "")
+                desc  = sn.get("description", "")
+                vid   = v.get("id", {}).get("videoId", "")
+
+                if not is_stock_related(title, desc):
+                    continue
+
+                # 자막 추출 (실패해도 계속 진행)
+                transcript = get_transcript(vid, max_chars=800)
+                summary    = transcript if transcript else desc[:400]
+
+                panelists = has_popular_panelist(title, desc)
+
+                results.append({
+                    "source_type":    source_type,
+                    "source_name":    ch_name,
+                    "title":          title,
+                    "summary":        summary,
+                    "link":           f"https://www.youtube.com/watch?v={vid}",
+                    "published":      sn.get("publishedAt", ""),
+                    "section":        "section1",
+                    "panelists":      panelists,
+                    "has_transcript": bool(transcript),
+                })
+
+            print(f"    → {len([v for v in videos if is_stock_related(v.get('snippet',{}).get('title',''), v.get('snippet',{}).get('description',''))])}건 수집")
+
+    print(f"  [섹션1 합계] {len(results)}건")
+    return results
+
+
+# ══════════════════════════════════════════════════════════════
+#  섹션 2: 증권TV 전문가 채널 수집
+# ══════════════════════════════════════════════════════════════
+
+def collect_section2_securities_tv() -> list:
+    """
+    섹션 2용 데이터 수집.
+    config.py 의 SECURITIES_TV_CHANNELS 목록 기반.
+    전문가 프로그램 키워드 필터링 적용 (48시간 기준).
+    """
+    if not API_KEY:
+        print("  [섹션2] YouTube API 키 없음")
+        return []
+
+    results = []
+
+    for ch in SECURITIES_TV_CHANNELS:
+        ch_id    = ch.get("id", "")
+        ch_name  = ch.get("name", ch_id)
+        hours    = SECURITIES_TV_HOURS
+
+        if not ch_id:
+            continue
+
+        resolved_id = resolve_channel_id(ch_id, API_KEY)
+        print(f"  [증권TV] {ch_name} 수집 중...")
+
+        videos = get_recent_videos_via_playlist(
+            resolved_id, API_KEY, hours=hours, max_results=20
         )
 
-        return {
-            "code":          stock_code,
-            "dates":         dates,
-            "closes":        closes,
-            "period_change": period_change_str,
-            "period_high":   f"{period_high:,}",
-            "period_low":    f"{period_low:,}",
-            "start_price":   f"{start_price:,}",
-            "end_price":     f"{end_price:,}",
-            "summary":       summary,
-        }
+        for v in videos:
+            sn    = v.get("snippet", {})
+            title = sn.get("title", "")
+            desc  = sn.get("description", "")
+            vid   = v.get("id", {}).get("videoId", "")
 
-    except Exception as e:
-        print(f"  [주가이력 조회 실패] {stock_code}: {e}")
-        return {}
+            # 전문가 프로그램 키워드 또는 주식 관련 키워드 확인
+            if not (is_expert_program(title, desc) or is_stock_related(title, desc)):
+                continue
 
+            transcript = get_transcript(vid, max_chars=800)
+            summary    = transcript if transcript else desc[:400]
 
-def get_stock_full_info(stock_code: str) -> dict:
-    """
-    ✅ 수정 3/3: 현재가 + 2주간 주가 흐름을 통합하여 반환
-    ai_analyzer.py 에서 이 함수 하나만 호출하면 됩니다.
+            # 패널리스트(전문가) 이름 추출
+            panelists = has_popular_panelist(title, desc + " " + summary)
 
-    반환값:
-    {
-        "code":          str,
-        "price":         str,    # 현재가
-        "change":        str,    # 전일 대비
-        "change_pct":    str,    # 전일 대비 등락률
-        "period_change": str,    # 2주간 누적 등락률
-        "period_high":   str,    # 2주 최고가
-        "period_low":    str,    # 2주 최저가
-        "start_price":   str,    # 2주 전 시작가
-        "price_display": str,    # 표시용 문자열
-        "history_summary": str,  # 주가 흐름 요약
-    }
-    """
-    if not stock_code or stock_code == "NONE":
-        return {}
+            results.append({
+                "source_type":    "증권TV",
+                "source_name":    ch_name,
+                "title":          title,
+                "summary":        summary,
+                "link":           f"https://www.youtube.com/watch?v={vid}",
+                "published":      sn.get("publishedAt", ""),
+                "section":        "section2",
+                "expert_name":    ", ".join(panelists) if panelists else "",
+                "has_transcript": bool(transcript),
+            })
 
-    # 현재가 조회
-    current = get_stock_price(stock_code)
+        print(f"    → {len(results)}건 누적")
 
-    # 2주간 이력 조회 (14거래일 ≈ 20일)
-    history = get_stock_price_history(stock_code, days=14)
-
-    if not current.get("price"):
-        return {}
-
-    price       = current.get("price", "")
-    change      = current.get("change", "")
-    change_pct  = current.get("change_pct", "")
-
-    # 방향 화살표
-    if change.startswith("+"):
-        arrow = "▲"
-    elif change.startswith("-"):
-        arrow = "▼"
-    else:
-        arrow = ""
-
-    change_abs = change.lstrip("+-") if change else ""
-    period_change = history.get("period_change", "")
-
-    # 표시용 문자열 조합
-    # 예: "181,000원 ▲10,700 (+5.58%) | 2주 변동: +12.3%"
-    price_display_parts = []
-    if price:
-        price_fmt = f"{int(price):,}" if price.isdigit() else price
-        price_display_parts.append(f"{price_fmt}원")
-    if arrow and change_abs:
-        price_display_parts.append(f"{arrow}{change_abs}")
-    if change_pct:
-        price_display_parts.append(f"({change_pct})")
-    if period_change:
-        price_display_parts.append(f"| 2주 변동: {period_change}")
-
-    price_display = " ".join(price_display_parts)
-
-    return {
-        "code":            stock_code,
-        "price":           price,
-        "change":          change,
-        "change_pct":      change_pct,
-        "period_change":   period_change,
-        "period_high":     history.get("period_high", ""),
-        "period_low":      history.get("period_low", ""),
-        "start_price":     history.get("start_price", ""),
-        "price_display":   price_display,
-        "history_summary": history.get("summary", ""),
-    }
-
-
-# ══════════════════════════════════════════════
-# 폴백 종목 목록
-# ══════════════════════════════════════════════
-
-def _get_fallback_stocks() -> dict:
-    """네이버 금융 실패 시 주요 종목 폴백 목록"""
-    return {
-        # 코스피 대형주
-        "삼성전자":       "005930",
-        "SK하이닉스":     "000660",
-        "LG에너지솔루션": "373220",
-        "삼성바이오로직스": "207940",
-        "현대차":         "005380",
-        "기아":           "000270",
-        "셀트리온":       "068270",
-        "POSCO홀딩스":    "005490",
-        "KB금융":         "105560",
-        "신한지주":       "055550",
-        "하나금융지주":   "086790",
-        "우리금융지주":   "316140",
-        "LG화학":         "051910",
-        "삼성SDI":        "006400",
-        "현대모비스":     "012330",
-        "카카오":         "035720",
-        "NAVER":          "035420",
-        "LG전자":         "066570",
-        "삼성물산":       "028260",
-        "SK텔레콤":       "017670",
-        "KT":             "030200",
-        "한화에어로스페이스": "012450",
-        "두산에너빌리티": "034020",
-        "HD현대중공업":   "329180",
-        "HD한국조선해양": "009540",
-        "현대건설":       "000720",
-        "LIG넥스원":      "079550",
-        "한국항공우주":   "047810",
-        "현대로템":       "064350",
-        "한화시스템":     "272210",
-        "한화오션":       "042660",
-        "삼성전기":       "009150",
-        "삼성SDS":        "018260",
-        "LS ELECTRIC":    "010120",
-        "HD현대일렉트릭": "267260",
-        "효성중공업":     "298040",
-        "카카오페이":     "377300",
-        "카카오뱅크":     "323410",
-        "HMM":            "011200",
-        "고려아연":       "010130",
-        "대한항공":       "003490",
-        "포스코퓨처엠":   "003670",
-        "엘앤에프":       "066970",
-        "SK이노베이션":   "096770",
-        "삼성생명":       "032830",
-        "삼성화재":       "000810",
-        "한국전력":       "015760",
-        "한국가스공사":   "036460",
-        "현대미포조선":   "010620",
-        "HL만도":         "204320",
-        "현대위아":       "011210",
-        # 코스닥 주요 종목
-        "에코프로":       "086520",
-        "에코프로비엠":   "247540",
-        "HLB":            "028300",
-        "유한양행":       "000100",
-        "알테오젠":       "196170",
-        "레인보우로보틱스": "277810",
-        "두산로보틱스":   "454910",
-        "HPSP":           "403870",
-        "피에스케이":     "319660",
-        "엔씨소프트":     "036570",
-        "크래프톤":       "259960",
-        "하이브":         "352820",
-        "SM":             "041510",
-        "JYP Ent":        "035900",
-        "이수페타시스":   "007660",
-        "솔브레인":       "357780",
-        "리노공업":       "058470",
-        "이오테크닉스":   "039030",
-        "주성엔지니어링": "036930",
-        "한미약품":       "128940",
-        "종근당":         "185750",
-        "셀트리온제약":   "068760",
-        "메디톡스":       "086900",
-        "휴젤":           "145020",
-        "클래시스":       "214150",
-        "덴티움":         "145720",
-        "코스맥스":       "044820",
-        "한국콜마":       "161890",
-        "펄어비스":       "263750",
-        "넷마블":         "251270",
-        "카카오게임즈":   "293490",
-        "파크시스템스":   "140860",
-        "테크윙":         "089030",
-        "포스코DX":       "022100",
-        "포스코인터내셔널": "047050",
-        "SKC":            "011790",
-        "케이씨텍":       "064760",
-    }
+    print(f"  [섹션2 합계] {len(results)}건")
+    return results
