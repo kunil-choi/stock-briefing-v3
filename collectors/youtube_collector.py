@@ -1,3 +1,4 @@
+# collectors/youtube_collector.py
 """
 유튜브 수집기 - v3
 방송, 유튜버, 증권사 채널에서 주식 관련 영상 수집
@@ -109,13 +110,13 @@ def get_recent_videos_via_playlist(youtube, channel_id: str, hours: int = 24, ma
             if published_kst >= cutoff:
                 video_id = snippet.get("resourceId", {}).get("videoId", "")
                 videos.append({
-                    "video_id": video_id,
-                    "title": snippet.get("title", ""),
-                    "channel": snippet.get("channelTitle", ""),
-                    "published": published_str,
+                    "video_id":    video_id,
+                    "title":       snippet.get("title", ""),
+                    "channel":     snippet.get("channelTitle", ""),
+                    "published":   published_str,
                     "description": snippet.get("description", "")[:500],
-                    "thumbnail": snippet.get("thumbnails", {}).get("medium", {}).get("url", ""),
-                    "url": f"https://www.youtube.com/watch?v={video_id}"
+                    "thumbnail":   snippet.get("thumbnails", {}).get("medium", {}).get("url", ""),
+                    "url":         f"https://www.youtube.com/watch?v={video_id}"
                 })
         except Exception:
             continue
@@ -204,14 +205,17 @@ def verify_channel(youtube, channel_id: str, min_views: int = 10000) -> dict:
 
     avg_views = sum(views) / len(views)
     max_views = max(views)
-    verified = max_views >= min_views
+    verified  = max_views >= min_views
 
     return {
-        "verified": verified,
-        "avg_views": int(avg_views),
-        "max_views": max_views,
+        "verified":      verified,
+        "avg_views":     int(avg_views),
+        "max_views":     max_views,
         "checked_count": len(views),
-        "reason": f"최대조회수 {max_views:,}" if verified else f"최대조회수 {max_views:,} (기준 미달)"
+        "reason": (
+            f"최대조회수 {max_views:,}" if verified
+            else f"최대조회수 {max_views:,} (기준 미달)"
+        )
     }
 
 
@@ -222,7 +226,7 @@ def verify_all_channels(youtube, min_views: int = 10000) -> dict:
 
     for category in ["broadcast", "youtuber", "securities"]:
         for ch in channels_data.get(category, []):
-            ch_id = ch.get("id", "")
+            ch_id   = ch.get("id", "")
             ch_name = ch.get("name", "")
             if not ch_id:
                 results[ch_name] = {"verified": False, "reason": "채널 ID 없음"}
@@ -248,30 +252,32 @@ def collect_section1_youtube(youtube) -> list:
     수집 원칙:
     - 유튜버/방송이 해당 종목을 언급하거나 다루는 콘텐츠 수집
     - 광고성 콘텐츠(AD_KEYWORDS)는 제외
-    - source_type, section 키를 태깅하여 ai_analyzer의 섹션1 필터 조건과 일치시킴
+    - 모든 카테고리 24시간 윈도우 통일
+      (securities는 증권TV 방송이 아닌 증권사 공식 유튜브 채널이므로
+       SECURITIES_TV_HOURS=48 대신 YOUTUBER_HOURS=24 사용)
     """
     if not youtube:
         print("  ⚠️ YouTube API 키 없음, 건너뜀")
         return []
 
     channels_data = load_channels_safe()
-    all_videos = []
+    all_videos    = []
 
     categories = [
-        ("broadcast", BROADCAST_HOURS),
-        ("youtuber", YOUTUBER_HOURS),
-        ("securities", SECURITIES_TV_HOURS),
+        ("broadcast",  BROADCAST_HOURS),
+        ("youtuber",   YOUTUBER_HOURS),
+        ("securities", YOUTUBER_HOURS),   # ← 수정: 24h로 통일 (증권사 유튜브 ≠ 증권TV 방송)
     ]
 
     for category, hours in categories:
         ch_list = channels_data.get(category, [])
-        print(f"\n  [{category}] {len(ch_list)}개 채널 처리 중...")
+        print(f"\n  [{category}] {len(ch_list)}개 채널 처리 중... (최근 {hours}h)")
         cat_count = 0
 
         for ch in ch_list:
-            ch_id = ch.get("id", "")
+            ch_id   = ch.get("id", "")
             ch_name = ch.get("name", "")
-            ch_url = ch.get("url", "")
+            ch_url  = ch.get("url", "")
 
             # ID가 없으면 URL에서 handle 추출하여 resolve 시도
             if not ch_id and ch_url:
@@ -294,11 +300,11 @@ def collect_section1_youtube(youtube) -> list:
                 ]
 
                 for v in stock_videos:
-                    v["category"]    = category
+                    v["category"]     = category
                     v["channel_name"] = ch_name
-                    v["source"]      = "youtube_section1"
-                    v["section"]     = "section1"                          # ← ai_analyzer 필터 일치
-                    v["source_type"] = SOURCE_TYPE_MAP.get(category, "개인유튜브")  # ← ai_analyzer 필터 일치
+                    v["source"]       = "youtube_section1"
+                    v["section"]      = "section1"
+                    v["source_type"]  = SOURCE_TYPE_MAP.get(category, "개인유튜브")
 
                 all_videos.extend(stock_videos)
                 cat_count += len(stock_videos)
@@ -324,6 +330,7 @@ def collect_section2_securities_tv(youtube) -> list:
     - 전문가 출연(EXPERT_KEYWORDS), 인기 패널리스트(POPULAR_PANELISTS),
       또는 주식 관련(STOCK_KEYWORDS) 콘텐츠 수집
     - 광고성 콘텐츠는 제외
+    - SECURITIES_TV_HOURS=48h 적용 (전일 방송 기준이므로 48h 유지)
     - source_type="증권TV", section="section2" 태깅
     """
     if not youtube:
@@ -331,12 +338,12 @@ def collect_section2_securities_tv(youtube) -> list:
         return []
 
     all_videos = []
-    print(f"\n  [섹션2 증권TV] {len(SECURITIES_TV_CHANNELS)}개 채널 처리 중...")
+    print(f"\n  [섹션2 증권TV] {len(SECURITIES_TV_CHANNELS)}개 채널 처리 중... (최근 {SECURITIES_TV_HOURS}h)")
 
     for ch in SECURITIES_TV_CHANNELS:
-        ch_id = ch.get("id", "")
+        ch_id   = ch.get("id", "")
         ch_name = ch.get("name", "")
-        ch_url = ch.get("url", "")
+        ch_url  = ch.get("url", "")
 
         # ID가 없으면 URL에서 handle 추출하여 resolve 시도
         if not ch_id and ch_url:
@@ -349,7 +356,9 @@ def collect_section2_securities_tv(youtube) -> list:
             continue
 
         try:
-            videos = get_recent_videos_via_playlist(youtube, ch_id, hours=SECURITIES_TV_HOURS)
+            videos = get_recent_videos_via_playlist(
+                youtube, ch_id, hours=SECURITIES_TV_HOURS
+            )
 
             # 전문가 출연 또는 주식 관련 필터 + 광고 제외
             filtered = [
@@ -363,11 +372,11 @@ def collect_section2_securities_tv(youtube) -> list:
             ]
 
             for v in filtered:
-                v["category"]    = "securities_tv"
+                v["category"]     = "securities_tv"
                 v["channel_name"] = ch_name
-                v["source"]      = "youtube_section2"
-                v["section"]     = "section2"   # ← ai_analyzer 필터 일치
-                v["source_type"] = "증권TV"      # ← ai_analyzer 필터 일치
+                v["source"]       = "youtube_section2"
+                v["section"]      = "section2"
+                v["source_type"]  = "증권TV"
 
             all_videos.extend(filtered)
             print(f"    ✅ {ch_name}: {len(filtered)}개 수집")
