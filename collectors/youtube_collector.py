@@ -6,7 +6,7 @@ import os
 import json
 import time
 from datetime import datetime, timedelta, timezone
-from urllib.parse import quote  # ← requests.utils.quote 대신 표준 라이브러리 사용
+from urllib.parse import quote
 
 from googleapiclient.discovery import build
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -17,6 +17,13 @@ from config import (
 )
 
 KST = timezone(timedelta(hours=9))
+
+# 카테고리별 source_type 매핑
+SOURCE_TYPE_MAP = {
+    "broadcast":  "경제방송",
+    "youtuber":   "개인유튜브",
+    "securities": "증권사유튜브",
+}
 
 # 키워드 정의
 STOCK_KEYWORDS = [
@@ -61,7 +68,6 @@ def resolve_channel_id(youtube, handle_or_id: str) -> str:
     if handle_or_id.startswith("UC"):
         return handle_or_id
 
-    # @handle 처리
     handle = handle_or_id.lstrip("@")
     try:
         response = youtube.channels().list(
@@ -154,7 +160,7 @@ def load_channels_safe() -> dict:
 
 def verify_channel(youtube, channel_id: str, min_views: int = 10000) -> dict:
     """
-    채널 검증: 최근 영상 10개의 평균 조회수가 min_views 이상인지 확인
+    채널 검증: 최근 영상 10개의 최대 조회수가 min_views 이상인지 확인
     """
     if not channel_id or not channel_id.startswith("UC"):
         return {"verified": False, "reason": "유효하지 않은 채널 ID"}
@@ -224,7 +230,7 @@ def verify_all_channels(youtube, min_views: int = 10000) -> dict:
             print(f"  검증 중: {ch_name} ({ch_id})")
             result = verify_channel(youtube, ch_id, min_views)
             results[ch_name] = result
-            time.sleep(0.1)  # API 레이트 리밋 방지
+            time.sleep(0.1)
 
     os.makedirs("data", exist_ok=True)
     with open("data/verify_result.json", "w", encoding="utf-8") as f:
@@ -237,7 +243,12 @@ def verify_all_channels(youtube, min_views: int = 10000) -> dict:
 def collect_section1_youtube(youtube) -> list:
     """
     섹션1 유튜브 수집:
-    broadcast, youtuber, securities 카테고리에서 주식 관련 영상 수집
+    broadcast, youtuber, securities 카테고리에서 주식 관련 영상 수집.
+
+    수집 원칙:
+    - 유튜버/방송이 해당 종목을 언급하거나 다루는 콘텐츠 수집
+    - 광고성 콘텐츠(AD_KEYWORDS)는 제외
+    - source_type, section 키를 태깅하여 ai_analyzer의 섹션1 필터 조건과 일치시킴
     """
     if not youtube:
         print("  ⚠️ YouTube API 키 없음, 건너뜀")
@@ -274,15 +285,26 @@ def collect_section1_youtube(youtube) -> list:
 
             try:
                 videos = get_recent_videos_via_playlist(youtube, ch_id, hours=hours)
-                stock_videos = [v for v in videos if is_stock_related(v["title"], v.get("description", ""))]
+
+                # 주식 관련 필터 + 광고 제외
+                stock_videos = [
+                    v for v in videos
+                    if is_stock_related(v["title"], v.get("description", ""))
+                    and not any(kw in v["title"] for kw in AD_KEYWORDS)
+                ]
+
                 for v in stock_videos:
-                    v["category"] = category
+                    v["category"]    = category
                     v["channel_name"] = ch_name
-                    v["source"] = "youtube_section1"
+                    v["source"]      = "youtube_section1"
+                    v["section"]     = "section1"                          # ← ai_analyzer 필터 일치
+                    v["source_type"] = SOURCE_TYPE_MAP.get(category, "개인유튜브")  # ← ai_analyzer 필터 일치
+
                 all_videos.extend(stock_videos)
                 cat_count += len(stock_videos)
                 if stock_videos:
                     print(f"    ✅ {ch_name}: {len(stock_videos)}개 수집")
+
             except Exception as e:
                 print(f"    ❌ {ch_name}: {e}")
 
@@ -295,7 +317,14 @@ def collect_section1_youtube(youtube) -> list:
 def collect_section2_securities_tv(youtube) -> list:
     """
     섹션2 증권TV 수집:
-    SECURITIES_TV_CHANNELS에서 전문가 출연 영상 수집
+    SECURITIES_TV_CHANNELS(한국경제TV, 매일경제TV, MTN, 이데일리TV, SBS Biz 등)에서
+    전일 방송 기준 전문가 출연 / 종목 추천 영상 수집.
+
+    수집 원칙:
+    - 전문가 출연(EXPERT_KEYWORDS), 인기 패널리스트(POPULAR_PANELISTS),
+      또는 주식 관련(STOCK_KEYWORDS) 콘텐츠 수집
+    - 광고성 콘텐츠는 제외
+    - source_type="증권TV", section="section2" 태깅
     """
     if not youtube:
         print("  ⚠️ YouTube API 키 없음, 건너뜀")
@@ -322,20 +351,25 @@ def collect_section2_securities_tv(youtube) -> list:
         try:
             videos = get_recent_videos_via_playlist(youtube, ch_id, hours=SECURITIES_TV_HOURS)
 
-            # 전문가 출연 또는 주식 관련 필터
+            # 전문가 출연 또는 주식 관련 필터 + 광고 제외
             filtered = [
                 v for v in videos
-                if is_expert_program(v["title"], v.get("description", ""))
-                or has_popular_panelist(v["title"], v.get("description", ""))
-                or is_stock_related(v["title"], v.get("description", ""))
+                if (
+                    is_expert_program(v["title"], v.get("description", ""))
+                    or has_popular_panelist(v["title"], v.get("description", ""))
+                    or is_stock_related(v["title"], v.get("description", ""))
+                )
+                and not any(kw in v["title"] for kw in AD_KEYWORDS)
             ]
 
             for v in filtered:
-                v["category"] = "securities_tv"
+                v["category"]    = "securities_tv"
                 v["channel_name"] = ch_name
-                v["source"] = "youtube_section2"
+                v["source"]      = "youtube_section2"
+                v["section"]     = "section2"   # ← ai_analyzer 필터 일치
+                v["source_type"] = "증권TV"      # ← ai_analyzer 필터 일치
 
-            all_videos.extend(filtered)  # ✅ 수정: 채널별 초기화 없이 누적
+            all_videos.extend(filtered)
             print(f"    ✅ {ch_name}: {len(filtered)}개 수집")
 
         except Exception as e:
