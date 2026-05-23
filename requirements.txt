@@ -1,10 +1,26 @@
+# ── 뉴스 수집 ─────────────────────────────────────────
 feedparser>=6.0
+
+# ── HTML 파싱 / 크롤링 ────────────────────────────────
 beautifulsoup4>=4.12
-requests>=2.31
-anthropic>=0.39
-youtube-transcript-api>=0.6
-pandas>=2.0
 lxml>=4.9
 html5lib>=1.1
+requests>=2.31
+
+# ── Anthropic Claude API ──────────────────────────────
+anthropic>=0.39
+
+# ── YouTube Data API v3 ───────────────────────────────
+google-api-python-client>=2.100.0
+google-auth-httplib2>=0.2.0
+google-auth-oauthlib>=1.2.0
+youtube-transcript-api>=0.6
+
+# ── 미국증시 / 가격 데이터 ────────────────────────────
 yfinance>=0.2.40
+
+# ── 데이터 처리 ───────────────────────────────────────
+pandas>=2.0
+
+# ── 환경변수 ──────────────────────────────────────────
 python-dotenv>=1.0
