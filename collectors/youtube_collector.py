@@ -46,7 +46,6 @@ AD_KEYWORDS = [
 # ── 유틸리티 ───────────────────────────────────────────────────────────────────
 
 def get_youtube_client(api_key: str = None):
-    """YouTube API 클라이언트 생성"""
     if not api_key:
         api_key = os.environ.get("YOUTUBE_API_KEY", "")
     if not api_key:
@@ -68,7 +67,6 @@ def get_uploads_playlist_id(channel_id: str) -> str:
 
 
 def resolve_channel_id(youtube, handle: str) -> str:
-    """@handle → 채널ID 변환"""
     try:
         resp = youtube.channels().list(
             part="id",
@@ -83,7 +81,6 @@ def resolve_channel_id(youtube, handle: str) -> str:
 
 
 def get_recent_videos_via_playlist(youtube, channel_id: str, hours: int) -> list:
-    """플레이리스트 API로 최근 N시간 영상 목록 반환"""
     playlist_id = get_uploads_playlist_id(channel_id)
     cutoff = datetime.now(KST) - timedelta(hours=hours)
     videos = []
@@ -151,7 +148,6 @@ def get_recent_videos_via_playlist(youtube, channel_id: str, hours: int) -> list
 
 
 def get_transcript(video_id: str, max_chars: int = 2000) -> str:
-    """영상 자막 추출"""
     if not _TRANSCRIPT_AVAILABLE:
         return ""
     try:
@@ -197,48 +193,54 @@ def is_ad_content(title: str) -> bool:
 def _normalize_channel_list(raw) -> list:
     """
     channels.json 카테고리 값을 list[{"id": ..., "name": ...}] 형태로 통일.
-    dict / list 양쪽 모두 처리.
+    list(실제 channels.json 형태) 또는 dict 양쪽 처리.
+    id가 빈 문자열인 항목은 제외(unconfirmed 채널 필터링).
     """
+    result = []
     if isinstance(raw, list):
-        result = []
         for item in raw:
             if isinstance(item, dict):
-                result.append({
-                    "id":   item.get("id", ""),
-                    "name": item.get("name", item.get("id", "")),
-                })
-            elif isinstance(item, str):
-                result.append({"id": item, "name": item})
-        return result
+                ch_id   = item.get("id", "").strip()
+                ch_name = item.get("name", ch_id)
+                if ch_id:                          # ← 빈 id 제외
+                    result.append({"id": ch_id, "name": ch_name})
+            elif isinstance(item, str) and item.strip():
+                result.append({"id": item.strip(), "name": item.strip()})
     elif isinstance(raw, dict):
-        result = []
         for name, val in raw.items():
             if isinstance(val, dict):
-                result.append({"id": val.get("id", ""), "name": name})
-            elif isinstance(val, str):
-                result.append({"id": val, "name": name})
-        return result
-    return []
+                ch_id = val.get("id", "").strip()
+                if ch_id:
+                    result.append({"id": ch_id, "name": name})
+            elif isinstance(val, str) and val.strip():
+                result.append({"id": val.strip(), "name": name})
+    return result
 
 
 # ── 섹션 1 수집 ────────────────────────────────────────────────────────────────
+# CRITICAL-1·2 수정:
+#   "top50" → "securities" 로 변경 (channels.json 실제 키에 맞춤)
+#   "broadcast" → source_type "경제방송"
+#   "youtuber"  → source_type "유튜버"
+#   "securities"→ source_type "유튜버" (증권사 공식 채널, 분석 콘텐츠)
 
 def collect_section1_youtube(youtube, channels: dict) -> list:
     """
-    섹션1: 방송·유튜버·증권 채널 영상 수집.
-    BUG-8 수정: 제목 통과 시 자막 중복 수집 제거.
+    섹션1: 방송·유튜버·증권사 채널 영상 수집.
+    channels.json 실제 키: broadcast, youtuber, securities
     """
     all_items = []
     categories = [
-        ("broadcast", BROADCAST_HOURS, "방송"),
-        ("youtuber",  YOUTUBER_HOURS,  "유튜버"),
-        ("top50",     YOUTUBER_HOURS,  "유튜버"),
+        ("broadcast",  BROADCAST_HOURS, "경제방송"),  # 한국경제TV·SBS Biz 등
+        ("youtuber",   YOUTUBER_HOURS,  "유튜버"),    # 슈카월드·삼프로TV 등
+        ("securities", YOUTUBER_HOURS,  "유튜버"),    # 삼성증권·키움증권 등
     ]
 
     for cat_key, hours, source_type in categories:
-        raw     = channels.get(cat_key, {})
+        raw     = channels.get(cat_key, [])
         ch_list = _normalize_channel_list(raw)
         if not ch_list:
+            print(f"  [섹션1-{cat_key}] 채널 없음 → 스킵")
             continue
 
         print(f"  [섹션1-{cat_key}] {len(ch_list)}개 채널 ({hours}h)")
@@ -265,7 +267,8 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
                 if is_ad_content(title):
                     continue
 
-                # BUG-8 수정: 제목이 주식 관련이면 자막 추가 수집, 아니면 자막으로 재확인
+                # 최적화: 제목이 주식 관련이면 자막 없이 바로 포함
+                # 제목 무관 시 자막으로 보조 확인
                 if is_stock_related(title):
                     transcript = get_transcript(v["video_id"])
                 else:
@@ -295,8 +298,8 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
 
 def collect_section2_securities_tv(youtube) -> list:
     """
-    섹션2: 증권TV 전문가 출연 채널 수집 (SECURITIES_TV_HOURS=48h).
-    SECURITIES_TV_CHANNELS dict를 _normalize_channel_list로 안전하게 순회.
+    섹션2: config.py의 SECURITIES_TV_CHANNELS(방송국 TV 채널) 수집.
+    전문가 출연 또는 패널리스트 포함 영상만 수집.
     """
     all_items = []
     ch_list = _normalize_channel_list(SECURITIES_TV_CHANNELS)
