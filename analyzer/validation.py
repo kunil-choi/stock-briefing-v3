@@ -1,0 +1,476 @@
+# analyzer/validation.py
+import json
+import os
+import re
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List
+
+from .api_client import call_claude_with_retry
+from .naver_finance import (
+    fetch_naver_company_info,
+    fetch_naver_daily_prices,
+    fetch_naver_stock_price,
+    generate_candlestick_base64,
+    search_code_by_autocomplete,
+    verify_stock_via_naver,
+)
+
+CB = "```"
+_CACHE_PATH = "data/stock_names_cache.json"
+_KST = timezone(timedelta(hours=9))
+
+FOREIGN_KEYWORDS = [
+    "엔비디아", "테슬라", "애플", "마이크로소프트", "구글", "알파벳",
+    "아마존", "메타", "넷플릭스", "AMD", "인텔", "퀄컴", "브로드컴",
+    "NVIDIA", "Tesla", "Apple", "Microsoft", "Google", "Amazon",
+    "Meta", "Netflix", "TSMC", "ASML", "ARM", "팔란티어",
+    "마이크론", "코스트코", "월마트", "비자", "마스터카드",
+]
+
+TYPE_ALIASES = {
+    "유튜브":    ["유튜브", "youtube"],
+    "경제방송":  ["경제방송", "방송", "broadcast"],
+    "애널리스트": ["애널리스트", "리포트", "report", "증권사"],
+}
+
+
+# ── 캐시 저장 ─────────────────────────────────────────────────────────────────
+
+def _save_to_cache(stock_name: str, code: str):
+    try:
+        today = datetime.now(_KST).strftime("%Y-%m-%d")
+        cache = {"date": today, "stocks": {}}
+        if os.path.exists(_CACHE_PATH):
+            with open(_CACHE_PATH, "r", encoding="utf-8") as f:
+                cache = json.load(f)
+        cache.setdefault("stocks", {})[stock_name] = code
+        os.makedirs("data", exist_ok=True)
+        with open(_CACHE_PATH, "w", encoding="utf-8") as f:
+            json.dump(cache, f, ensure_ascii=False, indent=2)
+        print(f"  [캐시저장] '{stock_name}' ({code}) 저장 완료")
+    except Exception as e:
+        print(f"  [캐시저장] 실패: {e}")
+
+
+# ── 섹션 순회 (BUG-1 수정: V2 구조 "stocks"/"hidden_picks" 키 사용) ──────────
+
+def _iter_sections(data: dict):
+    """
+    ai_analyzer.py 가 반환하는 실제 JSON 구조에 맞게 순회.
+    "stocks" 와 "hidden_picks" 두 키를 처리.
+    """
+    yield "stocks",       data.get("stocks", [])
+    yield "hidden_picks", data.get("hidden_picks", [])
+
+
+def _get_all_stocks(data: dict) -> list:
+    result = []
+    for _, stock_list in _iter_sections(data):
+        result.extend(stock_list)
+    return result
+
+
+# ── 리스트 정규화 ─────────────────────────────────────────────────────────────
+
+def _listify(value: Any) -> List[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, tuple):
+        return list(value)
+    return [value]
+
+
+# ── reasons 정규화 ────────────────────────────────────────────────────────────
+
+def _normalize_reason(reason: Any) -> dict:
+    if isinstance(reason, dict):
+        return {
+            "source_type": str(reason.get("source_type") or reason.get("section") or "").strip(),
+            "source_name": str(
+                reason.get("source_name") or reason.get("channel") or
+                reason.get("firm") or ""
+            ).strip(),
+            "detail":      str(
+                reason.get("detail") or reason.get("summary") or
+                reason.get("reason") or ""
+            ).strip(),
+            "source_url":  str(reason.get("source_url") or reason.get("url") or "").strip(),
+        }
+    text = str(reason).strip()
+    if not text:
+        return {}
+    return {"source_type": "", "source_name": "", "detail": text, "source_url": ""}
+
+
+def _normalize_reasons(stock: dict):
+    normalized = []
+    for reason in _listify(stock.get("reasons", [])):
+        item = _normalize_reason(reason)
+        if any(item.values()):
+            normalized.append(item)
+    stock["reasons"] = normalized
+
+
+# ── 원본 데이터 정규화 ────────────────────────────────────────────────────────
+
+def _normalize_all_data(all_data) -> list:
+    """
+    all_data 가 이미 flat list 이면 그대로 반환.
+    dict 구조라면 섹션별로 펼쳐서 반환.
+    """
+    if isinstance(all_data, list):
+        return all_data
+    if not isinstance(all_data, dict):
+        return []
+    result = []
+    for item in all_data.get("section1", {}).get("items", []):
+        result.append({
+            "source_type": "유튜브",
+            "title":       item.get("title", ""),
+            "summary":     item.get("title", ""),
+            "content":     "",
+            "transcript":  item.get("transcript", ""),
+        })
+    for item in all_data.get("section2", {}).get("items", []):
+        result.append({
+            "source_type": "경제방송",
+            "title":       item.get("title", ""),
+            "summary":     item.get("title", ""),
+            "content":     "",
+            "transcript":  item.get("transcript", ""),
+        })
+    for item in all_data.get("section3", {}).get("items", []):
+        result.append({
+            "source_type": "애널리스트",
+            "title":       " / ".join(item.get("titles", [])),
+            "summary":     item.get("stock_name", ""),
+            "content":     " ".join(item.get("titles", [])),
+            "transcript":  "",
+        })
+    return result
+
+
+# ── 소스 타입 매칭 ────────────────────────────────────────────────────────────
+
+def _match_source_type(type_a: str, type_b: str) -> bool:
+    a = (type_a or "").lower()
+    b = (type_b or "").lower()
+    if a in b or b in a:
+        return True
+    for aliases in TYPE_ALIASES.values():
+        if any(alias in a for alias in aliases) and any(alias in b for alias in aliases):
+            return True
+    return False
+
+
+def _name_in_text(stock_name: str, text: str) -> bool:
+    n = stock_name.lower().strip()
+    t = (text or "").lower()
+    if not n or not t:
+        return False
+    if n in t or n.replace(" ", "") in t.replace(" ", ""):
+        return True
+    for part in n.split():
+        if len(part) >= 2 and part in t:
+            return True
+    clean = re.sub(r"[(주식회사\s)]", "", n)
+    if len(clean) >= 2 and clean in t:
+        return True
+    return False
+
+
+# ── 코드 조회 팩토리 ──────────────────────────────────────────────────────────
+
+def _cached_verify_factory(stock_map: dict | None):
+    _naver_cache = {}
+
+    def _get_code(stock_name: str, naver_result: dict | None):
+        if naver_result and naver_result.get("code"):
+            return str(naver_result["code"]).zfill(6)
+        if stock_map and stock_name in stock_map:
+            return str(stock_map[stock_name]).zfill(6)
+        if stock_map:
+            name_clean = stock_name.replace(" ", "")
+            best_match = None
+            best_len   = 9999
+            for key, code in stock_map.items():
+                key_clean = str(key).replace(" ", "")
+                if name_clean in key_clean or key_clean in name_clean:
+                    if len(key_clean) < best_len:
+                        best_match = (key, code)
+                        best_len   = len(key_clean)
+            if best_match:
+                print(f"  [부분일치] '{stock_name}' → '{best_match[0]}' ({best_match[1]})")
+                return str(best_match[1]).zfill(6)
+        auto_result = search_code_by_autocomplete(stock_name)
+        if auto_result and auto_result.get("code"):
+            code = str(auto_result["code"]).zfill(6)
+            if stock_map is not None:
+                stock_map[stock_name] = code
+            _save_to_cache(stock_name, code)
+            return code
+        return None
+
+    def _cached_verify(stock_name: str):
+        if stock_name not in _naver_cache:
+            _naver_cache[stock_name] = verify_stock_via_naver(stock_name)
+        return _naver_cache[stock_name]
+
+    return _cached_verify, _get_code
+
+
+# ── 차트 생성 ─────────────────────────────────────────────────────────────────
+
+def _fetch_chart(name: str, code: str):
+    daily = fetch_naver_daily_prices(code, days=14)
+    if daily:
+        chart_b64 = generate_candlestick_base64(daily, name)
+        if chart_b64:
+            print(f"  [CHART] {name} 차트 생성 완료 ({len(daily)}일)")
+            return chart_b64
+    print(f"  [CHART] {name} 차트 데이터 없음")
+    return None
+
+
+# ── 메인 검증 함수 ────────────────────────────────────────────────────────────
+
+def validate_stocks(data: dict, api_key: str, all_data=None, stock_map=None) -> dict:
+    print("\n" + "=" * 60)
+    print("[검증] 분석 결과 원본 재확인 시작...")
+    print("=" * 60)
+
+    # reasons 정규화
+    for _, stock_list in _iter_sections(data):
+        for stock in stock_list:
+            _normalize_reasons(stock)
+
+    all_data = _normalize_all_data(all_data)
+    _cached_verify, _get_code = _cached_verify_factory(stock_map)
+
+    # ── 검증-A: 원본 데이터 재확인 ────────────────────────────────────────────
+    if all_data:
+        print("\n[검증-A] 각 소스별 원본 데이터 재확인...")
+        source_pool = {}
+        for item in all_data:
+            st   = item.get("source_type", "기타")
+            # summary 와 transcript 모두 포함 (BUG-11 수정)
+            text = " ".join([
+                item.get("title",      ""),
+                item.get("summary",    ""),
+                item.get("content",    ""),
+                item.get("transcript", ""),
+            ]).lower()
+            source_pool.setdefault(st, []).append(text)
+
+        for stype, texts in source_pool.items():
+            print(f"  [DATA] {stype}: {len(texts)}건")
+
+        for _, stock_list in _iter_sections(data):
+            for stock in stock_list:
+                name = stock.get("name", "")
+                verified_reasons = []
+                removed_sources  = []
+                for reason in stock.get("reasons", []):
+                    reason_stype = reason.get("source_type", "")
+                    matched_texts = []
+                    for pool_stype, pool_texts in source_pool.items():
+                        if _match_source_type(reason_stype, pool_stype):
+                            matched_texts.extend(pool_texts)
+                    if not matched_texts:
+                        verified_reasons.append(reason)
+                        continue
+                    if any(_name_in_text(name, t) for t in matched_texts):
+                        verified_reasons.append(reason)
+                    else:
+                        removed_sources.append(reason_stype or "기타")
+                if removed_sources:
+                    print(f"  [TRIM] {name}: [{', '.join(removed_sources)}] 원본 근거 없음 → 제거")
+                stock["reasons"] = verified_reasons
+        print("[검증-A] 완료")
+    else:
+        print("[검증-A] 원본 데이터 없음 → 스킵")
+
+    # ── 검증-B: 네이버 금융 주가/차트 조회 ────────────────────────────────────
+    print("\n[검증-B] 네이버 금융 종목 확인 및 주가 조회...")
+    for _, stock_list in _iter_sections(data):
+        for stock in stock_list:
+            name       = stock.get("name", "")
+            is_foreign = any(kw.lower() in name.lower() for kw in FOREIGN_KEYWORDS)
+
+            if is_foreign:
+                stock["market"]         = "해외"
+                stock["verified_price"] = None
+                stock["chart_base64"]   = None
+                print(f"  [OK] {name} - 해외 종목")
+                continue
+
+            stock["market"] = "국내"
+            code = (
+                stock.get("code", "") or
+                stock.get("naver_code", "") or
+                stock.get("ticker", "")
+            )
+            code = str(code).strip().zfill(6) if code else ""
+
+            naver_result = None
+            if not code:
+                naver_result = _cached_verify(name)
+                code = _get_code(name, naver_result)
+
+            if not code:
+                naver_result = _cached_verify(name)
+                code = _get_code(name, naver_result)
+
+            if code:
+                stock["naver_code"]     = code
+                stock["code"]           = code
+                price_info              = fetch_naver_stock_price(name, code_override=code)
+                stock["verified_price"] = price_info
+                if price_info:
+                    print(f"  [PRICE] {name}: {price_info['price']}원 {price_info.get('change', '')}")
+                else:
+                    print(f"  [OK] {name} ({code}) 주가 없음")
+                stock["chart_base64"] = _fetch_chart(name, code)
+            else:
+                print(f"  [WARN] {name}: 코드 조회 실패 → 종목 유지, 주가 없음")
+                stock["verified_price"] = None
+                stock["chart_base64"]   = None
+
+    # ── 검증-C: Claude 팩트체크 ───────────────────────────────────────────────
+    print("\n[검증-C] 최종 데이터 팩트체크...")
+    all_stocks = _get_all_stocks(data)
+    if not all_stocks:
+        print("[검증-C] 종목 없음 → 스킵")
+        return data
+    if not api_key:
+        print("[검증-C] ANTHROPIC_API_KEY 없음 → 스킵")
+        return data
+
+    try:
+        company_info_lines = []
+        price_info_lines   = []
+
+        for stock in all_stocks:
+            name = stock.get("name", "")
+            code = (
+                stock.get("code", "") or
+                stock.get("naver_code", "") or
+                (stock.get("verified_price") or {}).get("code", "")
+            )
+            if code:
+                print(f"  [기업정보] {name}({code}) 조회 중...")
+                company_info = fetch_naver_company_info(code)
+                if company_info.get("sector"):
+                    peers     = company_info.get("peers", [])[:5]
+                    peers_str = ", ".join(peers) if peers else "정보없음"
+                    company_info_lines.append(
+                        f"- {name}: 업종={company_info['sector']}, 동종업종=[{peers_str}]"
+                    )
+            verified_price = stock.get("verified_price")
+            if verified_price:
+                price_info_lines.append(
+                    f"- {name}: {verified_price['price']}원 "
+                    f"({verified_price.get('change', '')}, {verified_price.get('change_pct', '')})"
+                )
+            elif stock.get("market") == "해외":
+                price_info_lines.append(f"- {name}: 해외 종목")
+
+        company_block = "\n".join(company_info_lines) if company_info_lines else "기업정보 없음"
+        price_block   = "\n".join(price_info_lines)   if price_info_lines   else "주가 데이터 없음"
+
+        # 차트 제외한 사본 생성
+        check_target = json.loads(json.dumps(data, ensure_ascii=False))
+        for key in ["stocks", "hidden_picks"]:
+            for stock in check_target.get(key, []):
+                stock.pop("chart_base64", None)
+
+        target_json = json.dumps(check_target, ensure_ascii=False, indent=2)
+
+        fc_prompt = (
+            "당신은 한국 주식시장 전문 팩트체커입니다.\n"
+            "아래 AI 브리핑 데이터를 읽고 내용상 사실 오류가 있는지 검토하세요.\n\n"
+            "## 검토 항목:\n"
+            "1. 기업 설명 오류 (잘못된 업종, 사업 내용)\n"
+            "2. 주가/가격 오류\n"
+            "3. 사실관계 오류 (수치, 날짜, 인물, 이벤트)\n"
+            "4. 업종 설명이 아래 네이버 기업정보와 일치하는지 확인\n\n"
+            f"## 네이버 금융 기업정보:\n{company_block}\n\n"
+            f"## 실시간 주가 데이터:\n{price_block}\n\n"
+            "## 검토 대상 브리핑 데이터:\n"
+            + CB + "json\n"
+            + target_json + "\n"
+            + CB + "\n\n"
+            "## 응답 규칙:\n"
+            "- 오류를 발견하면 해당 부분만 수정해 전체 JSON을 반환하세요\n"
+            "- 오류가 없으면 원본 JSON을 그대로 반환하세요\n"
+            "- 종목을 삭제하지 마세요. 내용만 교정하세요\n"
+            "- source_url, naver_code, code, verified_price, chart_base64, "
+            "rank, total_count는 절대 변경하지 마세요\n"
+            "- 반드시 JSON만 반환하세요"
+        )
+
+        print("  [API] 팩트체크 Claude 호출...")
+        fc_result = call_claude_with_retry(api_key, fc_prompt, max_tokens=12000)
+
+        if not fc_result:
+            print("[검증-C] API 응답 없음 → 원본 유지")
+            return data
+
+        json_match = re.search(r"\{[\s\S]*\}", fc_result)
+        if not json_match:
+            print("[검증-C] JSON 파싱 실패 → 원본 유지")
+            return data
+
+        corrected = json.loads(json_match.group())
+
+        # BUG-1·BUG-2 수정: "stocks"/"hidden_picks" 키로 반영, str 타입 체크
+        for key in ["stocks", "hidden_picks"]:
+            orig_list = data.get(key, [])
+            corr_list = corrected.get(key, [])
+            if not isinstance(corr_list, list):
+                continue
+
+            orig_map = {s.get("name", ""): s for s in orig_list if s.get("name")}
+
+            for corr_stock in corr_list:
+                name       = corr_stock.get("name", "")
+                orig_stock = orig_map.get(name)
+                if not orig_stock:
+                    continue
+                # 보호 필드 원본값 유지
+                for protected in [
+                    "verified_price", "market", "naver_code", "code",
+                    "chart_base64", "rank", "total_count",
+                ]:
+                    corr_stock[protected] = orig_stock.get(protected)
+                # source_url 원본값 유지
+                corr_reasons = corr_stock.get("reasons", [])
+                orig_reasons = orig_stock.get("reasons", [])
+                if isinstance(corr_reasons, list):
+                    for idx, corr_reason in enumerate(corr_reasons):
+                        if not isinstance(corr_reason, dict):
+                            continue
+                        if idx < len(orig_reasons):
+                            corr_reason["source_url"] = orig_reasons[idx].get("source_url", "")
+
+            if corr_list:
+                data[key] = corr_list
+
+        # BUG-2 수정: str 타입으로 체크 (기존 dict 체크는 항상 False)
+        if isinstance(corrected.get("market_summary"), str) and corrected["market_summary"]:
+            data["market_summary"] = corrected["market_summary"]
+        if isinstance(corrected.get("investment_strategy"), str) and corrected["investment_strategy"]:
+            data["investment_strategy"] = corrected["investment_strategy"]
+
+        print("[검증-C] 완료")
+
+    except Exception as e:
+        print(f"[검증-C] 오류: {e} → 원본 유지")
+
+    total = sum(len(data.get(k, [])) for k in ["stocks", "hidden_picks"])
+    print("\n" + "=" * 60)
+    print(f"[검증 완료] 총 {total}개 종목")
+    print("=" * 60)
+    return data
