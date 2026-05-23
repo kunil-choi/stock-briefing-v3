@@ -1,6 +1,6 @@
 # analyzer/html_generator.py
 import os
-from urllib.parse import quote as url_quote   # BUG-6 수정: requests.utils.quote 대신 urllib 사용
+from urllib.parse import quote as url_quote
 from datetime import datetime, timedelta, timezone
 
 KST = timezone(timedelta(hours=9))
@@ -14,6 +14,7 @@ PARA_TITLES = [
 # ── 인디케이터 배지 ────────────────────────────────────────────────────────────
 
 def _indicator_badge(label: str, value, pct, direction: str = "") -> str:
+    # BUG-9 수정: 0.0도 숫자로 정상 처리
     try:
         pct_f = float(
             str(pct).replace(",", "").replace("%", "").replace("+", "")
@@ -21,20 +22,22 @@ def _indicator_badge(label: str, value, pct, direction: str = "") -> str:
     except Exception:
         pct_f = 0.0
 
-    if direction == "call":        color_cls = "ind-call"
-    elif direction == "put":       color_cls = "ind-put"
-    elif pct_f > 0:                color_cls = "ind-call"
-    elif pct_f < 0:                color_cls = "ind-put"
-    else:                          color_cls = "ind-neutral"
+    if direction == "call":   color_cls = "ind-call"
+    elif direction == "put":  color_cls = "ind-put"
+    elif pct_f > 0:           color_cls = "ind-call"
+    elif pct_f < 0:           color_cls = "ind-put"
+    else:                     color_cls = "ind-neutral"
 
     sign    = "▲" if pct_f > 0 else ("▼" if pct_f < 0 else "─")
     pct_str = f"{abs(pct_f):.2f}%"
 
-    # BUG-9 수정: value == 0.0 도 숫자로 정상 표시
+    # value가 숫자(0.0 포함)이면 포맷팅, None이거나 빈 문자열이면 N/A
     if isinstance(value, (int, float)) and value is not None:
         val_str = f"{value:,.2f}"
+    elif value and str(value).strip():
+        val_str = str(value)
     else:
-        val_str = str(value) if value else "N/A"
+        val_str = "N/A"
 
     return (
         f'<div class="ind-badge {color_cls}">'
@@ -49,15 +52,16 @@ def _build_market_indicators(market_overview: dict) -> str:
     if not market_overview:
         return ""
     nf = market_overview.get("night_futures", {})
-    us = market_overview.get("us_market", {})
-    kr = market_overview.get("korea_market", {})
-    badges  = _indicator_badge("야간선물", nf.get("price"),            nf.get("change_pct"), direction=nf.get("direction", ""))
-    badges += _indicator_badge("S&P500",  us.get("sp500",  {}).get("price"), us.get("sp500",  {}).get("change_pct"))
-    badges += _indicator_badge("나스닥",   us.get("nasdaq", {}).get("price"), us.get("nasdaq", {}).get("change_pct"))
-    badges += _indicator_badge("다우존스", us.get("dow",    {}).get("price"), us.get("dow",    {}).get("change_pct"))
-    badges += _indicator_badge("달러/원",  us.get("usd_krw",{}).get("price"), us.get("usd_krw",{}).get("change_pct"))
-    badges += _indicator_badge("코스피",   kr.get("kospi",  {}).get("price"), kr.get("kospi",  {}).get("change_pct"))
-    badges += _indicator_badge("코스닥",   kr.get("kosdaq", {}).get("price"), kr.get("kosdaq", {}).get("change_pct"))
+    us = market_overview.get("us_market",     {})
+    kr = market_overview.get("korea_market",  {})
+
+    badges  = _indicator_badge("야간선물", nf.get("price"),                nf.get("change_pct"), direction=nf.get("direction",""))
+    badges += _indicator_badge("S&P500",   us.get("sp500",  {}).get("price"), us.get("sp500",  {}).get("change_pct"))
+    badges += _indicator_badge("나스닥",    us.get("nasdaq", {}).get("price"), us.get("nasdaq", {}).get("change_pct"))
+    badges += _indicator_badge("다우존스",  us.get("dow",    {}).get("price"), us.get("dow",    {}).get("change_pct"))
+    badges += _indicator_badge("달러/원",   us.get("usd_krw",{}).get("price"), us.get("usd_krw",{}).get("change_pct"))
+    badges += _indicator_badge("코스피",    kr.get("kospi",  {}).get("price"), kr.get("kospi",  {}).get("change_pct"))
+    badges += _indicator_badge("코스닥",    kr.get("kosdaq", {}).get("price"), kr.get("kosdaq", {}).get("change_pct"))
     return f'<div class="ind-row">{badges}</div>'
 
 
@@ -100,6 +104,13 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
     stocks              = data.get("stocks", [])
     hidden_picks        = data.get("hidden_picks", [])
     investment_strategy = data.get("investment_strategy", data.get("final_summary", ""))
+
+    # BUG-NEW-6 수정: overlap_count 를 channel_counts 로 재계산하여 Claude 오류 방어
+    for s in stocks:
+        if s.get("channel_counts"):
+            recalc = sum(1 for v in s["channel_counts"].values() if v > 0)
+            if recalc > s.get("overlap_count", 0):
+                s["overlap_count"] = recalc
 
     stocks       = [s for s in stocks       if s.get("overlap_count", 0) >= 2]
     hidden_picks = [s for s in hidden_picks if s.get("signal", "") == "긍정"]
@@ -150,7 +161,6 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
 
         source_tags = "".join(f'<span class="source-tag">{st}</span>' for st in source_types)
 
-        # BUG-6 수정: url_quote 사용
         price_info_text = ""
         if isinstance(verified_price, dict):
             p  = verified_price
@@ -244,7 +254,7 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
         if isinstance(hp_verified, dict):
             p  = hp_verified
             cv = str(p.get("change", "") or "")
-            cc = ("price-up" if cv.startswith("+") else
+            cc = ("price-up"   if cv.startswith("+") else
                   "price-down" if cv.startswith("-") else "price-note")
             hp_price_html = (
                 f'<div class="price-box">'
@@ -268,7 +278,9 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
                 if hp_naver_code else
                 f"https://finance.naver.com/search/searchResult.naver?query={url_quote(hp_name)}"
             )
-            hp_chart_btn = f' <a href="{hp_naver_url}" target="_blank" class="chart-icon">📈 차트</a>'
+            hp_chart_btn = (
+                f' <a href="{hp_naver_url}" target="_blank" class="chart-icon">📈 차트</a>'
+            )
 
         hp_reasons_html = ""
         for reason in hp_reasons:
@@ -315,12 +327,18 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
         b64 = stock.get("chart_base64")
         if b64:
             c = b64.replace('\n', '').replace('\r', '')
-            chart_data_js += f'chartDataMap["{stock.get("rank","")}"] = "data:image/png;base64,{c}";\n'
+            chart_data_js += (
+                f'chartDataMap["{stock.get("rank","")}"] = '
+                f'"data:image/png;base64,{c}";\n'
+            )
     for hp in hidden_picks:
         b64 = hp.get("chart_base64")
         if b64:
             c = b64.replace('\n', '').replace('\r', '')
-            chart_data_js += f'chartDataMap["hp_{hp.get("rank","")}"] = "data:image/png;base64,{c}";\n'
+            chart_data_js += (
+                f'chartDataMap["hp_{hp.get("rank","")}"] = '
+                f'"data:image/png;base64,{c}";\n'
+            )
 
     # ── 아카이브 링크 ──────────────────────────────────────────────────────────
     archive_links = ""
@@ -357,7 +375,6 @@ body { font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Segoe UI',sans
 .section { margin-bottom:35px; }
 .section-title { font-size:1.3em; color:#fff; margin-bottom:15px;
                  padding-left:12px; border-left:3px solid #667eea; }
-/* 인디케이터 */
 .ind-row { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px; }
 .ind-badge { display:flex; flex-direction:column; align-items:center;
              padding:10px 16px; border-radius:12px; min-width:90px; border:1px solid transparent; }
@@ -372,17 +389,14 @@ body { font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Segoe UI',sans
 .ind-call .ind-pct    { color:#ff6b6b; }
 .ind-put  .ind-pct    { color:#339af0; }
 .ind-neutral .ind-pct { color:#ffd43b; }
-/* 5단락 요약 */
 .summary-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 @media(max-width:600px){ .summary-grid{ grid-template-columns:1fr; } }
 .summary-block { background:#141420; border-radius:12px; padding:18px; border:1px solid #1e1e2e; }
 .summary-subtitle { color:#667eea; font-size:1em; margin-bottom:8px; }
 .summary-text { color:#ccc; font-size:.88em; line-height:1.7; }
-/* 섹터 */
 .sector-badge { display:inline-block; background:linear-gradient(135deg,#667eea20,#764ba220);
                 color:#a8b4ff; padding:6px 14px; border-radius:20px;
                 margin:4px; font-size:.85em; border:1px solid #667eea40; }
-/* 종목 카드 */
 .stock-card,.hidden-pick-card { background:#141420; border-radius:12px;
     padding:20px; margin-bottom:16px; border:1px solid #1e1e2e; transition:border-color .3s; }
 .stock-card:hover,.hidden-pick-card:hover { border-color:#667eea60; }
