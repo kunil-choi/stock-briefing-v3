@@ -26,6 +26,26 @@ HEADERS = {
 }
 
 
+def _safe_float(value) -> float:
+    """쉼표 포함 문자열·None 등 안전하게 float 변환. 실패 시 0.0 반환"""
+    if value is None:
+        return 0.0
+    try:
+        return float(str(value).replace(",", "").strip())
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _fmt(value, suffix="%") -> str:
+    """None-safe 포맷 출력"""
+    if value is None:
+        return "N/A"
+    try:
+        return f"{float(value):+.2f}{suffix}"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
 # ══════════════════════════════════════════════════════════════
 #  1. 미국 증시 (yfinance)
 # ══════════════════════════════════════════════════════════════
@@ -52,8 +72,8 @@ def get_us_market_data() -> dict:
             try:
                 ticker = yf.Ticker(symbol)
                 info   = ticker.fast_info
-                price  = round(float(info.last_price), 2)
-                prev   = round(float(info.previous_close), 2)
+                price  = round(_safe_float(info.last_price), 2)
+                prev   = round(_safe_float(info.previous_close), 2)
                 change = round(price - prev, 2)
                 change_pct = round((change / prev) * 100, 2) if prev else 0.0
                 result[key] = {
@@ -65,14 +85,14 @@ def get_us_market_data() -> dict:
             except Exception as e:
                 print(f"  [미국증시] {key}({symbol}) 수집 실패: {e}")
 
-        sp  = result["sp500"]
-        nq  = result["nasdaq"]
-        dw  = result["dow"]
-        fx  = result["usd_krw"]
+        sp = result["sp500"]
+        nq = result["nasdaq"]
+        dw = result["dow"]
+        fx = result["usd_krw"]
         print(
-            f"  [미국증시] S&P500={sp['price']} ({sp['change_pct']:+}%) "
-            f"나스닥={nq['price']} ({nq['change_pct']:+}%) "
-            f"다우={dw['price']} ({dw['change_pct']:+}%) "
+            f"  [미국증시] S&P500={sp['price']}({_fmt(sp['change_pct'])}) "
+            f"나스닥={nq['price']}({_fmt(nq['change_pct'])}) "
+            f"다우={dw['price']}({_fmt(dw['change_pct'])}) "
             f"달러={fx['price']}"
         )
 
@@ -96,8 +116,8 @@ def _get_usd_krw_naver() -> dict:
         change_el = soup.select_one("div.today span.change")
         sign_el   = soup.select_one("div.today span.blind")
 
-        price      = float(price_el.text.replace(",", ""))  if price_el  else None
-        change_raw = float(change_el.text.replace(",", "")) if change_el else None
+        price      = _safe_float(price_el.text)  if price_el  else None
+        change_raw = _safe_float(change_el.text) if change_el else None
         sign       = -1 if (sign_el and "하락" in sign_el.text) else 1
         change     = round(sign * change_raw, 2) if change_raw else None
         change_pct = (
@@ -116,10 +136,7 @@ def _get_usd_krw_naver() -> dict:
 # ══════════════════════════════════════════════════════════════
 
 def get_night_futures_data() -> dict:
-    """
-    네이버 증권에서 코스피200 야간선물 데이터 수집
-    야간시장: 18:00 ~ 익일 05:00 KST
-    """
+    """네이버 증권에서 코스피200 야간선물 데이터 수집"""
     result = {
         "price":      None,
         "change":     None,
@@ -131,15 +148,15 @@ def get_night_futures_data() -> dict:
 
     # 1차 시도: 네이버 모바일 API
     try:
-        url  = "https://m.stock.naver.com/api/index/FUT/basic"   # ← 수정된 URL
+        url  = "https://m.stock.naver.com/api/index/FUT/basic"
         resp = requests.get(url, headers=HEADERS, timeout=8)
 
         if resp.status_code == 200:
             data       = resp.json()
-            price      = float(data.get("closePrice",                    0) or 0)
-            change     = float(data.get("compareToPreviousClosePrice",   0) or 0)
-            change_pct = float(data.get("fluctuationsRatio",             0) or 0)
-            volume     = int(  data.get("accumulatedTradingVolume",      0) or 0)
+            price      = _safe_float(data.get("closePrice"))
+            change     = _safe_float(data.get("compareToPreviousClosePrice"))
+            change_pct = _safe_float(data.get("fluctuationsRatio"))
+            volume     = int(_safe_float(data.get("accumulatedTradingVolume")))
 
             result["price"]      = round(price,      2)
             result["change"]     = round(change,     2)
@@ -158,7 +175,7 @@ def get_night_futures_data() -> dict:
 
             print(
                 f"  [야간선물] 코스피200선물={price} "
-                f"({change_pct:+.2f}%) 방향={result['direction']}"
+                f"({_fmt(change_pct)}) 방향={result['direction']}"
             )
             return result
         else:
@@ -183,8 +200,6 @@ def _get_night_futures_html_fallback() -> dict:
     }
     try:
         from bs4 import BeautifulSoup
-
-        # 코스피200 선물 네이버 페이지
         url  = "https://finance.naver.com/item/main.naver?code=101S6000"
         resp = requests.get(url, headers=HEADERS, timeout=8)
         resp.encoding = "euc-kr"
@@ -192,7 +207,7 @@ def _get_night_futures_html_fallback() -> dict:
 
         price_el = soup.select_one("p.no_today span.blind")
         if price_el:
-            price = float(price_el.text.replace(",", ""))
+            price = _safe_float(price_el.text)
             result["price"]  = price
             result["signal"] = f"코스피200 선물 {price:,.2f} (등락 미확인)"
 
@@ -223,14 +238,14 @@ def get_korea_market_data() -> dict:
     for key, code in indices.items():
         # 1차 시도: 네이버 모바일 API
         try:
-            url  = f"https://m.stock.naver.com/api/index/{code}/basic"  # ← 수정된 URL
+            url  = f"https://m.stock.naver.com/api/index/{code}/basic"
             resp = requests.get(url, headers=HEADERS, timeout=8)
 
             if resp.status_code == 200:
                 data       = resp.json()
-                price      = float(data.get("closePrice",                   0) or 0)
-                change     = float(data.get("compareToPreviousClosePrice",  0) or 0)
-                change_pct = float(data.get("fluctuationsRatio",            0) or 0)
+                price      = _safe_float(data.get("closePrice"))
+                change     = _safe_float(data.get("compareToPreviousClosePrice"))
+                change_pct = _safe_float(data.get("fluctuationsRatio"))
                 result[key] = {
                     "price":      round(price,      2),
                     "change":     round(change,     2),
@@ -248,11 +263,11 @@ def get_korea_market_data() -> dict:
 
     kp = result["kospi"]
     kd = result["kosdaq"]
+
+    # None-safe 출력 (_fmt 함수 사용)
     print(
-        f"  [한국증시] 코스피={kp['price']} ({kp['change_pct']:+}%) "
-        f"코스닥={kd['price']} ({kd['change_pct']:+}%)"
-        if kp["price"] and kd["price"]
-        else "  [한국증시] 데이터 수집 실패"
+        f"  [한국증시] 코스피={kp['price']}({_fmt(kp['change_pct'])}) "
+        f"코스닥={kd['price']}({_fmt(kd['change_pct'])})"
     )
 
     return result
@@ -262,16 +277,14 @@ def _get_korea_index_fallback(code: str) -> dict:
     """네이버 증권 HTML에서 지수 수집 (fallback)"""
     try:
         from bs4 import BeautifulSoup
-
-        code_map = {"KOSPI": "KOSPI", "KOSDAQ": "KOSDAQ"}
-        url  = f"https://finance.naver.com/sise/sise_index.naver?code={code_map.get(code, code)}"
+        url  = f"https://finance.naver.com/sise/sise_index.naver?code={code}"
         resp = requests.get(url, headers=HEADERS, timeout=8)
         resp.encoding = "euc-kr"
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        price_el = soup.select_one("#KOSPI_now") or soup.select_one("#now_value")
+        price_el = soup.select_one("#now_value")
         if price_el:
-            price = float(price_el.text.replace(",", ""))
+            price = _safe_float(price_el.text)
             return {"price": price, "change": None, "change_pct": None}
 
     except Exception as e:
