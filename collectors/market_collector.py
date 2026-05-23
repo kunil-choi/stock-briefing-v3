@@ -4,13 +4,13 @@
 - 야간 코스피200 선물 (네이버 증권 스크래핑)
 - 미국 증시 (yfinance: S&P500, 나스닥, 다우)
 - 환율 (달러/원)
+- 한국 증시 (코스피, 코스닥)
 """
 
 import os
 import time
 import requests
-import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 KST = ZoneInfo("Asia/Seoul")
@@ -26,15 +26,16 @@ HEADERS = {
 }
 
 
-# ──────────────────────────────────────────────
-# 1. 미국 증시 (yfinance)
-# ──────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+#  1. 미국 증시 (yfinance)
+# ══════════════════════════════════════════════════════════════
+
 def get_us_market_data() -> dict:
     """yfinance로 S&P500·나스닥·다우 전일 종가·등락 수집"""
     result = {
-        "sp500":  {"price": None, "change": None, "change_pct": None},
-        "nasdaq": {"price": None, "change": None, "change_pct": None},
-        "dow":    {"price": None, "change": None, "change_pct": None},
+        "sp500":   {"price": None, "change": None, "change_pct": None},
+        "nasdaq":  {"price": None, "change": None, "change_pct": None},
+        "dow":     {"price": None, "change": None, "change_pct": None},
         "usd_krw": {"price": None, "change": None, "change_pct": None},
     }
     try:
@@ -50,24 +51,30 @@ def get_us_market_data() -> dict:
         for key, symbol in tickers.items():
             try:
                 ticker = yf.Ticker(symbol)
-                info = ticker.fast_info
-                price = round(float(info.last_price), 2)
-                prev  = round(float(info.previous_close), 2)
+                info   = ticker.fast_info
+                price  = round(float(info.last_price), 2)
+                prev   = round(float(info.previous_close), 2)
                 change = round(price - prev, 2)
                 change_pct = round((change / prev) * 100, 2) if prev else 0.0
                 result[key] = {
-                    "price": price,
-                    "change": change,
+                    "price":      price,
+                    "change":     change,
                     "change_pct": change_pct,
                 }
                 time.sleep(0.3)
             except Exception as e:
                 print(f"  [미국증시] {key}({symbol}) 수집 실패: {e}")
 
-        print(f"  [미국증시] S&P500={result['sp500']['price']} "
-              f"나스닥={result['nasdaq']['price']} "
-              f"다우={result['dow']['price']} "
-              f"달러={result['usd_krw']['price']}")
+        sp  = result["sp500"]
+        nq  = result["nasdaq"]
+        dw  = result["dow"]
+        fx  = result["usd_krw"]
+        print(
+            f"  [미국증시] S&P500={sp['price']} ({sp['change_pct']:+}%) "
+            f"나스닥={nq['price']} ({nq['change_pct']:+}%) "
+            f"다우={dw['price']} ({dw['change_pct']:+}%) "
+            f"달러={fx['price']}"
+        )
 
     except ImportError:
         print("  [미국증시] yfinance 미설치 → 네이버 환율만 수집")
@@ -79,64 +86,66 @@ def get_us_market_data() -> dict:
 def _get_usd_krw_naver() -> dict:
     """네이버 증권에서 달러/원 환율 수집 (fallback)"""
     try:
-        url = "https://finance.naver.com/marketindex/exchangeDetail.naver?marketindexCd=FX_USDKRW"
+        from bs4 import BeautifulSoup
+        url  = "https://finance.naver.com/marketindex/exchangeDetail.naver?marketindexCd=FX_USDKRW"
         resp = requests.get(url, headers=HEADERS, timeout=8)
         resp.encoding = "euc-kr"
-        from bs4 import BeautifulSoup
         soup = BeautifulSoup(resp.text, "html.parser")
+
         price_el  = soup.select_one("div.today span.value")
         change_el = soup.select_one("div.today span.change")
         sign_el   = soup.select_one("div.today span.blind")
 
-        price = float(price_el.text.replace(",", "")) if price_el else None
+        price      = float(price_el.text.replace(",", ""))  if price_el  else None
         change_raw = float(change_el.text.replace(",", "")) if change_el else None
-        sign = -1 if (sign_el and "하락" in sign_el.text) else 1
-        change = round(sign * change_raw, 2) if change_raw else None
-        change_pct = round((change / (price - change)) * 100, 2) if change and price else None
-
+        sign       = -1 if (sign_el and "하락" in sign_el.text) else 1
+        change     = round(sign * change_raw, 2) if change_raw else None
+        change_pct = (
+            round((change / (price - change)) * 100, 2)
+            if change and price else None
+        )
         return {"price": price, "change": change, "change_pct": change_pct}
+
     except Exception as e:
         print(f"  [환율] 네이버 환율 수집 실패: {e}")
         return {"price": None, "change": None, "change_pct": None}
 
 
-# ──────────────────────────────────────────────
-# 2. 야간 선물 (네이버 증권 → 코스피200 선물)
-# ──────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+#  2. 야간선물 (네이버 증권)
+# ══════════════════════════════════════════════════════════════
+
 def get_night_futures_data() -> dict:
     """
     네이버 증권에서 코스피200 야간선물 데이터 수집
     야간시장: 18:00 ~ 익일 05:00 KST
-    반환: {"price": float, "change": float, "change_pct": float,
-           "volume": int, "direction": "call"|"put"|"neutral",
-           "signal": str, "is_night_session": bool}
     """
     result = {
-        "price": None,
-        "change": None,
+        "price":      None,
+        "change":     None,
         "change_pct": None,
-        "volume": None,
-        "direction": "neutral",
-        "signal": "데이터 없음",
-        "is_night_session": False,
+        "volume":     None,
+        "direction":  "neutral",
+        "signal":     "데이터 없음",
     }
-    try:
-        # 네이버 증권 선물 API (JSON)
-        url = "https://api.stock.naver.com/index/FUT/basic"
-        resp = requests.get(url, headers=HEADERS, timeout=8)
-        if resp.status_code == 200:
-            data = resp.json()
-            price      = float(data.get("closePrice", 0) or 0)
-            prev_price = float(data.get("compareToPreviousClosePrice", 0) or 0)
-            change_pct = float(data.get("fluctuationsRatio", 0) or 0)
-            volume     = int(data.get("accumulatedTradingVolume", 0) or 0)
 
-            result["price"]      = round(price, 2)
-            result["change"]     = round(prev_price, 2)
+    # 1차 시도: 네이버 모바일 API
+    try:
+        url  = "https://m.stock.naver.com/api/index/FUT/basic"   # ← 수정된 URL
+        resp = requests.get(url, headers=HEADERS, timeout=8)
+
+        if resp.status_code == 200:
+            data       = resp.json()
+            price      = float(data.get("closePrice",                    0) or 0)
+            change     = float(data.get("compareToPreviousClosePrice",   0) or 0)
+            change_pct = float(data.get("fluctuationsRatio",             0) or 0)
+            volume     = int(  data.get("accumulatedTradingVolume",      0) or 0)
+
+            result["price"]      = round(price,      2)
+            result["change"]     = round(change,     2)
             result["change_pct"] = round(change_pct, 2)
             result["volume"]     = volume
 
-            # 방향 판단
             if change_pct >= 0.3:
                 result["direction"] = "call"
                 result["signal"]    = f"상승 신호 (야간 선물 +{change_pct:.2f}%)"
@@ -147,40 +156,47 @@ def get_night_futures_data() -> dict:
                 result["direction"] = "neutral"
                 result["signal"]    = f"보합/중립 (야간 선물 {change_pct:+.2f}%)"
 
-            print(f"  [야간선물] 코스피200선물={price} ({change_pct:+.2f}%) "
-                  f"방향={result['direction']}")
+            print(
+                f"  [야간선물] 코스피200선물={price} "
+                f"({change_pct:+.2f}%) 방향={result['direction']}"
+            )
+            return result
         else:
-            # fallback: 네이버 증권 HTML
-            result = _get_night_futures_html_fallback()
+            print(f"  [야간선물] API 응답 오류: {resp.status_code} → fallback 시도")
 
     except Exception as e:
-        print(f"  [야간선물] 수집 실패: {e}")
-        result = _get_night_futures_html_fallback()
+        print(f"  [야간선물] 1차 수집 실패: {e} → fallback 시도")
 
-    return result
+    # 2차 시도: HTML fallback
+    return _get_night_futures_html_fallback()
 
 
 def _get_night_futures_html_fallback() -> dict:
-    """네이버 증권 HTML fallback - 코스피200 선물 페이지"""
+    """네이버 증권 HTML fallback — 코스피200 선물 페이지"""
     result = {
-        "price": None, "change": None, "change_pct": None,
-        "volume": None, "direction": "neutral",
-        "signal": "데이터 수집 실패 (장중 참고 불가)", "is_night_session": False,
+        "price":      None,
+        "change":     None,
+        "change_pct": None,
+        "volume":     None,
+        "direction":  "neutral",
+        "signal":     "데이터 수집 실패",
     }
     try:
         from bs4 import BeautifulSoup
-        url = "https://finance.naver.com/item/main.naver?code=101S6000"
+
+        # 코스피200 선물 네이버 페이지
+        url  = "https://finance.naver.com/item/main.naver?code=101S6000"
         resp = requests.get(url, headers=HEADERS, timeout=8)
         resp.encoding = "euc-kr"
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        price_el  = soup.select_one("p.no_today span.blind")
-        change_el = soup.select_one("p.no_exday em span.blind")
-
+        price_el = soup.select_one("p.no_today span.blind")
         if price_el:
             price = float(price_el.text.replace(",", ""))
-            result["price"] = price
-            result["signal"] = f"코스피200 선물 {price}"
+            result["price"]  = price
+            result["signal"] = f"코스피200 선물 {price:,.2f} (등락 미확인)"
+
+        print(f"  [야간선물 fallback] {result['signal']}")
 
     except Exception as e:
         print(f"  [야간선물 fallback] 실패: {e}")
@@ -188,53 +204,90 @@ def _get_night_futures_html_fallback() -> dict:
     return result
 
 
-# ──────────────────────────────────────────────
-# 3. 전일 한국 증시 (코스피·코스닥)
-# ──────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+#  3. 한국 증시 (코스피·코스닥)
+# ══════════════════════════════════════════════════════════════
+
 def get_korea_market_data() -> dict:
-    """네이버 증권에서 코스피·코스닥 전일 종가·등락 수집"""
+    """네이버 증권 모바일 API에서 코스피·코스닥 전일 종가·등락 수집"""
     result = {
         "kospi":  {"price": None, "change": None, "change_pct": None},
         "kosdaq": {"price": None, "change": None, "change_pct": None},
     }
-    try:
-        indices = {
-            "kospi":  "KOSPI",
-            "kosdaq": "KOSDAQ",
-        }
-        for key, code in indices.items():
-            try:
-                url = f"https://api.stock.naver.com/index/{code}/basic"
-                resp = requests.get(url, headers=HEADERS, timeout=8)
-                if resp.status_code == 200:
-                    data = resp.json()
-                    price      = float(data.get("closePrice", 0) or 0)
-                    change     = float(data.get("compareToPreviousClosePrice", 0) or 0)
-                    change_pct = float(data.get("fluctuationsRatio", 0) or 0)
-                    result[key] = {
-                        "price": round(price, 2),
-                        "change": round(change, 2),
-                        "change_pct": round(change_pct, 2),
-                    }
-                time.sleep(0.2)
-            except Exception as e:
-                print(f"  [한국증시] {key} 수집 실패: {e}")
 
-        print(f"  [한국증시] 코스피={result['kospi']['price']} "
-              f"코스닥={result['kosdaq']['price']}")
+    indices = {
+        "kospi":  "KOSPI",
+        "kosdaq": "KOSDAQ",
+    }
 
-    except Exception as e:
-        print(f"  [한국증시] 전체 수집 실패: {e}")
+    for key, code in indices.items():
+        # 1차 시도: 네이버 모바일 API
+        try:
+            url  = f"https://m.stock.naver.com/api/index/{code}/basic"  # ← 수정된 URL
+            resp = requests.get(url, headers=HEADERS, timeout=8)
+
+            if resp.status_code == 200:
+                data       = resp.json()
+                price      = float(data.get("closePrice",                   0) or 0)
+                change     = float(data.get("compareToPreviousClosePrice",  0) or 0)
+                change_pct = float(data.get("fluctuationsRatio",            0) or 0)
+                result[key] = {
+                    "price":      round(price,      2),
+                    "change":     round(change,     2),
+                    "change_pct": round(change_pct, 2),
+                }
+            else:
+                print(f"  [한국증시] {key} API 응답 오류: {resp.status_code} → fallback")
+                result[key] = _get_korea_index_fallback(code)
+
+            time.sleep(0.2)
+
+        except Exception as e:
+            print(f"  [한국증시] {key} 수집 실패: {e} → fallback")
+            result[key] = _get_korea_index_fallback(code)
+
+    kp = result["kospi"]
+    kd = result["kosdaq"]
+    print(
+        f"  [한국증시] 코스피={kp['price']} ({kp['change_pct']:+}%) "
+        f"코스닥={kd['price']} ({kd['change_pct']:+}%)"
+        if kp["price"] and kd["price"]
+        else "  [한국증시] 데이터 수집 실패"
+    )
 
     return result
 
 
-# ──────────────────────────────────────────────
-# 4. 통합 수집
-# ──────────────────────────────────────────────
+def _get_korea_index_fallback(code: str) -> dict:
+    """네이버 증권 HTML에서 지수 수집 (fallback)"""
+    try:
+        from bs4 import BeautifulSoup
+
+        code_map = {"KOSPI": "KOSPI", "KOSDAQ": "KOSDAQ"}
+        url  = f"https://finance.naver.com/sise/sise_index.naver?code={code_map.get(code, code)}"
+        resp = requests.get(url, headers=HEADERS, timeout=8)
+        resp.encoding = "euc-kr"
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        price_el = soup.select_one("#KOSPI_now") or soup.select_one("#now_value")
+        if price_el:
+            price = float(price_el.text.replace(",", ""))
+            return {"price": price, "change": None, "change_pct": None}
+
+    except Exception as e:
+        print(f"  [한국증시 fallback] {code} 실패: {e}")
+
+    return {"price": None, "change": None, "change_pct": None}
+
+
+# ══════════════════════════════════════════════════════════════
+#  4. 통합 수집
+# ══════════════════════════════════════════════════════════════
+
 def collect_market_overview() -> dict:
     """야간선물 + 미국증시 + 한국증시 통합 수집"""
     print("\n[시장 데이터 수집]")
+
     print("  야간선물 수집 중...")
     night_futures = get_night_futures_data()
 
@@ -250,5 +303,6 @@ def collect_market_overview() -> dict:
         "korea_market":  korea_market,
         "collected_at":  datetime.now(KST).strftime("%Y-%m-%d %H:%M KST"),
     }
+
     print(f"  [시장 데이터] 수집 완료 ({overview['collected_at']})")
     return overview
