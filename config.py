@@ -29,12 +29,19 @@ POPULAR_PANELISTS = [
     "이주열", "박종훈", "김현석", "신중호", "이창용",
 ]
 
-BROADCAST_HOURS     = 24
-YOUTUBER_HOURS      = 24
-SECURITIES_TV_HOURS = 48
-REPORT_DAYS         = 1
+# ── 수집 시간 설정 ─────────────────────────────────────────────────────────────
+# 일반 유튜브(방송사/개인/증권사) : 모두 24시간
+BROADCAST_HOURS     = 24   # 방송사 유튜브 채널 (한국경제TV, SBS Biz 등)
+YOUTUBER_HOURS      = 24   # 개인 유튜버 채널 (슈카월드, 삼프로TV 등)
+SECURITIES_HOURS    = 24   # 증권사 유튜브 채널 (삼성증권, 키움증권 등)
 
-# 섹션2 전용: 경제방송 TV 채널 (전문가 출연 프로그램 위주)
+# 섹션2 전용: 경제방송 TV 다시보기 채널
+# → 오전 종목추천 프로그램 업로드가 늦는 관계로 전날 자료 포함을 위해 48시간 설정
+SECURITIES_TV_HOURS = 48
+
+REPORT_DAYS = 1
+
+# 섹션2 전용: 경제방송 TV 채널 (전문가 출연 오전 프로그램 위주)
 SECURITIES_TV_CHANNELS = {
     "한국경제TV":   "UCp7vLUO-BI9UkVFJWFSJ-ig",
     "매일경제TV":   "UCbSSCqKMmBOCR5KxFsVzmvA",
