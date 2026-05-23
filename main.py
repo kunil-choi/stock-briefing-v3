@@ -1,119 +1,118 @@
 # main.py - v3
 """
 AI 주식 브리핑 v3 메인 실행 파일
-섹션 1: 유튜브·미디어 채널 언급 종목 분석
-섹션 2: 증권TV 전문가 출연 추천 종목 (전일 방송 기준)
-섹션 3: 증권사 애널리스트 리포트 분석
-종합 투자전략: 섹션 1~3 통합 분석
 """
 import os
 import json
 import shutil
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from config import (
-    ANTHROPIC_API_KEY,
-    YOUTUBE_API_KEY,
-    GH_TOKEN,
-    GITHUB_REPO,
-    NEWS_RSS_FEEDS,
-    load_channels,
+    ANTHROPIC_API_KEY, YOUTUBE_API_KEY, GH_TOKEN, GITHUB_REPO,
+    NEWS_RSS_FEEDS, load_channels
 )
 from collectors.news_collector import collect_news
 from collectors.youtube_collector import (
-    get_youtube_client,
-    collect_section1_youtube,
-    collect_section2_securities_tv,
+    get_youtube_client, collect_section1_youtube, collect_section2_securities_tv
 )
 from collectors.analyst_collector import collect_analyst
+from collectors.market_collector import collect_market_overview   # ← 추가
 from analyzer.ai_analyzer import analyze_and_generate_html
 
-KST = timezone(timedelta(hours=9))
-
+KST = ZoneInfo("Asia/Seoul")
 
 def main():
     now = datetime.now(KST)
-    print(f"=== AI 주식 브리핑 v3 시작: {now.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
+    print(f"\n{'='*60}")
+    print(f"  AI 주식 브리핑 v3 시작: {now.strftime('%Y-%m-%d %H:%M:%S KST')}")
+    print(f"{'='*60}\n")
 
-    # 채널 목록 로드
-    print("[채널 로드]")
+    # 채널 로드
     channels = load_channels()
-    print(f"  방송사: {len(channels.get('broadcast', []))}개")
-    print(f"  개인유튜브: {len(channels.get('youtuber', []))}개")
-    print(f"  증권사유튜브: {len(channels.get('securities', []))}개")
+    print(f"[채널] 방송:{len(channels.get('broadcast',[]))} "
+          f"유튜버:{len(channels.get('youtuber',[]))} "
+          f"증권:{len(channels.get('securities',[]))}")
 
     all_data = []
 
-    # 1. 뉴스 (섹션 1 및 시장요약용)
-    print("\n[1/4] 뉴스 RSS 수집 중...")
-    news_data = collect_news(NEWS_RSS_FEEDS)
-    all_data.extend(news_data)
-    print(f"  → 총 {len(news_data)}건")
+    # ── 시장 데이터 수집 (야간선물, 미국증시, 한국증시) ──────────────
+    market_overview = collect_market_overview()
 
-    # YouTube 클라이언트 생성 (섹션 1, 2 공용)
-    youtube = get_youtube_client() if YOUTUBE_API_KEY else None
+    # ── 뉴스 RSS ──────────────────────────────────────────────────────
+    print("\n[뉴스 수집]")
+    news_items = collect_news(NEWS_RSS_FEEDS)
+    all_data.extend(news_items)
+    print(f"  뉴스 {len(news_items)}건 수집")
 
-    # 2. 섹션 1: 유튜브·미디어 채널
-    print(f"\n[2/4] 섹션 1 유튜브·미디어 채널 수집 중...")
-    if youtube:
-        section1_yt = collect_section1_youtube(youtube)
-        all_data.extend(section1_yt)
-        print(f"  → 총 {len(section1_yt)}건")
+    # ── 유튜브 섹션1·섹션2 ───────────────────────────────────────────
+    youtube_client = None
+    if YOUTUBE_API_KEY:
+        youtube_client = get_youtube_client(YOUTUBE_API_KEY)
+
+    section1_items = []
+    section2_items = []
+
+    if youtube_client:
+        print("\n[유튜브 섹션1 수집]")
+        section1_items = collect_section1_youtube(youtube_client, channels)
+        all_data.extend(section1_items)
+        print(f"  섹션1 {len(section1_items)}건")
+
+        print("\n[유튜브 섹션2 수집]")
+        section2_items = collect_section2_securities_tv(youtube_client)
+        all_data.extend(section2_items)
+        print(f"  섹션2 {len(section2_items)}건")
     else:
-        print("  → YouTube API 키 없음, 건너뜀")
+        print("\n[유튜브] YOUTUBE_API_KEY 없음 → 스킵")
 
-    # 3. 섹션 2: 증권TV (전일 기준)
-    print(f"\n[3/4] 섹션 2 증권TV 전문가 채널 수집 중 (전일 기준)...")
-    if youtube:
-        section2_yt = collect_section2_securities_tv(youtube)
-        all_data.extend(section2_yt)
-        print(f"  → 총 {len(section2_yt)}건")
-    else:
-        print("  → YouTube API 키 없음, 건너뜀")
+    # ── 애널리스트 리포트 ─────────────────────────────────────────────
+    print("\n[애널리스트 리포트 수집]")
+    analyst_items = collect_analyst()
+    all_data.extend(analyst_items)
+    print(f"  리포트 {len(analyst_items)}건")
 
-    # 4. 섹션 3: 애널리스트 리포트
-    print("\n[4/4] 섹션 3 애널리스트 리포트 수집 중...")
-    analyst_data = collect_analyst()
-    all_data.extend(analyst_data)
-    print(f"  → 총 {len(analyst_data)}건")
+    print(f"\n[전체] 수집 완료: {len(all_data)}건 "
+          f"(뉴스 {len(news_items)} | 섹션1 {len(section1_items)} "
+          f"| 섹션2 {len(section2_items)} | 리포트 {len(analyst_items)})")
 
-    print(f"\n========== 전체 {len(all_data)}건 수집 완료 ==========")
-
-    # 원본 데이터 백업
+    # ── Raw 데이터 저장 ───────────────────────────────────────────────
     os.makedirs("data", exist_ok=True)
-    today_str = now.strftime("%Y%m%d")
-    with open(f"data/raw_{today_str}.json", "w", encoding="utf-8") as f:
-        json.dump(all_data, f, ensure_ascii=False, indent=2, default=str)
-    print(f"\n  원본 데이터 저장: data/raw_{today_str}.json")
+    raw_path = f"data/raw_{now.strftime('%Y%m%d')}.json"
+    with open(raw_path, "w", encoding="utf-8") as f:
+        json.dump({
+            "collected_at": now.isoformat(),
+            "market_overview": market_overview,
+            "items": all_data,
+        }, f, ensure_ascii=False, indent=2)
+    print(f"\n[저장] {raw_path}")
 
-    # docs 디렉토리 준비
-    os.makedirs("docs", exist_ok=True)
+    # ── 아카이브 백업 ─────────────────────────────────────────────────
     os.makedirs("docs/archive", exist_ok=True)
+    archive_path = f"docs/archive/{now.strftime('%Y-%m-%d')}.html"
+    if os.path.exists("docs/index.html") and not os.path.exists(archive_path):
+        shutil.copy("docs/index.html", archive_path)
+        print(f"[아카이브] {archive_path}")
 
-    # 기존 index.html을 아카이브에 백업 (HTML 생성 전)
-    existing_index = "docs/index.html"
-    if os.path.exists(existing_index):
-        archive_date = now.strftime("%Y-%m-%d")
-        archive_path = f"docs/archive/{archive_date}.html"
-        if not os.path.exists(archive_path):
-            shutil.copy2(existing_index, archive_path)
-            print(f"  아카이브 저장: {archive_path}")
-
-    # AI 분석 + HTML 생성
-    print("\n[AI 분석] Claude API로 교차분석 중...")
+    # ── AI 분석 + HTML 생성 ───────────────────────────────────────────
+    print("\n[AI 분석 시작]")
     html = analyze_and_generate_html(
-        all_data,
-        ANTHROPIC_API_KEY,
-        channels_data=channels,
-        gh_repo=GITHUB_REPO,
+        all_data=all_data,
+        api_key=ANTHROPIC_API_KEY,
+        channels=channels,
+        github_repo=GITHUB_REPO,
+        market_overview=market_overview,        # ← 추가
     )
 
-    # index.html 저장
+    os.makedirs("docs", exist_ok=True)
     with open("docs/index.html", "w", encoding="utf-8") as f:
         f.write(html)
-    print(f"\n  브리핑 페이지 저장: docs/index.html")
 
-    print(f"\n=== 완료: {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S')} ===")
+    end = datetime.now(KST)
+    print(f"\n{'='*60}")
+    print(f"  완료: {end.strftime('%Y-%m-%d %H:%M:%S KST')}")
+    print(f"  소요: {int((end-now).total_seconds())}초")
+    print(f"{'='*60}\n")
 
 
 if __name__ == "__main__":
