@@ -17,6 +17,7 @@ from config import (
     YOUTUBE_API_KEY,
     BROADCAST_HOURS,
     YOUTUBER_HOURS,
+    SECURITIES_HOURS,
     SECURITIES_TV_HOURS,
     SECURITIES_TV_CHANNELS,
     POPULAR_PANELISTS,
@@ -47,7 +48,7 @@ SECURITIES_ANALYSIS_KEYWORDS = [
 
 AD_KEYWORDS = [
     "광고", "협찬", "이벤트", "강의", "클래스", "수강", "모집", "세미나",
-    "할인", "프로모션", "가입", "혜택", "이벤트", "신청",
+    "할인", "프로모션", "가입", "혜택", "신청",
 ]
 
 
@@ -185,10 +186,7 @@ def is_stock_related(title: str, transcript: str = "") -> bool:
 
 
 def is_securities_analysis(title: str, transcript: str = "") -> bool:
-    """
-    증권사 채널 전용: 순수 분석/전략 콘텐츠 여부 판별.
-    BUG-NEW-1 수정: securities 카테고리에 별도 필터 적용.
-    """
+    """증권사 채널 전용: 순수 분석/전략 콘텐츠 여부 판별."""
     combined = (title + " " + transcript).lower()
     return any(kw in combined for kw in SECURITIES_ANALYSIS_KEYWORDS)
 
@@ -237,21 +235,25 @@ def _normalize_channel_list(raw) -> list:
 
 def collect_section1_youtube(youtube, channels: dict) -> list:
     """
-    섹션1: 방송·유튜버·증권사 채널 영상 수집.
-    channels.json 실제 키: broadcast / youtuber / securities
+    섹션1: 방송사·유튜버·증권사 채널 영상 수집 (모두 24시간).
 
-    source_type 매핑:
-      broadcast  → "경제방송"  (한국경제TV·SBS Biz 등 방송국 유튜브)
-      youtuber   → "유튜버"    (슈카월드·삼프로TV 등 개인/독립 채널)
-      securities → "증권사"    (삼성증권·키움증권 등 증권사 공식 채널)
-                               BUG-NEW-1 수정: is_securities_analysis() 추가 필터 적용
-                               QUALITY-1 수정: source_type 을 "유튜버"가 아닌 "증권사"로 구분
+    채널 분류:
+      broadcast  → "경제방송"  (한국경제TV·SBS Biz 등 방송국 유튜브)  24h
+      youtuber   → "유튜버"    (슈카월드·삼프로TV 등 개인/독립 채널)   24h
+      securities → "증권사"    (삼성증권·키움증권 등 증권사 공식 채널) 24h
+                               is_securities_analysis() 추가 필터 적용
+
+    섹션2(SECURITIES_TV_HOURS=48h)와 다른 점:
+      섹션2는 경제방송TV 다시보기 채널로 업로드 지연을 감안해 48시간 수집.
+      섹션1은 3개 카테고리 모두 24시간.
     """
     all_items  = []
+    # BUG-H1 수정: securities 카테고리를 SECURITIES_HOURS(24h)로 명시
+    # (YOUTUBER_HOURS 와 동일값이지만 의미를 명확히 분리)
     categories = [
-        ("broadcast",  BROADCAST_HOURS, "경제방송", False),
-        ("youtuber",   YOUTUBER_HOURS,  "유튜버",   False),
-        ("securities", YOUTUBER_HOURS,  "증권사",   True),   # True = 증권사 추가 필터 적용
+        ("broadcast",  BROADCAST_HOURS,  "경제방송", False),
+        ("youtuber",   YOUTUBER_HOURS,   "유튜버",   False),
+        ("securities", SECURITIES_HOURS, "증권사",   True),
     ]
 
     for cat_key, hours, source_type, securities_filter in categories:
@@ -285,22 +287,19 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
                 if is_ad_content(title):
                     continue
 
-                # BUG-NEW-2 수정: 제목이 주식 관련이면 자막 불필요 시 스킵
-                # → 자막은 summary 용도로도 쓰이므로 항상 가져오되,
-                #   주식 관련 여부 판단은 제목 우선으로 최적화
+                # BUG-NEW-2 최적화: 제목으로 먼저 주식 관련 여부 판단
+                # 제목이 충분하면 자막은 summary 보강용으로만 취득
                 if is_stock_related(title):
-                    # 제목만으로 통과 → 자막은 summary 보강용으로만 취득
                     transcript = get_transcript(v["video_id"])
                     stock_ok   = True
                 else:
-                    # 제목 불충분 → 자막으로 재판단
                     transcript = get_transcript(v["video_id"])
                     stock_ok   = is_stock_related(title, transcript)
 
                 if not stock_ok:
                     continue
 
-                # BUG-NEW-1 수정: 증권사 채널은 분석 콘텐츠 여부 추가 확인
+                # 증권사 채널 추가 필터: 분석/전략 콘텐츠 여부 확인
                 if securities_filter and not is_securities_analysis(title, transcript):
                     continue
 
@@ -326,12 +325,20 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
 
 def collect_section2_securities_tv(youtube) -> list:
     """
-    섹션2: config.py의 SECURITIES_TV_CHANNELS (방송국 TV 채널) 수집.
-    전문가 출연 또는 인기 패널리스트 포함 영상만 수집.
+    섹션2: config.py의 SECURITIES_TV_CHANNELS (경제방송 TV 다시보기 채널) 수집.
+
+    수집 기간: SECURITIES_TV_HOURS = 48시간
+    → 오전 종목추천 프로그램이 유튜브에 올라오는 시간이 늦어
+      전날 방송분까지 포함하기 위해 이틀치(48h) 수집.
+
+    필터: 전문가 출연 프로그램 또는 인기 패널리스트 포함 영상만 수집.
+
+    BUG-M4 수정: 제목으로 먼저 판단, 통과하면 자막은 summary 보강용으로만 취득.
+                 제목 불충분 시에만 자막으로 재판단하여 API 쿼터 절약.
     """
     all_items = []
     ch_list   = _normalize_channel_list(SECURITIES_TV_CHANNELS)
-    print(f"  [섹션2] 경제방송TV {len(ch_list)}개 채널 ({SECURITIES_TV_HOURS}h)")
+    print(f"  [섹션2] 경제방송TV {len(ch_list)}개 채널 ({SECURITIES_TV_HOURS}h, 전날 방송분 포함)")
 
     for ch in ch_list:
         channel_id   = ch.get("id", "")
@@ -349,10 +356,15 @@ def collect_section2_securities_tv(youtube) -> list:
             if is_ad_content(title):
                 continue
 
-            transcript = get_transcript(v["video_id"])
-
-            if not (is_expert_program(title, transcript) or has_popular_panelist(title, transcript)):
-                continue
+            # 제목으로 먼저 판단: 통과 시 자막은 summary 보강용만
+            title_pass = is_expert_program(title) or has_popular_panelist(title)
+            if title_pass:
+                transcript = get_transcript(v["video_id"])
+            else:
+                # 제목 불충분 → 자막으로 재판단
+                transcript = get_transcript(v["video_id"])
+                if not (is_expert_program(title, transcript) or has_popular_panelist(title, transcript)):
+                    continue
 
             all_items.append({
                 "source_type": "경제방송",
