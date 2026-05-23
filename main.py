@@ -8,10 +8,14 @@ from config import (
     ANTHROPIC_API_KEY, YOUTUBE_API_KEY, GH_TOKEN, GITHUB_REPO,
     NEWS_RSS_FEEDS, BROADCAST_HOURS, YOUTUBER_HOURS, load_channels,
 )
-from collectors.news_collector     import collect_news
-from collectors.youtube_collector  import collect_broadcast_youtube, collect_youtuber
+from collectors.news_collector    import collect_news
+from collectors.youtube_collector import (
+    get_youtube_client,
+    collect_section1_youtube,
+    collect_section2_securities_tv,
+)
 from collectors.analyst_collector  import collect_analyst
-from collectors.market_collector   import collect_market_overview   # ← V3 추가
+from collectors.market_collector   import collect_market_overview
 from analyzer.ai_analyzer          import analyze_and_generate_html
 
 
@@ -22,7 +26,7 @@ def main():
     print("\n[채널 로드]")
     channels = load_channels()
 
-    # ─── 시장 데이터 수집 (V3 추가) ─────────────────────────────────────────
+    # 시장 데이터 수집
     market_overview = collect_market_overview()
 
     all_data = []
@@ -33,17 +37,22 @@ def main():
     all_data.extend(news_data)
     print(f"  → 총 {len(news_data)}건")
 
-    # 2. 경제방송
-    print(f"\n[2/4] 경제전문방송 유튜브 수집 중 (최근 {BROADCAST_HOURS}시간)...")
-    broadcast_data = collect_broadcast_youtube()
-    all_data.extend(broadcast_data)
-    print(f"  → 총 {len(broadcast_data)}건")
+    # 2. 유튜브 수집 (YouTube API 클라이언트 생성)
+    youtube = get_youtube_client(YOUTUBE_API_KEY)
 
-    # 3. 유튜버 (TOP50 + 인기패널)
-    print(f"\n[3/4] 오리지널 경제유튜브 TOP50 + 인기패널 수집 중 (최근 {YOUTUBER_HOURS}시간)...")
-    youtuber_data = collect_youtuber()
-    all_data.extend(youtuber_data)
-    print(f"  → 총 {len(youtuber_data)}건")
+    if youtube:
+        print(f"\n[2/4] 유튜브 수집 중 (섹션1, 최근 {BROADCAST_HOURS}시간)...")
+        section1_data = collect_section1_youtube(youtube, channels)
+        all_data.extend(section1_data)
+        print(f"  → 총 {len(section1_data)}건")
+
+        print(f"\n[3/4] 증권TV 수집 중 (섹션2, 최근 48시간)...")
+        section2_data = collect_section2_securities_tv(youtube)
+        all_data.extend(section2_data)
+        print(f"  → 총 {len(section2_data)}건")
+    else:
+        print("\n[2/4] YouTube API 클라이언트 생성 실패 → 유튜브 수집 스킵")
+        print("\n[3/4] 스킵")
 
     # 4. 애널리스트
     print("\n[4/4] 애널리스트 리포트 수집 중...")
@@ -56,17 +65,14 @@ def main():
     # 원본 데이터 백업
     os.makedirs("data", exist_ok=True)
     today_str = datetime.now().strftime("%Y%m%d")
-    save_payload = {
-        "market_overview": market_overview,
-        "items": all_data,
-    }
+    save_payload = {"market_overview": market_overview, "items": all_data}
     with open(f"data/raw_{today_str}.json", "w", encoding="utf-8") as f:
         json.dump(save_payload, f, ensure_ascii=False, indent=2, default=str)
 
     os.makedirs("docs", exist_ok=True)
     os.makedirs("docs/archive", exist_ok=True)
 
-    # 아카이브 백업 (HTML 생성 전에 실행 — V2 동일)
+    # 아카이브 백업 (HTML 생성 전에 실행)
     existing_index = "docs/index.html"
     if os.path.exists(existing_index):
         archive_date = datetime.now().strftime("%Y-%m-%d")
@@ -82,7 +88,7 @@ def main():
         ANTHROPIC_API_KEY,
         channels_data=channels,
         gh_repo=GITHUB_REPO,
-        market_overview=market_overview,   # ← V3 추가
+        market_overview=market_overview,
     )
 
     with open("docs/index.html", "w", encoding="utf-8") as f:
