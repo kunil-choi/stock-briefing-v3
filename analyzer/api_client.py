@@ -1,15 +1,16 @@
 # analyzer/api_client.py
+import os
 import time
 import requests as req_lib
-import os
 
 ANTHROPIC_API_URL     = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_API_VERSION = "2023-06-01"
 
+# BUG-NEW-7 수정: 실제 API가 인식하는 정확한 모델 ID 사용
+# "claude-sonnet-4-6" 은 유효하지 않은 ID → 제거
 CLAUDE_MODELS = [
-    "claude-sonnet-4-6",
-    "claude-3-5-sonnet-20241022",
-    "claude-3-5-haiku-20241022",
+    "claude-3-5-sonnet-20241022",   # 1순위: 안정적 고성능
+    "claude-3-5-haiku-20241022",    # 2순위: 경량 폴백
 ]
 
 
@@ -18,7 +19,7 @@ def call_claude_with_retry(api_key: str, prompt: str,
                             max_retries: int = 3) -> str:
     """
     Claude API 직접 호출 (requests 사용).
-    V2 시그니처 유지: call_claude_with_retry(api_key, prompt, max_tokens)
+    모델 순서대로 시도하고, 각 모델당 max_retries 회 재시도.
     """
     if not api_key:
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
@@ -27,9 +28,9 @@ def call_claude_with_retry(api_key: str, prompt: str,
         return ""
 
     headers = {
-        "x-api-key":          api_key,
-        "anthropic-version":  ANTHROPIC_API_VERSION,
-        "content-type":       "application/json",
+        "x-api-key":         api_key,
+        "anthropic-version": ANTHROPIC_API_VERSION,
+        "content-type":      "application/json",
     }
 
     for model in CLAUDE_MODELS:
@@ -56,16 +57,16 @@ def call_claude_with_retry(api_key: str, prompt: str,
 
                 elif resp.status_code == 429:
                     wait = 60 * (attempt + 1)
-                    print(f"  [API] 429 Rate limit. {wait}초 대기...")
+                    print(f"  [API] 429 Rate limit → {wait}초 대기...")
                     time.sleep(wait)
 
                 elif resp.status_code in (529, 503, 500):
                     wait = 30 * (attempt + 1)
-                    print(f"  [API] {resp.status_code} 서버 과부하. {wait}초 대기...")
+                    print(f"  [API] {resp.status_code} 서버 과부하 → {wait}초 대기...")
                     time.sleep(wait)
 
                 elif resp.status_code == 401:
-                    print(f"  [API] 401 인증 실패. API 키를 확인하세요.")
+                    print("  [API] 401 인증 실패. API 키를 확인하세요.")
                     return ""
 
                 else:
@@ -88,7 +89,7 @@ def call_claude_with_retry(api_key: str, prompt: str,
                 if attempt < max_retries - 1:
                     time.sleep(10)
 
-        print(f"  [API] 모델 {model} 실패 → 다음 모델 시도")
+        print(f"  [API] 모델 {model} 전체 실패 → 다음 모델 시도")
 
     print("  [API] 모든 모델/재시도 실패")
     return ""
