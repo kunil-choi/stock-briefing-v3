@@ -171,10 +171,17 @@ def get_transcript(video_id: str, max_chars: int = 2000) -> str:
         entries = t.fetch()
         texts   = []
         for e in entries:
+            # FetchedTranscriptSnippet 객체 또는 dict 모두 처리
             if hasattr(e, "text"):
-                texts.append(e.text)
+                texts.append(str(e.text))
             elif isinstance(e, dict):
                 texts.append(e.get("text", ""))
+            else:
+                # 기타 객체: 문자열 변환 시도
+                try:
+                    texts.append(str(e))
+                except Exception:
+                    pass
         return " ".join(texts)[:max_chars]
     except Exception:
         return ""
@@ -367,7 +374,7 @@ def collect_section2_securities_tv(youtube) -> list:
                     continue
 
             all_items.append({
-                "source_type": "경제방송",
+                "source_type": "경제방송TV",
                 "source_name": channel_name,
                 "title":       title,
                 "summary":     transcript[:500] if transcript else title,
