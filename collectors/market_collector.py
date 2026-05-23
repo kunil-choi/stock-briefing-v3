@@ -67,8 +67,8 @@ def _get_usd_krw_naver() -> dict:
         soup = BeautifulSoup(resp.text, "html.parser")
         price_el  = soup.select_one("p.no_today em.no_up, p.no_today em.no_down, p.no_today em")
         change_el = soup.select_one("span.change")
-        price     = price_el.get_text(strip=True).replace(",", "") if price_el  else ""
-        change    = change_el.get_text(strip=True).replace(",", "") if change_el else ""
+        price  = price_el.get_text(strip=True).replace(",", "")  if price_el  else ""
+        change = change_el.get_text(strip=True).replace(",", "") if change_el else ""
         return {
             "price":      _safe_float(price),
             "change":     _safe_float(change),
@@ -97,10 +97,10 @@ def get_us_market_data() -> dict:
         }
         for key, symbol in tickers.items():
             try:
-                t    = yf.Ticker(symbol)
-                info = t.fast_info
-                price     = _safe_float(getattr(info, "last_price",         None))
-                prev      = _safe_float(getattr(info, "previous_close",     None))
+                t         = yf.Ticker(symbol)
+                info      = t.fast_info
+                price     = _safe_float(getattr(info, "last_price",     None))
+                prev      = _safe_float(getattr(info, "previous_close", None))
                 change    = round(price - prev, 2) if (price and prev) else None
                 chg_pct   = round((change / prev) * 100, 2) if (change and prev) else None
                 result[key] = {
@@ -120,41 +120,24 @@ def get_us_market_data() -> dict:
 # ── 야간선물 ──────────────────────────────────────────────────────────────────
 
 def _get_night_futures_fallback() -> dict:
-    """네이버 야간선물 HTML 폴백"""
+    """
+    네이버 금융 야간선물 HTML 폴백.
+    코스피200 야간선물 종목코드: 101S6000
+    """
     try:
         url  = "https://finance.naver.com/item/main.naver?code=101S6000"
         resp = requests.get(url, headers=_HEADERS, timeout=10)
         resp.encoding = "euc-kr"
         soup = BeautifulSoup(resp.text, "html.parser")
-        price_el = soup.select_one("p.no_today em")
-        price    = _safe_float(price_el.get_text(strip=True)) if price_el else None
-        return {
-            "price":      price,
-            "change":     None,
-            "change_pct": None,
-            "volume":     None,
-            "direction":  "neutral",
-        }
-    except Exception as e:
-        print(f"  [야간선물 폴백 오류] {e}")
-        return {"price": None, "change": None, "change_pct": None, "volume": None, "direction": "neutral"}
 
+        price_el      = soup.select_one("p.no_today em")
+        change_el     = soup.select_one("p.no_exday em")
+        change_pct_el = soup.select_one("p.no_exday span.no_up, p.no_exday span.no_down")
 
-def get_night_futures_data() -> dict:
-    """네이버 모바일 API에서 코스피200 야간선물 수집"""
-    try:
-        url  = "https://m.stock.naver.com/api/index/FUT/basic"
-        resp = requests.get(url, headers=_HEADERS, timeout=10)
-        if resp.status_code != 200:
-            return _get_night_futures_fallback()
+        price     = _safe_float(price_el.get_text(strip=True))      if price_el      else None
+        change    = _safe_float(change_el.get_text(strip=True))     if change_el     else None
+        chg_pct   = _safe_float(change_pct_el.get_text(strip=True)) if change_pct_el else None
 
-        d         = resp.json()
-        price     = _safe_float(d.get("closePrice")    or d.get("price"))
-        change    = _safe_float(d.get("compareToPreviousClosePrice") or d.get("change"))
-        chg_pct   = _safe_float(d.get("fluctuationsRatio")           or d.get("change_pct"))
-        volume    = _safe_float(d.get("accumulatedTradingVolume")     or d.get("volume"))
-
-        # 방향 결정
         if chg_pct is not None:
             direction = "call" if chg_pct > 0 else ("put" if chg_pct < 0 else "neutral")
         elif change is not None:
@@ -162,19 +145,70 @@ def get_night_futures_data() -> dict:
         else:
             direction = "neutral"
 
-        result = {
+        return {
             "price":      price,
             "change":     change,
             "change_pct": chg_pct,
-            "volume":     volume,
+            "volume":     None,
             "direction":  direction,
         }
-        print(f"  [야간선물] {price} ({_fmt(chg_pct)}) → {direction}")
-        return result
-
     except Exception as e:
-        print(f"  [야간선물 API 오류] {e} → 폴백 시도")
-        return _get_night_futures_fallback()
+        print(f"  [야간선물 폴백 오류] {e}")
+        return {
+            "price": None, "change": None, "change_pct": None,
+            "volume": None, "direction": "neutral",
+        }
+
+
+def get_night_futures_data() -> dict:
+    """
+    코스피200 야간선물 수집.
+    1순위: 네이버 모바일 API (KOSPI200FUT)
+    2순위: HTML 폴백 (code=101S6000)
+    """
+    # BUG-M3 수정: 정확한 코스피200 야간선물 API 엔드포인트 사용
+    endpoints = [
+        "https://m.stock.naver.com/api/index/KOSPI200FUT/basic",
+        "https://m.stock.naver.com/api/index/FUT/basic",
+    ]
+
+    for url in endpoints:
+        try:
+            resp = requests.get(url, headers=_HEADERS, timeout=10)
+            if resp.status_code != 200:
+                continue
+
+            d       = resp.json()
+            price   = _safe_float(d.get("closePrice")    or d.get("price"))
+            change  = _safe_float(d.get("compareToPreviousClosePrice") or d.get("change"))
+            chg_pct = _safe_float(d.get("fluctuationsRatio")           or d.get("change_pct"))
+            volume  = _safe_float(d.get("accumulatedTradingVolume")    or d.get("volume"))
+
+            if price is None:
+                continue
+
+            if chg_pct is not None:
+                direction = "call" if chg_pct > 0 else ("put" if chg_pct < 0 else "neutral")
+            elif change is not None:
+                direction = "call" if change > 0  else ("put" if change  < 0 else "neutral")
+            else:
+                direction = "neutral"
+
+            result = {
+                "price":      price,
+                "change":     change,
+                "change_pct": chg_pct,
+                "volume":     volume,
+                "direction":  direction,
+            }
+            print(f"  [야간선물] {price} ({_fmt(chg_pct)}) → {direction}")
+            return result
+
+        except Exception as e:
+            print(f"  [야간선물 API 오류] {url}: {e}")
+
+    print("  [야간선물] API 모두 실패 → HTML 폴백 시도")
+    return _get_night_futures_fallback()
 
 
 # ── 한국 증시 ─────────────────────────────────────────────────────────────────
@@ -188,9 +222,13 @@ def _get_korea_index_fallback(code: str) -> dict:
         soup = BeautifulSoup(resp.text, "html.parser")
         price_el  = soup.select_one("strong#now_value")
         change_el = soup.select_one("strong#change_value")
-        price     = _safe_float(price_el.get_text(strip=True))  if price_el  else None
-        change    = _safe_float(change_el.get_text(strip=True)) if change_el else None
-        chg_pct   = round((change / (price - change)) * 100, 2) if (change and price and price != change) else None
+        price   = _safe_float(price_el.get_text(strip=True))  if price_el  else None
+        change  = _safe_float(change_el.get_text(strip=True)) if change_el else None
+        chg_pct = (
+            round((change / (price - change)) * 100, 2)
+            if (change is not None and price and price != change)
+            else None
+        )
         return {"price": price, "change": change, "change_pct": chg_pct}
     except Exception as e:
         print(f"  [{code} 폴백 오류] {e}")
@@ -214,10 +252,10 @@ def get_korea_market_data() -> dict:
             if resp.status_code != 200:
                 result[key] = _get_korea_index_fallback(fallback_code)
                 continue
-            d         = resp.json()
-            price     = _safe_float(d.get("closePrice")    or d.get("price"))
-            change    = _safe_float(d.get("compareToPreviousClosePrice") or d.get("change"))
-            chg_pct   = _safe_float(d.get("fluctuationsRatio")           or d.get("change_pct"))
+            d       = resp.json()
+            price   = _safe_float(d.get("closePrice")    or d.get("price"))
+            change  = _safe_float(d.get("compareToPreviousClosePrice") or d.get("change"))
+            chg_pct = _safe_float(d.get("fluctuationsRatio")           or d.get("change_pct"))
             result[key] = {"price": price, "change": change, "change_pct": chg_pct}
             print(f"  [{key.upper()}] {price} ({_fmt(chg_pct)})")
             time.sleep(0.2)
