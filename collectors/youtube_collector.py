@@ -38,8 +38,16 @@ EXPERT_KEYWORDS = [
     "목표가", "매수추천", "강력매수", "시황", "전망",
 ]
 
+# 증권사 채널 전용 추가 필터: 순수 분석/전략 콘텐츠 키워드
+SECURITIES_ANALYSIS_KEYWORDS = [
+    "분석", "리포트", "전망", "시황", "전략", "목표주가", "추천종목",
+    "포트폴리오", "섹터", "실적", "투자의견", "매수", "매도", "중립",
+    "강력매수", "상향", "하향", "신규", "커버리지",
+]
+
 AD_KEYWORDS = [
     "광고", "협찬", "이벤트", "강의", "클래스", "수강", "모집", "세미나",
+    "할인", "프로모션", "가입", "혜택", "이벤트", "신청",
 ]
 
 
@@ -82,8 +90,8 @@ def resolve_channel_id(youtube, handle: str) -> str:
 
 def get_recent_videos_via_playlist(youtube, channel_id: str, hours: int) -> list:
     playlist_id = get_uploads_playlist_id(channel_id)
-    cutoff = datetime.now(KST) - timedelta(hours=hours)
-    videos = []
+    cutoff      = datetime.now(KST) - timedelta(hours=hours)
+    videos      = []
 
     try:
         next_page_token = None
@@ -160,7 +168,7 @@ def get_transcript(video_id: str, max_chars: int = 2000) -> str:
             except Exception:
                 return ""
         entries = t.fetch()
-        texts = []
+        texts   = []
         for e in entries:
             if hasattr(e, "text"):
                 texts.append(e.text)
@@ -174,6 +182,15 @@ def get_transcript(video_id: str, max_chars: int = 2000) -> str:
 def is_stock_related(title: str, transcript: str = "") -> bool:
     combined = (title + " " + transcript).lower()
     return any(kw in combined for kw in STOCK_KEYWORDS)
+
+
+def is_securities_analysis(title: str, transcript: str = "") -> bool:
+    """
+    증권사 채널 전용: 순수 분석/전략 콘텐츠 여부 판별.
+    BUG-NEW-1 수정: securities 카테고리에 별도 필터 적용.
+    """
+    combined = (title + " " + transcript).lower()
+    return any(kw in combined for kw in SECURITIES_ANALYSIS_KEYWORDS)
 
 
 def is_expert_program(title: str, transcript: str = "") -> bool:
@@ -192,9 +209,8 @@ def is_ad_content(title: str) -> bool:
 
 def _normalize_channel_list(raw) -> list:
     """
-    channels.json 카테고리 값을 list[{"id": ..., "name": ...}] 형태로 통일.
-    list(실제 channels.json 형태) 또는 dict 양쪽 처리.
-    id가 빈 문자열인 항목은 제외(unconfirmed 채널 필터링).
+    channels.json 카테고리 값을 list[{"id":..., "name":...}] 형태로 통일.
+    id가 빈 문자열인 항목(unconfirmed)은 제외.
     """
     result = []
     if isinstance(raw, list):
@@ -202,7 +218,7 @@ def _normalize_channel_list(raw) -> list:
             if isinstance(item, dict):
                 ch_id   = item.get("id", "").strip()
                 ch_name = item.get("name", ch_id)
-                if ch_id:                          # ← 빈 id 제외
+                if ch_id:
                     result.append({"id": ch_id, "name": ch_name})
             elif isinstance(item, str) and item.strip():
                 result.append({"id": item.strip(), "name": item.strip()})
@@ -218,32 +234,34 @@ def _normalize_channel_list(raw) -> list:
 
 
 # ── 섹션 1 수집 ────────────────────────────────────────────────────────────────
-# CRITICAL-1·2 수정:
-#   "top50" → "securities" 로 변경 (channels.json 실제 키에 맞춤)
-#   "broadcast" → source_type "경제방송"
-#   "youtuber"  → source_type "유튜버"
-#   "securities"→ source_type "유튜버" (증권사 공식 채널, 분석 콘텐츠)
 
 def collect_section1_youtube(youtube, channels: dict) -> list:
     """
     섹션1: 방송·유튜버·증권사 채널 영상 수집.
-    channels.json 실제 키: broadcast, youtuber, securities
+    channels.json 실제 키: broadcast / youtuber / securities
+
+    source_type 매핑:
+      broadcast  → "경제방송"  (한국경제TV·SBS Biz 등 방송국 유튜브)
+      youtuber   → "유튜버"    (슈카월드·삼프로TV 등 개인/독립 채널)
+      securities → "증권사"    (삼성증권·키움증권 등 증권사 공식 채널)
+                               BUG-NEW-1 수정: is_securities_analysis() 추가 필터 적용
+                               QUALITY-1 수정: source_type 을 "유튜버"가 아닌 "증권사"로 구분
     """
-    all_items = []
+    all_items  = []
     categories = [
-        ("broadcast",  BROADCAST_HOURS, "경제방송"),  # 한국경제TV·SBS Biz 등
-        ("youtuber",   YOUTUBER_HOURS,  "유튜버"),    # 슈카월드·삼프로TV 등
-        ("securities", YOUTUBER_HOURS,  "유튜버"),    # 삼성증권·키움증권 등
+        ("broadcast",  BROADCAST_HOURS, "경제방송", False),
+        ("youtuber",   YOUTUBER_HOURS,  "유튜버",   False),
+        ("securities", YOUTUBER_HOURS,  "증권사",   True),   # True = 증권사 추가 필터 적용
     ]
 
-    for cat_key, hours, source_type in categories:
+    for cat_key, hours, source_type, securities_filter in categories:
         raw     = channels.get(cat_key, [])
         ch_list = _normalize_channel_list(raw)
         if not ch_list:
             print(f"  [섹션1-{cat_key}] 채널 없음 → 스킵")
             continue
 
-        print(f"  [섹션1-{cat_key}] {len(ch_list)}개 채널 ({hours}h)")
+        print(f"  [섹션1-{cat_key}] {len(ch_list)}개 채널 ({hours}h, type={source_type})")
         collected = 0
 
         for ch in ch_list:
@@ -267,14 +285,24 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
                 if is_ad_content(title):
                     continue
 
-                # 최적화: 제목이 주식 관련이면 자막 없이 바로 포함
-                # 제목 무관 시 자막으로 보조 확인
+                # BUG-NEW-2 수정: 제목이 주식 관련이면 자막 불필요 시 스킵
+                # → 자막은 summary 용도로도 쓰이므로 항상 가져오되,
+                #   주식 관련 여부 판단은 제목 우선으로 최적화
                 if is_stock_related(title):
+                    # 제목만으로 통과 → 자막은 summary 보강용으로만 취득
                     transcript = get_transcript(v["video_id"])
+                    stock_ok   = True
                 else:
+                    # 제목 불충분 → 자막으로 재판단
                     transcript = get_transcript(v["video_id"])
-                    if not is_stock_related(title, transcript):
-                        continue
+                    stock_ok   = is_stock_related(title, transcript)
+
+                if not stock_ok:
+                    continue
+
+                # BUG-NEW-1 수정: 증권사 채널은 분석 콘텐츠 여부 추가 확인
+                if securities_filter and not is_securities_analysis(title, transcript):
+                    continue
 
                 all_items.append({
                     "source_type": source_type,
@@ -298,12 +326,12 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
 
 def collect_section2_securities_tv(youtube) -> list:
     """
-    섹션2: config.py의 SECURITIES_TV_CHANNELS(방송국 TV 채널) 수집.
-    전문가 출연 또는 패널리스트 포함 영상만 수집.
+    섹션2: config.py의 SECURITIES_TV_CHANNELS (방송국 TV 채널) 수집.
+    전문가 출연 또는 인기 패널리스트 포함 영상만 수집.
     """
     all_items = []
-    ch_list = _normalize_channel_list(SECURITIES_TV_CHANNELS)
-    print(f"  [섹션2] 증권TV {len(ch_list)}개 채널 ({SECURITIES_TV_HOURS}h)")
+    ch_list   = _normalize_channel_list(SECURITIES_TV_CHANNELS)
+    print(f"  [섹션2] 경제방송TV {len(ch_list)}개 채널 ({SECURITIES_TV_HOURS}h)")
 
     for ch in ch_list:
         channel_id   = ch.get("id", "")
