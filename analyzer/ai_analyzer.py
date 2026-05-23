@@ -1,512 +1,614 @@
-# analyzer/ai_analyzer.py
-import json
+# analyzer/html_generator.py
 import os
-import re
+import requests
 from datetime import datetime, timedelta, timezone
 
-from .api_client   import call_claude_with_retry
-from .validation   import validate_stocks
-from .html_generator import generate_html
-
 KST = timezone(timedelta(hours=9))
-CB  = "\u0060\u0060\u0060"
 
 
-# ────────────────────────────────────────────────────────────────────────────
-# 종목 목록 로드 (V2 그대로)
-# ────────────────────────────────────────────────────────────────────────────
+# ─── 인디케이터 배지 헬퍼 ─────────────────────────────────────────────────────
 
-def load_stock_names() -> dict:
-    import requests
-
-    cache_path = "data/stock_names_cache.json"
-    today      = datetime.now(KST).strftime("%Y-%m-%d")
-
-    if os.path.exists(cache_path):
-        try:
-            with open(cache_path, "r", encoding="utf-8") as f:
-                cache = json.load(f)
-            if cache.get("date") == today and len(cache.get("stocks", {})) > 0:
-                print(f"  [종목목록] 캐시 사용 ({len(cache['stocks'])}개, {today})")
-                return cache["stocks"]
-        except Exception:
-            pass
-
-    print("  [종목목록] KRX 종목 목록 로드 중...")
-    stock_map = {}
-    headers   = {"User-Agent": "Mozilla/5.0", "Referer": "http://data.krx.co.kr/"}
-
-    for market_id, market_name in [("STK", "코스피"), ("KSQ", "코스닥")]:
-        try:
-            url    = "http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
-            params = {
-                "bld": "dbms/MDC/STAT/standard/MDCSTAT01901",
-                "mktId": market_id, "share": "1", "money": "1", "csvxls_isNo": "false",
-            }
-            res   = requests.post(url, data=params, headers=headers, timeout=15)
-            items = res.json().get("OutBlock_1", [])
-            for item in items:
-                name = item.get("ISU_ABBRV", "").strip()
-                code = item.get("ISU_SRT_CD", "").strip()
-                if name and code:
-                    stock_map[name] = code
-            print(f"  [{market_name}] {len(items)}개 로드")
-        except Exception as e:
-            print(f"  [{market_name}] KRX 오류: {e}")
-
-    if not stock_map:
-        print("  [종목목록] KRX 실패 → 주요 종목 폴백 사용")
-        stock_map = {
-            "삼성전자": "005930", "SK하이닉스": "000660", "LG에너지솔루션": "373220",
-            "삼성바이오로직스": "207940", "현대차": "005380", "기아": "000270",
-            "셀트리온": "068270", "POSCO홀딩스": "005490", "KB금융": "105560",
-            "신한지주": "055550", "하나금융지주": "086790", "우리금융지주": "316140",
-            "LG화학": "051910", "삼성SDI": "006400", "현대모비스": "012330",
-            "카카오": "035720", "NAVER": "035420", "LG전자": "066570",
-            "삼성물산": "028260", "SK텔레콤": "017670", "KT": "030200",
-            "삼성생명": "032830", "삼성화재": "000810", "메리츠금융지주": "138040",
-            "한화에어로스페이스": "012450", "두산에너빌리티": "034020",
-            "HD현대중공업": "329180", "HD한국조선해양": "009540",
-            "HD현대": "267250", "현대건설": "000720", "GS건설": "006360",
-            "에코프로": "086520", "에코프로비엠": "247540", "알테오젠": "196170",
-            "삼성전기": "009150", "삼성SDS": "018260", "삼성증권": "016360",
-            "미래에셋증권": "006800", "NH투자증권": "005940", "키움증권": "039490",
-            "HLB": "028300", "유한양행": "000100", "종근당": "185750",
-            "한미약품": "128940", "크래프톤": "259960", "엔씨소프트": "036570",
-            "카카오게임즈": "293490", "고려아연": "010130", "HMM": "011200",
-            "대한항공": "003490", "한화오션": "042660", "HD현대일렉트릭": "267260",
-            "효성중공업": "298040", "LS일렉트릭": "010120", "두산로보틱스": "454910",
-            "레인보우로보틱스": "277810", "리가켐바이오": "141080",
-        }
-
-    os.makedirs("data", exist_ok=True)
-    with open(cache_path, "w", encoding="utf-8") as f:
-        json.dump({"date": today, "stocks": stock_map}, f, ensure_ascii=False)
-
-    print(f"  [종목목록] 총 {len(stock_map)}개 로드 완료")
-    return stock_map
-
-
-# ────────────────────────────────────────────────────────────────────────────
-# 종목 언급 추출 · 필터 (V2 그대로)
-# ────────────────────────────────────────────────────────────────────────────
-
-def extract_mentions(all_data: list, stock_map: dict) -> dict:
-    type_map  = {"뉴스": "뉴스", "경제방송": "경제방송", "유튜버": "유튜브",
-                 "유튜브": "유튜브", "애널리스트": "애널리스트"}
-    skip_names = {"삼성","현대","LG","SK","롯데","한국","대한","국민",
-                  "신한","우리","하나","기업","산업","전자","화학",
-                  "건설","증권","보험","카드","캐피탈","파이낸스",
-                  "글로벌","인터내셔널","코리아","홀딩스"}
-    mentions = {}
-    for item in all_data:
-        raw_type    = item.get("source_type", "기타")
-        source_type = type_map.get(raw_type, raw_type)
-        source_name = item.get("source_name", "")
-        link        = item.get("link", "")
-        content_id  = link if link else (source_name + "|" + item.get("title", ""))
-        full_text   = " ".join([item.get("title",""), item.get("summary",""), item.get("content","")])
-        for stock_name, code in stock_map.items():
-            if len(stock_name) < 2 or stock_name in skip_names:
-                continue
-            if stock_name not in full_text:
-                continue
-            if stock_name not in mentions:
-                mentions[stock_name] = {"code": code, "뉴스": [], "경제방송": [],
-                                        "유튜브": [], "애널리스트": [], "total": 0}
-            already = any(m.get("content_id") == content_id
-                          for m in mentions[stock_name][source_type])
-            if already:
-                continue
-            idx     = full_text.find(stock_name)
-            context = full_text[max(0, idx-50): idx+150].strip()
-            mentions[stock_name][source_type].append({
-                "source_name": source_name, "text": context,
-                "link": link, "content_id": content_id,
-            })
-            mentions[stock_name]["total"] += 1
-    return mentions
-
-
-def filter_mentions(mentions: dict, min_channel_types: int = 2) -> dict:
-    filtered = {}
-    for name, data in mentions.items():
-        channel_types = sum(1 for t in ["뉴스","경제방송","유튜브","애널리스트"]
-                            if len(data[t]) > 0)
-        if channel_types >= min_channel_types:
-            filtered[name] = data
-    filtered = dict(sorted(filtered.items(), key=lambda x: x[1]["total"], reverse=True))
-    print(f"  [필터] {len(filtered)}개 종목 선별 (2개 이상 채널, 총 언급횟수 순)")
-    return filtered
-
-
-# ────────────────────────────────────────────────────────────────────────────
-# 5단락 시장 요약 생성 (V3 신규)
-# ────────────────────────────────────────────────────────────────────────────
-
-def _fmt_pct(val) -> str:
-    if val is None:
-        return "N/A"
+def _indicator_badge(label: str, value, pct, direction: str = "") -> str:
+    """
+    시장 인디케이터 하나를 색상 배지로 렌더링.
+    direction: 'call'→초록, 'put'→빨강, ''→등락률 기준 자동
+    """
     try:
-        return f"{float(val):+.2f}%"
+        pct_f = float(str(pct).replace(",", "").replace("%","").replace("+",""))
     except Exception:
-        return "N/A"
+        pct_f = 0.0
+
+    if direction == "call":
+        color_cls = "ind-call"
+    elif direction == "put":
+        color_cls = "ind-put"
+    elif pct_f > 0:
+        color_cls = "ind-call"
+    elif pct_f < 0:
+        color_cls = "ind-put"
+    else:
+        color_cls = "ind-neutral"
+
+    sign    = "▲" if pct_f > 0 else ("▼" if pct_f < 0 else "-")
+    pct_str = f"{abs(pct_f):.2f}%" if pct_f != 0 else "0.00%"
+    val_str = f"{value:,.2f}" if isinstance(value, float) else str(value) if value else "N/A"
+
+    return (
+        f'<div class="ind-badge {color_cls}">'
+        f'<span class="ind-label">{label}</span>'
+        f'<span class="ind-value">{val_str}</span>'
+        f'<span class="ind-pct">{sign} {pct_str}</span>'
+        f'</div>'
+    )
 
 
-def generate_market_summary(market_overview: dict, all_data: list,
-                             api_key: str, today_date: str) -> str:
+def _build_market_indicators(market_overview: dict) -> str:
+    """market_overview → 인디케이터 배지 행 HTML"""
+    if not market_overview:
+        return ""
+
+    nf = market_overview.get("night_futures", {})
+    us = market_overview.get("us_market", {})
+    kr = market_overview.get("korea_market", {})
+
+    badges = ""
+    # 야간선물
+    badges += _indicator_badge(
+        "야간선물", nf.get("price"), nf.get("change_pct"),
+        direction=nf.get("direction", "")
+    )
+    # 미국 3대 지수
+    badges += _indicator_badge("S&P500",  us.get("sp500",  {}).get("price"), us.get("sp500",  {}).get("change_pct"))
+    badges += _indicator_badge("나스닥",   us.get("nasdaq", {}).get("price"), us.get("nasdaq", {}).get("change_pct"))
+    badges += _indicator_badge("다우존스", us.get("dow",    {}).get("price"), us.get("dow",    {}).get("change_pct"))
+    badges += _indicator_badge("달러/원",  us.get("usd_krw",{}).get("price"), us.get("usd_krw",{}).get("change_pct"))
+    # 한국 지수
+    badges += _indicator_badge("코스피",  kr.get("kospi",  {}).get("price"), kr.get("kospi",  {}).get("change_pct"))
+    badges += _indicator_badge("코스닥",  kr.get("kosdaq", {}).get("price"), kr.get("kosdaq", {}).get("change_pct"))
+
+    return f'<div class="ind-row">{badges}</div>'
+
+
+# ─── 5단락 시장 요약 파싱 (V2 방식 확장) ────────────────────────────────────
+
+PARA_TITLES = [
+    "야간선물 시장 동향",
+    "미국 증시 마감 요약",
+    "전일 국내 증시 흐름",
+    "오늘 국내 증시 예상 흐름",
+    "주요 섹터 포커스",
+]
+
+
+def _render_market_summary(market_summary: str) -> str:
     """
-    market_overview 데이터와 수집 뉴스 헤드라인을 바탕으로
-    5단락 시장 요약을 Claude에게 생성 요청하고 결과 문자열을 반환.
-    실패 시 간이 요약 문자열 반환.
+    V2 포맷(소제목: 내용\\n\\n...)을 카드 그리드로 렌더링.
+    소제목이 5개 단락에 매핑되면 아이콘을 붙임.
     """
-    nf  = market_overview.get("night_futures", {})
-    us  = market_overview.get("us_market", {})
-    kr  = market_overview.get("korea_market", {})
+    icons = ["🌙", "🇺🇸", "🇰🇷", "📊", "🔥"]
+    paragraphs = [p.strip() for p in market_summary.split("\n\n") if p.strip()]
+    if not paragraphs:
+        return ""
 
-    nf_price = nf.get("price", "N/A")
-    nf_pct   = _fmt_pct(nf.get("change_pct"))
-    nf_dir   = "콜(매수)" if nf.get("direction") == "call" else (
-               "풋(매도)" if nf.get("direction") == "put" else "보합/중립")
+    html = '<div class="summary-grid">\n'
+    for i, para in enumerate(paragraphs):
+        icon = icons[i] if i < len(icons) else "📌"
+        if ":" in para:
+            idx   = para.index(":")
+            title = para[:idx].strip()
+            body  = para[idx+1:].strip()
+        else:
+            title = PARA_TITLES[i] if i < len(PARA_TITLES) else f"요약 {i+1}"
+            body  = para
 
-    sp_price = us.get("sp500",  {}).get("price", "N/A")
-    sp_pct   = _fmt_pct(us.get("sp500",  {}).get("change_pct"))
-    nq_price = us.get("nasdaq", {}).get("price", "N/A")
-    nq_pct   = _fmt_pct(us.get("nasdaq", {}).get("change_pct"))
-    dw_price = us.get("dow",    {}).get("price", "N/A")
-    dw_pct   = _fmt_pct(us.get("dow",    {}).get("change_pct"))
-    fx_price = us.get("usd_krw",{}).get("price", "N/A")
-    fx_pct   = _fmt_pct(us.get("usd_krw",{}).get("change_pct"))
+        html += (
+            f'<div class="summary-block">'
+            f'<h3 class="summary-subtitle">{icon} {title}</h3>'
+            f'<p class="summary-text">{body}</p>'
+            f'</div>\n'
+        )
+    html += '</div>\n'
+    return html
 
-    kp_price = kr.get("kospi",  {}).get("price", "N/A")
-    kp_pct   = _fmt_pct(kr.get("kospi",  {}).get("change_pct"))
-    kd_price = kr.get("kosdaq", {}).get("price", "N/A")
-    kd_pct   = _fmt_pct(kr.get("kosdaq", {}).get("change_pct"))
 
-    # 뉴스 헤드라인 최대 20건
-    headlines = "\n".join(
-        f"- {d.get('title','')}"
-        for d in all_data if d.get("source_type") == "뉴스"
-    )[:2000]
+# ─── 메인 HTML 생성 ──────────────────────────────────────────────────────────
 
-    prompt = f"""당신은 한국 주식시장 전문 애널리스트입니다.
-아래 시장 데이터와 뉴스 헤드라인을 바탕으로, 오늘 아침 브리핑을 위한
-시장 요약 5단락을 작성해 주세요.
+def generate_html(data, channels_data=None, gh_repo="", gh_token="",
+                  market_overview=None):
+    now_kst           = datetime.now(KST)
+    briefing_date     = data.get("briefing_date", now_kst.strftime("%Y-%m-%d"))
+    briefing_datetime = now_kst.strftime("%Y-%m-%d %H:%M")
+    market_summary    = data.get("market_summary", "")
+    hot_sectors       = data.get("hot_sectors", [])
+    stocks            = data.get("stocks", [])
+    hidden_picks      = data.get("hidden_picks", [])
+    investment_strategy = data.get("investment_strategy",
+                                   data.get("final_summary", ""))
 
-[야간선물 데이터]
-- 코스피200 야간선물: {nf_price} ({nf_pct}) → 방향 신호: {nf_dir}
+    stocks       = [s for s in stocks       if s.get("overlap_count", 0) >= 2]
+    hidden_picks = [s for s in hidden_picks if s.get("signal", "") == "긍정"]
 
-[미국 증시 전일 종가]
-- S&P500: {sp_price} ({sp_pct})
-- 나스닥: {nq_price} ({nq_pct})
-- 다우존스: {dw_price} ({dw_pct})
-- 달러/원: {fx_price} ({fx_pct})
+    # ── 시장 인디케이터 배지 ────────────────────────────────────────────
+    indicators_html = _build_market_indicators(market_overview)
 
-[전일 한국 증시]
-- 코스피: {kp_price} ({kp_pct})
-- 코스닥: {kd_price} ({kd_pct})
+    # ── 5단락 시장 요약 ─────────────────────────────────────────────────
+    formatted_summary = _render_market_summary(market_summary)
 
-[오늘 뉴스 헤드라인]
-{headlines}
+    # ── 섹터 배지 ───────────────────────────────────────────────────────
+    sectors_html = "".join(
+        f'<span class="sector-badge">{sector}</span>\n'
+        for sector in hot_sectors
+    )
 
-**작성 규칙:**
-1. 반드시 아래 5개 소제목을 그대로 사용하고, 각 단락은 소제목: 내용 형식으로 작성하세요.
-2. 각 단락은 200~300자로 작성하세요.
-3. 수치는 위 데이터를 직접 인용하세요.
-4. 단락 사이는 빈 줄 하나로 구분하세요.
-5. JSON이나 마크다운 기호(**,##,``` 등)를 절대 사용하지 마세요.
-6. 순수 텍스트 5단락만 출력하세요.
+    # ── 관심 종목 카드 (V2 그대로) ──────────────────────────────────────
+    stocks_html = ""
+    for stock in stocks:
+        name        = stock.get("name", "")
+        rank        = stock.get("rank", "")
+        signal      = stock.get("signal", "중립")
+        description = stock.get("description", "")
+        price_trend = stock.get("price_trend", "")
+        catalyst    = stock.get("catalyst", "")
+        risk        = stock.get("risk", "")
+        overlap     = stock.get("overlap_count", 0)
+        source_types= stock.get("source_types", [])
+        reasons     = stock.get("reasons", [])
+        verified_price = stock.get("verified_price")
+        chart_b64   = stock.get("chart_base64")
+        market      = stock.get("market", "국내")
+        naver_code  = stock.get("naver_code", "")
+        if not naver_code and verified_price:
+            naver_code = verified_price.get("code", "")
 
-소제목(순서 고정):
-1) 야간선물 시장 동향
-2) 미국 증시 마감 요약
-3) 전일 국내 증시 흐름
-4) 오늘 국내 증시 예상 흐름
-5) 주요 섹터 포커스
+        signal_class = (
+            "signal-positive" if signal == "긍정" else
+            "signal-negative" if signal == "부정" else
+            "signal-neutral"
+        )
+
+        channel_counts = stock.get("channel_counts", {})
+        total_count    = stock.get("total_count", overlap)
+        if channel_counts:
+            parts = [f"{ch} {cnt}회"
+                     for ch in ["뉴스","경제방송","유튜브","애널리스트"]
+                     for cnt in [channel_counts.get(ch, 0)] if cnt > 0]
+            overlap_badge = (
+                f'<span class="overlap-badge">총 {total_count}회 언급 '
+                f'({" / ".join(parts)})</span>'
+            )
+        else:
+            overlap_badge = f'<span class="overlap-badge">{overlap}개 채널 언급</span>'
+
+        source_tags = "".join(
+            f'<span class="source-tag">{st}</span>' for st in source_types
+        )
+
+        price_info_text = ""
+        if verified_price:
+            p  = verified_price
+            cv = p.get("change", "")
+            sign = "▲" if cv.startswith("+") else ("▼" if cv.startswith("-") else "")
+            cd   = cv.lstrip("+-") if cv else ""
+            price_info_text = (
+                f' ({p["price"]}원 {sign}{cd} {p.get("change_pct","")})' if sign and cd
+                else f' ({p["price"]}원)'
+            )
+        elif market == "해외":
+            price_info_text = " (해외 종목)"
+
+        if chart_b64:
+            chart_btn_html = (
+                f' <span class="chart-icon"'
+                f' onclick="openChartWindow(\'{name}\', \'{rank}\')"'
+                f' title="14일 주가 차트 보기">📈 차트보기</span>'
+            )
+        else:
+            naver_url = (
+                f"https://finance.naver.com/item/main.naver?code={naver_code}"
+                if naver_code else
+                f"https://finance.naver.com/search/searchResult.naver?query={requests.utils.quote(name)}"
+            )
+            chart_btn_html = (
+                f' <a href="{naver_url}" target="_blank"'
+                f' class="chart-icon" title="네이버 금융에서 차트 보기">📈 차트보기</a>'
+            )
+
+        reasons_html = ""
+        for reason in reasons:
+            rs   = reason.get("source_type","")
+            rn   = reason.get("source_name","")
+            rd   = reason.get("detail","")
+            rurl = reason.get("source_url","")
+            if not rurl and "애널리스트" in rs:
+                rurl = (
+                    "https://finance.naver.com/research/company_list.naver"
+                    f"?searchType=itemCode&itemName={requests.utils.quote(name)}"
+                )
+            link_html = (
+                f' <a href="{rurl}" target="_blank"'
+                f' class="source-link" title="원본 보기">🔗 바로보기</a>'
+                if rurl else ""
+            )
+            reasons_html += (
+                f'<div class="reason-item">'
+                f'<div class="reason-header">'
+                f'<span class="reason-source">[{rs}] {rn}</span>{link_html}'
+                f'</div>'
+                f'<p class="reason-detail">{rd}</p>'
+                f'</div>'
+            )
+
+        stocks_html += (
+            f'<div class="stock-card">'
+            f'<div class="stock-header">'
+            f'<span class="stock-rank">#{rank}</span>'
+            f'<span class="stock-name">{name}</span>'
+            f'<span class="stock-signal {signal_class}">{signal}</span>'
+            f'{overlap_badge}'
+            f'</div>'
+            f'<div class="source-tags">{source_tags}</div>'
+            f'<div class="info-block"><h4>📋 종목 요약</h4><p>{description}</p></div>'
+            f'<div class="info-block">'
+            f'<h4>📈 주가 흐름{price_info_text}{chart_btn_html}</h4>'
+            f'<p>{price_trend}</p></div>'
+            f'<div class="info-block"><h4>🚀 상승 촉매</h4><p>{catalyst}</p></div>'
+            f'<div class="info-block"><h4>⚠️ 리스크</h4><p>{risk}</p></div>'
+            f'<div class="reasons-section">'
+            f'<h4>📢 채널별 언급 내용</h4>{reasons_html}'
+            f'</div>'
+            f'</div>\n'
+        )
+
+    # ── 히든픽 카드 (V2 그대로) ─────────────────────────────────────────
+    hidden_html = ""
+    for hp in hidden_picks:
+        hp_name      = hp.get("name","")
+        hp_rank      = hp.get("rank","")
+        hp_desc      = hp.get("description","")
+        hp_catalyst  = hp.get("catalyst","")
+        hp_risk      = hp.get("risk","")
+        hp_reasons   = hp.get("reasons",[])
+        hp_verified  = hp.get("verified_price")
+        hp_market    = hp.get("market","국내")
+        hp_chart_b64 = hp.get("chart_base64")
+        hp_naver_code= hp.get("naver_code","")
+        if not hp_naver_code and hp_verified:
+            hp_naver_code = hp_verified.get("code","")
+
+        hp_price_html = ""
+        if hp_verified:
+            p  = hp_verified
+            cv = p.get("change","")
+            cc = ("price-up" if cv.startswith("+") else
+                  "price-down" if cv.startswith("-") else "price-note")
+            hp_price_html = (
+                f'<div class="price-box">'
+                f'<span class="current-price">{p["price"]}원</span>'
+                f'<span class="{cc}">'
+                + (f'{cv} ({p.get("change_pct","")})' if cv else "등락 정보 없음")
+                + '</span></div>'
+            )
+        elif hp_market == "해외":
+            hp_price_html = (
+                '<div class="price-box">'
+                '<span class="price-note">해외 종목 (실시간 가격 미제공)</span>'
+                '</div>'
+            )
+
+        if hp_chart_b64:
+            hp_chart_btn = (
+                f' <span class="chart-icon"'
+                f' onclick="openChartWindow(\'{hp_name}\', \'hp_{hp_rank}\')"'
+                f' title="14일 주가 차트 보기">📈 차트보기</span>'
+            )
+        else:
+            hp_naver_url = (
+                f"https://finance.naver.com/item/main.naver?code={hp_naver_code}"
+                if hp_naver_code else
+                f"https://finance.naver.com/search/searchResult.naver?query={requests.utils.quote(hp_name)}"
+            )
+            hp_chart_btn = (
+                f' <a href="{hp_naver_url}" target="_blank"'
+                f' class="chart-icon" title="네이버 금융에서 차트 보기">📈 차트보기</a>'
+            )
+
+        hp_reasons_html = ""
+        for reason in hp_reasons:
+            rs   = reason.get("source_type","")
+            rn   = reason.get("source_name","")
+            rd   = reason.get("detail","")
+            rurl = reason.get("source_url","")
+            if not rurl and "애널리스트" in rs:
+                rurl = (
+                    "https://finance.naver.com/research/company_list.naver"
+                    f"?searchType=itemCode&itemName={requests.utils.quote(hp_name)}"
+                )
+            link_html = (
+                f' <a href="{rurl}" target="_blank"'
+                f' class="source-link" title="원본 보기">🔗 바로보기</a>'
+                if rurl else ""
+            )
+            hp_reasons_html += (
+                f'<div class="reason-item">'
+                f'<div class="reason-header">'
+                f'<span class="reason-source">[{rs}] {rn}</span>{link_html}'
+                f'</div>'
+                f'<p class="reason-detail">{rd}</p>'
+                f'</div>'
+            )
+
+        hidden_html += (
+            f'<div class="hidden-pick-card">'
+            f'<div class="stock-header">'
+            f'<span class="stock-rank">Hidden #{hp_rank}</span>'
+            f'<span class="stock-name">{hp_name}</span>'
+            f'</div>'
+            f'{hp_price_html}'
+            f'<div class="info-block"><h4>📋 기업 소개</h4><p>{hp_desc}</p></div>'
+            f'<div class="info-block"><h4>🚀 주목 이유{hp_chart_btn}</h4>'
+            f'<p>{hp_catalyst}</p></div>'
+            f'<div class="info-block"><h4>⚠️ 리스크</h4><p>{hp_risk}</p></div>'
+            f'<div class="reasons-section">'
+            f'<h4>📢 채널별 언급 내용</h4>{hp_reasons_html}'
+            f'</div>'
+            f'</div>\n'
+        )
+
+    # ── 차트 데이터 JS ───────────────────────────────────────────────────
+    chart_data_js = "var chartDataMap = {};\n"
+    for stock in stocks:
+        b64 = stock.get("chart_base64")
+        if b64:
+            clean = b64.replace('\n','').replace('\r','')
+            chart_data_js += f'chartDataMap["{stock.get("rank","")}"] = "data:image/png;base64,{clean}";\n'
+    for hp in hidden_picks:
+        b64 = hp.get("chart_base64")
+        if b64:
+            clean = b64.replace('\n','').replace('\r','')
+            chart_data_js += f'chartDataMap["hp_{hp.get("rank","")}"] = "data:image/png;base64,{clean}";\n'
+
+    # ── 아카이브 링크 (V2 그대로: 로컬 파일 스캔) ───────────────────────
+    archive_links = ""
+    try:
+        archive_dir = "docs/archive"
+        if os.path.exists(archive_dir):
+            html_files = sorted(
+                [f for f in os.listdir(archive_dir) if f.endswith(".html")],
+                reverse=True
+            )
+            repo_owner = gh_repo.split("/")[0] if gh_repo and "/" in gh_repo else ""
+            repo_name  = gh_repo.split("/")[1] if gh_repo and "/" in gh_repo else ""
+            for af in html_files[:14]:
+                date_str = af.replace(".html","")
+                url = (
+                    f"https://{repo_owner}.github.io/{repo_name}/archive/{af}"
+                    if repo_owner and repo_name else f"archive/{af}"
+                )
+                archive_links += f'<a href="{url}" class="archive-link">{date_str}</a>\n'
+            print(f"  [아카이브] {len(html_files)}개 파일 링크 생성 완료")
+    except Exception as e:
+        print(f"  [아카이브] 오류: {e}")
+
+    # ── CSS (V2 + 인디케이터 배지 스타일 추가) ──────────────────────────
+    css = """
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+       background: #0a0a14; color: #e0e0e0; line-height: 1.6; }
+.container { max-width: 860px; margin: 0 auto; padding: 20px; }
+.header { text-align: center; padding: 30px 0; border-bottom: 1px solid #1e1e2e; margin-bottom: 30px; }
+.header h1 { font-size: 1.8em; color: #fff; margin-bottom: 8px; }
+.header .date { color: #888; font-size: 0.95em; }
+.header .desc { color: #aaa; font-size: 0.85em; margin-top: 8px; }
+.section { margin-bottom: 35px; }
+.section-title { font-size: 1.3em; color: #fff; margin-bottom: 15px;
+                 padding-left: 12px; border-left: 3px solid #667eea; }
+
+/* ── 인디케이터 배지 ── */
+.ind-row { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+.ind-badge { display: flex; flex-direction: column; align-items: center;
+             padding: 10px 16px; border-radius: 12px; min-width: 90px;
+             border: 1px solid transparent; }
+.ind-call    { background: #ff6b6b18; border-color: #ff6b6b50; }
+.ind-put     { background: #339af018; border-color: #339af050; }
+.ind-neutral { background: #ffd43b18; border-color: #ffd43b50; }
+.ind-label { font-size: 0.72em; color: #888; margin-bottom: 4px; }
+.ind-value { font-size: 1.05em; font-weight: 700; color: #fff; }
+.ind-call  .ind-value { color: #ff6b6b; }
+.ind-put   .ind-value { color: #339af0; }
+.ind-pct { font-size: 0.78em; margin-top: 2px; }
+.ind-call    .ind-pct { color: #ff6b6b; }
+.ind-put     .ind-pct { color: #339af0; }
+.ind-neutral .ind-pct { color: #ffd43b; }
+
+/* ── 5단락 요약 그리드 ── */
+.summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .summary-grid { grid-template-columns: 1fr; } }
+.summary-block { background: #141420; border-radius: 12px; padding: 18px;
+                 border: 1px solid #1e1e2e; }
+.summary-subtitle { color: #667eea; font-size: 1.0em; margin-bottom: 8px; }
+.summary-text { color: #ccc; font-size: 0.88em; line-height: 1.7; }
+
+/* ── 섹터 ── */
+.sector-badge { display: inline-block;
+                background: linear-gradient(135deg,#667eea20,#764ba220);
+                color: #a8b4ff; padding: 6px 14px; border-radius: 20px;
+                margin: 4px; font-size: 0.85em; border: 1px solid #667eea40; }
+
+/* ── 종목 카드 ── */
+.stock-card, .hidden-pick-card { background: #141420; border-radius: 12px;
+    padding: 20px; margin-bottom: 16px; border: 1px solid #1e1e2e;
+    transition: border-color 0.3s; }
+.stock-card:hover, .hidden-pick-card:hover { border-color: #667eea60; }
+.hidden-pick-card { border-left: 3px solid #ffd43b; }
+.stock-header { display: flex; align-items: center; gap: 10px;
+                margin-bottom: 12px; flex-wrap: wrap; }
+.stock-rank { background: #667eea; color: #fff; padding: 2px 10px;
+              border-radius: 12px; font-size: 0.85em; font-weight: 700; }
+.stock-name { font-size: 1.15em; font-weight: 700; color: #fff; }
+.stock-signal { padding: 3px 10px; border-radius: 10px; font-size: 0.8em; font-weight: 600; }
+.signal-positive { background: #ff6b6b20; color: #ff6b6b; border: 1px solid #ff6b6b40; }
+.signal-negative { background: #339af020; color: #339af0; border: 1px solid #339af040; }
+.signal-neutral  { background: #ffd43b20; color: #ffd43b; border: 1px solid #ffd43b40; }
+.overlap-badge { background: #51cf6620; color: #51cf66; padding: 3px 10px;
+                 border-radius: 10px; font-size: 0.8em; border: 1px solid #51cf6640; }
+.source-tags { margin-bottom: 12px; }
+.source-tag { display: inline-block; background: #1e1e2e; color: #888;
+              padding: 3px 8px; border-radius: 6px; font-size: 0.75em; margin: 2px; }
+.price-box { margin-bottom: 12px; padding: 10px; background: #1a1a2e; border-radius: 8px; }
+.current-price { font-size: 1.3em; font-weight: 700; color: #fff; margin-right: 10px; }
+.price-up   { color: #ff6b6b; font-weight: 600; }
+.price-down { color: #339af0; font-weight: 600; }
+.price-note { color: #888; font-size: 0.85em; }
+.chart-icon { cursor: pointer; color: #667eea; font-size: 0.85em;
+              padding: 3px 8px; border-radius: 6px; background: #667eea15;
+              border: 1px solid #667eea30; margin-left: 4px;
+              white-space: nowrap; text-decoration: none; display: inline-block; }
+.chart-icon:hover { background: #667eea30; }
+.info-block { margin-bottom: 12px; }
+.info-block h4 { color: #a8b4ff; font-size: 0.9em; margin-bottom: 4px;
+                 display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.info-block p { color: #bbb; font-size: 0.88em; }
+.reasons-section { margin-top: 12px; }
+.reasons-section h4 { color: #a8b4ff; font-size: 0.9em; margin-bottom: 8px; }
+.reason-item { background: #1a1a2e; border-radius: 8px; padding: 10px; margin-bottom: 6px; }
+.reason-header { display: flex; align-items: center; gap: 8px;
+                 margin-bottom: 4px; flex-wrap: wrap; }
+.reason-source { color: #667eea; font-size: 0.82em; font-weight: 600; }
+.source-link { color: #51cf66; font-size: 0.78em; text-decoration: none; }
+.source-link:hover { text-decoration: underline; }
+.reason-detail { color: #aaa; font-size: 0.85em; }
+.strategy-block { background: linear-gradient(135deg,#141420,#1a1a2e);
+                  border: 1px solid #667eea30; border-radius: 12px; padding: 20px; }
+.strategy-block p { color: #ccc; font-size: 0.92em; line-height: 1.8; }
+.disclaimer { text-align: center; color: #666; font-size: 0.78em;
+              margin-top: 30px; padding: 15px; border-top: 1px solid #1e1e2e; }
+.archive-section { margin-top: 20px; }
+.archive-link { display: inline-block; color: #667eea; text-decoration: none;
+                padding: 4px 10px; margin: 3px; border: 1px solid #667eea30;
+                border-radius: 6px; font-size: 0.82em; }
+.archive-link:hover { background: #667eea20; }
+.chart-modal { display: none; position: fixed; top: 0; left: 0;
+               width: 100%; height: 100%; background: rgba(0,0,0,0.85);
+               z-index: 1000; justify-content: center; align-items: center; }
+.chart-modal img { max-width: 95%; max-height: 80%; border-radius: 8px; }
+.chart-modal .close-btn { position: absolute; top: 20px; right: 30px;
+                           color: #fff; font-size: 2em; cursor: pointer; }
 """
 
-    result = call_claude_with_retry(api_key, prompt, max_tokens=2000)
-    if result and len(result.strip()) > 100:
-        # 마크다운 기호 제거
-        result = re.sub(r'\*{1,3}', '', result)
-        result = re.sub(r'^#{1,4}\s*', '', result, flags=re.MULTILINE)
-        result = re.sub(r'`{1,3}', '', result)
-        return result.strip()
-
-    # 폴백: 수집 데이터로 간이 요약
-    return (
-        f"야간선물 시장 동향: 코스피200 야간선물은 {nf_price}포인트({nf_pct})로 "
-        f"마감하여 {nf_dir} 신호를 나타내고 있습니다.\n\n"
-        f"미국 증시 마감 요약: S&P500 {sp_price}({sp_pct}), "
-        f"나스닥 {nq_price}({nq_pct}), 다우 {dw_price}({dw_pct})로 마감했습니다. "
-        f"달러/원 환율은 {fx_price}원({fx_pct})입니다.\n\n"
-        f"전일 국내 증시 흐름: 코스피 {kp_price}({kp_pct}), "
-        f"코스닥 {kd_price}({kd_pct})로 마감했습니다.\n\n"
-        f"오늘 국내 증시 예상 흐름: 야간선물 방향({nf_dir})과 미국증시 흐름을 "
-        f"고려할 때 오늘 장은 {nf_dir} 기조로 출발할 것으로 예상됩니다.\n\n"
-        f"주요 섹터 포커스: 오늘 뉴스 흐름 상 반도체, 방산, 바이오 섹터에 "
-        f"주목할 필요가 있습니다."
+    # ── HTML 조립 ────────────────────────────────────────────────────────
+    html = (
+        '<!DOCTYPE html>\n'
+        '<html lang="ko">\n'
+        '<head>\n'
+        '<meta charset="UTF-8">\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+        f'<title>AI 주식 브리핑 - {briefing_date}</title>\n'
+        f'<style>\n{css}\n</style>\n'
+        '</head>\n'
+        '<body>\n'
+        '<div class="container">\n'
+        '    <div class="header">\n'
+        '        <h1>📊 AI 주식 브리핑</h1>\n'
+        f'        <div class="date">{briefing_datetime} 기준</div>\n'
+        '        <div class="desc">최근 뉴스와 경제방송, 구독자 상위권 유튜브, '
+        '증권사 보고서에서 공통으로 언급된 종목들에 대한 브리핑입니다.</div>\n'
+        '    </div>\n'
+        '\n'
     )
 
-
-# ────────────────────────────────────────────────────────────────────────────
-# Claude 분석 프롬프트 (V2 그대로)
-# ────────────────────────────────────────────────────────────────────────────
-
-def build_analysis_prompt(filtered_mentions: dict, all_data: list,
-                           today_date: str, now_kst: str) -> str:
-    stock_contexts = ""
-    for rank, (name, data) in enumerate(filtered_mentions.items(), 1):
-        if rank > 15:
-            break
-        stock_contexts += f"\n\n### [{rank}] {name} (총 {data['total']}회 언급)\n"
-        for ch_type in ["뉴스", "경제방송", "유튜브", "애널리스트"]:
-            items = data[ch_type]
-            if not items:
-                continue
-            stock_contexts += f"\n**{ch_type} ({len(items)}회):**\n"
-            for item in items[:5]:
-                link_str = item['link'] if item['link'] else "링크없음"
-                stock_contexts += (
-                    f"- [{item['source_name']}] (링크: {link_str})\n"
-                    f"  {item['text']}\n"
-                )
-
-    news_headlines = "\n".join(
-        f"- {d.get('title','')}"
-        for d in all_data if d.get("source_type") == "뉴스"
-    )
-
-    prompt = (
-        f"당신은 한국 주식시장 전문 애널리스트입니다.\n"
-        f"기준 시각: {now_kst}\n\n"
-        f"아래는 오늘 4개 채널(뉴스/경제방송/유튜브/애널리스트리포트)에서 "
-        f"2개 이상 채널에 공통 언급된 종목들과 관련 발언 원문입니다.\n\n"
-        f"**분석 지침:**\n"
-        f"1. 각 발언에서 해당 종목에 대한 평가를 긍정/중립/부정으로 판단하세요.\n"
-        f"2. signal은 긍정/부정/중립 발언 횟수를 합산해 다수결로 결정하세요.\n"
-        f"3. channel_counts는 각 채널별 실제 콘텐츠 수(위 괄호 안 숫자)를 그대로 기재하세요.\n"
-        f"4. total_count는 모든 채널 콘텐츠 수의 합계입니다.\n"
-        f"5. overlap_count는 언급된 채널 종류의 수입니다.\n"
-        f"6. reasons의 source_url은 반드시 위 발언 데이터의 '링크' 값을 그대로 사용하세요. "
-        f"링크가 '링크없음'이면 빈 문자열(\"\")로 기재하세요.\n"
-        f"7. reasons detail은 채널별 실제 발언 내용을 구체적으로 요약하세요.\n"
-        f"8. hidden_picks는 공통 언급 종목 외에 한 채널에서만 언급됐지만 "
-        f"투자 가치가 높다고 판단되는 긍정적 종목 최대 3개를 선별하세요.\n"
-        f"9. description 200자, price_trend/catalyst/risk 각 150자, "
-        f"reasons detail 각 100자.\n"
-        f"10. market_summary는 빈 문자열로 두세요 (별도 생성됩니다).\n"
-        f"11. investment_strategy는 시장 요약과 중복되지 않는 "
-        f"구체적 투자 전략만 400자로 작성하세요.\n"
-        f"12. 절대로 '특정 종목', '특정 주식', '이 종목' 같은 모호한 표현을 "
-        f"사용하지 마세요.\n\n"
-        f"## 오늘 뉴스 헤드라인:\n{news_headlines}\n\n"
-        f"## 종목별 채널 발언 원문:\n{stock_contexts}\n\n"
-        f"JSON만 출력하세요:\n\n"
-        + CB + "json\n"
-        "{\n"
-        f'  "briefing_date": "{today_date}",\n'
-        '  "market_summary": "",\n'
-        '  "hot_sectors": ["섹터1", "섹터2", "섹터3"],\n'
-        '  "stocks": [\n'
-        "    {\n"
-        '      "rank": 1,\n'
-        '      "name": "종목명",\n'
-        '      "signal": "긍정",\n'
-        '      "description": "기업 소개 200자",\n'
-        '      "price_trend": "주가흐름 150자",\n'
-        '      "catalyst": "상승촉매 150자",\n'
-        '      "risk": "리스크 150자",\n'
-        '      "total_count": 5,\n'
-        '      "channel_counts": {"뉴스": 1, "경제방송": 1, "유튜브": 3, "애널리스트": 0},\n'
-        '      "source_types": ["뉴스", "경제방송", "유튜브"],\n'
-        '      "overlap_count": 3,\n'
-        '      "reasons": [\n'
-        '        {"source_type": "뉴스", "source_name": "출처명", '
-        '"source_url": "https://...", "detail": "발언 내용 100자"},\n'
-        '        {"source_type": "경제방송", "source_name": "채널명", '
-        '"source_url": "https://...", "detail": "발언 내용 100자"}\n'
-        "      ]\n"
-        "    }\n"
-        "  ],\n"
-        '  "hidden_picks": [\n'
-        "    {\n"
-        '      "rank": 1,\n'
-        '      "name": "종목명",\n'
-        '      "signal": "긍정",\n'
-        '      "description": "기업 소개 300자",\n'
-        '      "catalyst": "주목 이유 150자",\n'
-        '      "risk": "리스크 150자",\n'
-        '      "reasons": [\n'
-        '        {"source_type": "유튜브", "source_name": "채널명", '
-        '"source_url": "https://...", "detail": "발언 내용 100자"}\n'
-        "      ]\n"
-        "    }\n"
-        "  ],\n"
-        '  "investment_strategy": "구체적 투자 전략 400자"\n'
-        "}\n"
-        + CB
-    )
-    return prompt
-
-
-# ────────────────────────────────────────────────────────────────────────────
-# URL 복원 (V2 그대로)
-# ────────────────────────────────────────────────────────────────────────────
-
-def _restore_source_url(reason, real_channel_data):
-    ch     = reason.get("source_type", "")
-    sname  = reason.get("source_name", "")
-    if reason.get("source_url"):
-        return
-    ch_key = {"뉴스":"뉴스","경제방송":"경제방송","유튜브":"유튜브","애널리스트":"애널리스트"}.get(ch,"")
-    if not ch_key or ch_key not in real_channel_data:
-        return
-    candidates = real_channel_data[ch_key]
-    for m in candidates:
-        if m.get("source_name") == sname and m.get("link"):
-            reason["source_url"] = m["link"]; return
-    for m in candidates:
-        rs = m.get("source_name","")
-        if (sname in rs or rs in sname) and m.get("link"):
-            reason["source_url"] = m["link"]; return
-    for m in candidates:
-        if m.get("link"):
-            reason["source_url"] = m["link"]; return
-
-
-# ────────────────────────────────────────────────────────────────────────────
-# 메인 진입점
-# ────────────────────────────────────────────────────────────────────────────
-
-def analyze_and_generate_html(all_data, api_key, channels_data=None,
-                               gh_repo="", market_overview=None):
-    print("\n" + "=" * 60)
-    print("[AI 분석] 시작 (종목추출 → 심층분석 → 검증 → HTML)")
-    print("=" * 60)
-
-    now_kst    = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
-    today_date = datetime.now(KST).strftime("%Y-%m-%d")
-    gh_token   = os.environ.get("GH_TOKEN", "")
-
-    # ── 1단계: 종목 언급 추출 ─────────────────────────────────────────────
-    print("\n[1단계] 종목명 추출 (KRX 종목목록 매칭)...")
-    stock_map = load_stock_names()
-
-    if not stock_map:
-        data = {"briefing_date": today_date, "market_summary": "종목 목록 로드 실패.",
-                "hot_sectors": [], "stocks": [], "hidden_picks": [],
-                "investment_strategy": "데이터 수집 완료, 종목 목록 로드 실패."}
-        return generate_html(data, channels_data, gh_repo, gh_token,
-                             market_overview=market_overview)
-
-    mentions = extract_mentions(all_data, stock_map)
-    print(f"  [추출] 언급 종목 총 {len(mentions)}개 발견")
-    filtered = filter_mentions(mentions, min_channel_types=2)
-
-    if not filtered:
-        data = {"briefing_date": today_date,
-                "market_summary": "오늘 수집된 데이터에서 공통 언급 종목 없음.",
-                "hot_sectors": [], "stocks": [], "hidden_picks": [],
-                "investment_strategy": "분석할 종목이 없습니다."}
-        return generate_html(data, channels_data, gh_repo, gh_token,
-                             market_overview=market_overview)
-
-    # ── 2단계: 5단락 시장 요약 생성 ─────────────────────────────────────
-    print("\n[2단계] 5단락 시장 요약 생성 중...")
-    if market_overview:
-        market_summary_text = generate_market_summary(
-            market_overview, all_data, api_key, today_date
+    # 인디케이터 배지 (V3 신규)
+    if indicators_html:
+        html += (
+            '    <div class="section">\n'
+            '        <h2 class="section-title">📡 시장 지표</h2>\n'
+            f'        {indicators_html}\n'
+            '    </div>\n\n'
         )
-    else:
-        market_summary_text = "시장 데이터를 수집하지 못했습니다."
-    print(f"  [시장요약] {len(market_summary_text)}자 생성 완료")
 
-    # ── 3단계: 종목 심층 분석 ────────────────────────────────────────────
-    print(f"\n[3단계] Claude 종목 심층 분석 ({len(filtered)}개 종목)...")
-    prompt      = build_analysis_prompt(filtered, all_data, today_date, now_kst)
-    result_text = call_claude_with_retry(api_key, prompt, max_tokens=16000)
+    # 5단락 시장 요약
+    html += (
+        '    <div class="section">\n'
+        '        <h2 class="section-title">🌍 시장 요약</h2>\n'
+        f'        {formatted_summary}\n'
+        '    </div>\n\n'
+    )
 
-    data = None
-    if result_text:
-        # V2 그대로: 정규식으로 JSON 블록 추출
-        json_match = re.search(r'\{[\s\S]*\}', result_text)
-        if json_match:
-            try:
-                data = json.loads(json_match.group())
-                print(f"[3단계] 파싱 성공: 종목 {len(data.get('stocks',[]))}개, "
-                      f"히든픽 {len(data.get('hidden_picks',[]))}개")
-            except json.JSONDecodeError as e:
-                print(f"[3단계] JSON 파싱 실패: {e}")
-                # 개행 제거 후 재시도
-                try:
-                    cleaned = json_match.group().replace('\n', ' ').replace('\r', '')
-                    data    = json.loads(cleaned)
-                    print("[3단계] 개행 제거 후 파싱 성공")
-                except Exception:
-                    pass
+    # 섹터
+    html += (
+        '    <div class="section">\n'
+        '        <h2 class="section-title">🔥 주목 섹터</h2>\n'
+        f'        {sectors_html}\n'
+        '    </div>\n\n'
+    )
 
-    if not data:
-        data = {"briefing_date": today_date, "market_summary": "",
-                "hot_sectors": [], "stocks": [], "hidden_picks": [],
-                "investment_strategy": "AI 분석에 실패했습니다."}
+    # 관심 종목
+    html += (
+        '    <div class="section">\n'
+        '        <h2 class="section-title">🎯 관심 종목</h2>\n'
+        f'        {stocks_html}\n'
+        '    </div>\n'
+    )
 
-    # 5단락 시장 요약 덮어쓰기 (Claude 종목분석 프롬프트는 "" 반환)
-    data["market_summary"] = market_summary_text
+    # 히든픽
+    if hidden_html:
+        html += (
+            '\n    <div class="section">\n'
+            '        <h2 class="section-title">💎 히든픽</h2>\n'
+            f'        {hidden_html}\n'
+            '    </div>\n'
+        )
 
-    # ── channel_counts / source_url 복원 (V2 그대로) ────────────────────
-    for stock in data.get("stocks", []):
-        name = stock.get("name", "")
-        if name in filtered:
-            real = filtered[name]
-            stock["channel_counts"] = {
-                "뉴스": len(real["뉴스"]), "경제방송": len(real["경제방송"]),
-                "유튜브": len(real["유튜브"]), "애널리스트": len(real["애널리스트"]),
-            }
-            stock["total_count"] = real["total"]
-            for reason in stock.get("reasons", []):
-                _restore_source_url(reason, real)
+    # 투자 전략
+    if investment_strategy:
+        html += (
+            '\n    <div class="section">\n'
+            '        <h2 class="section-title">💰 AI 투자 전략</h2>\n'
+            '        <div class="strategy-block">\n'
+            f'            <p>{investment_strategy}</p>\n'
+            '        </div>\n'
+            '    </div>\n'
+        )
 
-    for stock in data.get("hidden_picks", []):
-        hp_name = stock.get("name", "")
-        for reason in stock.get("reasons", []):
-            if reason.get("source_url"):
-                continue
-            ch_key = {"뉴스":"뉴스","경제방송":"경제방송","유튜브":"유튜브",
-                      "애널리스트":"애널리스트"}.get(reason.get("source_type",""),"")
-            if not ch_key:
-                continue
-            if hp_name in filtered:
-                _restore_source_url(reason, filtered[hp_name])
-                if reason.get("source_url"):
-                    continue
-            sname = reason.get("source_name","")
-            for stock_data in filtered.values():
-                if ch_key not in stock_data:
-                    continue
-                for m in stock_data[ch_key]:
-                    rs = m.get("source_name","")
-                    if (sname == rs or sname in rs or rs in sname) and m.get("link"):
-                        reason["source_url"] = m["link"]; break
-                if reason.get("source_url"):
-                    break
+    # 아카이브
+    if archive_links:
+        html += (
+            '\n    <div class="section archive-section">\n'
+            '        <h2 class="section-title">📅 지난 브리핑</h2>\n'
+            f'        {archive_links}\n'
+            '    </div>\n'
+        )
 
-    # ── 검증 ────────────────────────────────────────────────────────────
-    if data.get("stocks") or data.get("hidden_picks"):
-        data = validate_stocks(data, api_key, all_data, stock_map)
-    else:
-        print("[검증] 종목 없음 → 스킵")
+    html += (
+        '\n    <div class="disclaimer">\n'
+        '        ⚠️ 본 브리핑은 AI가 자동 생성한 참고 자료이며, 투자 권유가 아닙니다.<br>\n'
+        '        투자 판단의 책임은 투자자 본인에게 있습니다.\n'
+        '    </div>\n'
+        '</div>\n'
+        '\n'
+        '<div class="chart-modal" id="chartModal" onclick="closeChart()">\n'
+        '    <span class="close-btn" onclick="closeChart()">&times;</span>\n'
+        '    <img id="chartImg" src="" alt="차트">\n'
+        '</div>\n'
+        '\n'
+        '<script>\n'
+        + chart_data_js
+        + '\n'
+        'function openChartWindow(stockName, chartKey) {\n'
+        '    var src = chartDataMap[chartKey];\n'
+        '    if (src) {\n'
+        '        document.getElementById(\'chartImg\').src = src;\n'
+        '        document.getElementById(\'chartModal\').style.display = \'flex\';\n'
+        '    }\n'
+        '}\n'
+        'function closeChart() {\n'
+        '    document.getElementById(\'chartModal\').style.display = \'none\';\n'
+        '}\n'
+        'document.addEventListener(\'keydown\', function(e) {\n'
+        '    if (e.key === \'Escape\') closeChart();\n'
+        '});\n'
+        '</script>\n'
+        '</body>\n'
+        '</html>'
+    )
 
-    # ── 저장 ────────────────────────────────────────────────────────────
-    os.makedirs("data", exist_ok=True)
-    save_data = json.loads(json.dumps(data, ensure_ascii=False))
-    for s in save_data.get("stocks", []):
-        s.pop("chart_base64", None)
-    for s in save_data.get("hidden_picks", []):
-        s.pop("chart_base64", None)
-    with open("data/briefing_data.json", "w", encoding="utf-8") as f:
-        json.dump(save_data, f, ensure_ascii=False, indent=2)
-    print("[저장] data/briefing_data.json 완료")
-
-    return generate_html(data, channels_data, gh_repo, gh_token,
-                         market_overview=market_overview)
+    return html
