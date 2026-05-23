@@ -6,7 +6,8 @@ from datetime import datetime
 
 from config import (
     ANTHROPIC_API_KEY, YOUTUBE_API_KEY, GH_TOKEN, GITHUB_REPO,
-    NEWS_RSS_FEEDS, BROADCAST_HOURS, YOUTUBER_HOURS, load_channels,
+    NEWS_RSS_FEEDS, BROADCAST_HOURS, YOUTUBER_HOURS, SECURITIES_TV_HOURS,
+    load_channels,
 )
 from collectors.news_collector    import collect_news
 from collectors.youtube_collector import (
@@ -45,12 +46,12 @@ def main():
     youtube = get_youtube_client(YOUTUBE_API_KEY)
 
     if youtube:
-        print(f"\n[2/4] 유튜브 수집 중 (섹션1, 최근 {BROADCAST_HOURS}시간)...")
+        print(f"\n[2/4] 유튜브 수집 중 (섹션1: 방송사/유튜버/증권사 각 24시간)...")
         section1_data = collect_section1_youtube(youtube, channels)
         all_data.extend(section1_data)
         print(f"  → 총 {len(section1_data)}건")
 
-        print(f"\n[3/4] 증권TV 수집 중 (섹션2, 최근 48시간)...")
+        print(f"\n[3/4] 경제방송TV 다시보기 수집 중 (섹션2: {SECURITIES_TV_HOURS}시간)...")
         section2_data = collect_section2_securities_tv(youtube)
         all_data.extend(section2_data)
         print(f"  → 총 {len(section2_data)}건")
@@ -74,7 +75,7 @@ def main():
 
     # 원본 데이터 백업
     os.makedirs("data", exist_ok=True)
-    today_str = datetime.now().strftime("%Y%m%d")
+    today_str    = datetime.now().strftime("%Y%m%d")
     save_payload = {"market_overview": market_overview, "items": all_data}
     with open(f"data/raw_{today_str}.json", "w", encoding="utf-8") as f:
         json.dump(save_payload, f, ensure_ascii=False, indent=2, default=str)
