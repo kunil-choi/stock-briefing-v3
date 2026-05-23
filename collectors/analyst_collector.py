@@ -9,14 +9,17 @@
   cols[1]: 리포트 제목 (링크 포함)
   cols[2]: 증권사
   cols[3]: 첨부 (PDF 링크, 없으면 빈 td)
-  cols[4]: 작성일 (YY.MM.DD)
+  cols[4]: 작성일 (YY.MM.DD 또는 YYYY.MM.DD)
   cols[5]: 조회수
 """
 import time
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import defaultdict
+
+# BUG-H2 수정: KST timezone 정의 — datetime.now(KST)로 UTC/KST 혼용 제거
+KST = timezone(timedelta(hours=9))
 
 REPORT_DAYS = 1
 
@@ -58,6 +61,11 @@ def is_within_days(date_str: str, days: int = REPORT_DAYS) -> bool:
     """
     네이버 금융 날짜 파싱.
     실제 형식: "26.05.22" (YY.MM.DD) 또는 "2026.05.22" (YYYY.MM.DD)
+
+    BUG-H2 수정:
+    - datetime.now() → datetime.now(KST) 로 변경하여 UTC/KST 혼용 제거.
+    - GitHub Actions 서버(UTC 기준)에서 실행 시 KST와 최대 9시간 차이 발생 가능.
+    - 날짜 비교는 .date() 기준으로 수행하여 시분초 영향 제거.
     """
     try:
         date_str = date_str.strip().replace(" ", "")
@@ -74,8 +82,9 @@ def is_within_days(date_str: str, days: int = REPORT_DAYS) -> bool:
             print(f"  [날짜 파싱 불가] '{date_str}' → 포함 처리")
             return True
 
-        cutoff = datetime.now() - timedelta(days=days)
-        return report_date >= cutoff.replace(hour=0, minute=0, second=0, microsecond=0)
+        # KST 기준 cutoff 날짜와 비교 (날짜 단위)
+        cutoff_date = (datetime.now(KST) - timedelta(days=days)).date()
+        return report_date.date() >= cutoff_date
 
     except Exception as e:
         print(f"  [날짜 파싱 오류] '{date_str}': {e} → 포함 처리")
@@ -90,6 +99,11 @@ def collect_naver_research() -> list:
     """
     네이버 금융 리서치 company_list.naver 수집.
     source_type 을 "애널리스트" 로 명시.
+
+    BUG-C2 수정: 컬럼 인덱스 안전 파싱
+    - 실제 컬럼 수(5~6개)를 먼저 확인하고,
+      날짜 컬럼을 cols[4]로 고정하되 텍스트가 날짜 형식인지 검증.
+    - 형식 불일치 시 cols를 역순 탐색하여 날짜 컬럼을 자동 감지.
     """
     results = []
 
@@ -110,7 +124,12 @@ def collect_naver_research() -> list:
                 stock_name   = cols[0].get_text(strip=True)
                 report_title = cols[1].get_text(strip=True)
                 broker       = cols[2].get_text(strip=True)
-                date_str     = cols[4].get_text(strip=True)
+
+                # BUG-C2 수정: 날짜 컬럼 자동 감지
+                # 기본적으로 cols[4]를 시도하고, 날짜 형식이 아니면 cols[3], cols[5] 순서로 탐색
+                date_str = _find_date_col(cols)
+                if not date_str:
+                    continue
 
                 if not is_within_days(date_str, REPORT_DAYS):
                     continue
@@ -123,7 +142,7 @@ def collect_naver_research() -> list:
                 link     = _build_link(link_tag.get("href", "")) if link_tag else ""
 
                 pdf_link = ""
-                pdf_tag  = cols[3].find("a")
+                pdf_tag  = cols[3].find("a") if len(cols) > 3 else None
                 if pdf_tag and pdf_tag.get("href", "").endswith(".pdf"):
                     pdf_link = _build_link(pdf_tag.get("href", ""))
 
@@ -131,7 +150,7 @@ def collect_naver_research() -> list:
 
                 results.append({
                     # ── 핵심 식별 필드 ──────────────────────────────────
-                    "source_type":    "애널리스트",   # extract_mentions() 분류 기준
+                    "source_type":    "애널리스트",
                     "source_name":    broker,
                     # ── 애널리스트 전용 필드 ────────────────────────────
                     "stock_name":     stock_name,
@@ -141,7 +160,7 @@ def collect_naver_research() -> list:
                     "opinion":        "",
                     "date":           date_str,
                     "new_coverage":   new_coverage,
-                    "analyst_category": "",           # classify 단계에서 채워짐
+                    "analyst_category": "",
                     # ── extract_mentions() 가 읽는 공통 필드 ───────────
                     "title":   f"[{broker}] {stock_name} - {report_title}",
                     "summary": f"증권사: {broker} | 종목: {stock_name} | 리포트: {report_title}",
@@ -159,6 +178,32 @@ def collect_naver_research() -> list:
             print(f"  [리서치 페이지 {page}] 오류: {e}")
 
     return results
+
+
+def _find_date_col(cols: list) -> str:
+    """
+    BUG-C2 수정: 날짜 컬럼 자동 감지 헬퍼.
+    cols[4] 우선 → cols[3] → cols[5] 순서로 날짜 형식 확인.
+    날짜 형식: YY.MM.DD (8자) 또는 YYYY.MM.DD (10자)
+    """
+    import re as _re
+    date_pattern = _re.compile(r"^\d{2,4}\.\d{2}\.\d{2}$")
+
+    check_order = [4, 3, 5] if len(cols) > 4 else [3]
+    for idx in check_order:
+        if idx >= len(cols):
+            continue
+        text = cols[idx].get_text(strip=True).replace(" ", "")
+        if date_pattern.match(text):
+            return text
+
+    # 마지막 수단: 모든 컬럼에서 날짜 형식 탐색
+    for col in cols:
+        text = col.get_text(strip=True).replace(" ", "")
+        if date_pattern.match(text):
+            return text
+
+    return ""
 
 
 def classify_analyst_reports(reports: list) -> dict:
@@ -180,7 +225,6 @@ def classify_analyst_reports(reports: list) -> dict:
     seen_keys     = set()
 
     for stock_name, stock_reports in stock_brokers.items():
-        # 고유 증권사 목록 (순서 유지)
         seen_b         = set()
         unique_brokers = []
         for r in stock_reports:
@@ -199,16 +243,21 @@ def classify_analyst_reports(reports: list) -> dict:
 
         # 복수 증권사 동시 언급
         if len(unique_brokers) >= 2:
-            primary = stock_reports[0].copy()
-            brokers_str = " / ".join(unique_brokers)
-            primary["source_name"]           = brokers_str
-            primary["simultaneous_brokers"]  = unique_brokers
-            primary["all_reports"]           = stock_reports
-            primary["title"]   = f"[동시언급: {brokers_str}] {stock_name} - {stock_reports[0].get('report_title','')}"
-            primary["summary"] = f"증권사: {brokers_str} | 종목: {stock_name} | 리포트: {stock_reports[0].get('report_title','')}"
+            primary                           = stock_reports[0].copy()
+            brokers_str                       = " / ".join(unique_brokers)
+            primary["source_name"]            = brokers_str
+            primary["simultaneous_brokers"]   = unique_brokers
+            primary["all_reports"]            = stock_reports
+            primary["title"]   = (
+                f"[동시언급: {brokers_str}] {stock_name} - "
+                f"{stock_reports[0].get('report_title','')}"
+            )
+            primary["summary"] = (
+                f"증권사: {brokers_str} | 종목: {stock_name} | "
+                f"리포트: {stock_reports[0].get('report_title','')}"
+            )
             simultaneous.append(primary)
         else:
-            # 단일 증권사 첫 언급
             for r in stock_reports:
                 key = f"{stock_name}_{r.get('source_name', '')}"
                 if key not in seen_keys and not r.get("new_coverage", False):
