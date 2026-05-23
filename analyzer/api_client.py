@@ -7,7 +7,6 @@ ANTHROPIC_API_URL     = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_API_VERSION = "2023-06-01"
 
 # BUG-NEW-7 수정: 실제 API가 인식하는 정확한 모델 ID 사용
-# "claude-sonnet-4-6" 은 유효하지 않은 ID → 제거
 CLAUDE_MODELS = [
     "claude-3-5-sonnet-20241022",   # 1순위: 안정적 고성능
     "claude-3-5-haiku-20241022",    # 2순위: 경량 폴백
