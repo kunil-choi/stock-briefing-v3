@@ -1,312 +1,491 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>주식 브리핑 2026-05-23</title>
-  <style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 주식 브리핑 — 2026년 05월 23일</title>
+
+<style>
 :root {
-  --bg: #0f0f13;
-  --surface: #1a1a22;
-  --surface2: #252530;
-  --accent: #6c63ff;
-  --accent2: #ff6584;
-  --text: #e8e8f0;
-  --text-muted: #8888aa;
-  --border: #2e2e3e;
-  --up: #26c281;
-  --down: #e74c3c;
-  --radius: 12px;
-  --shadow: 0 4px 20px rgba(0,0,0,0.4);
+  --bg:        #0d1117;
+  --surface:   #161b22;
+  --surface2:  #21262d;
+  --border:    #30363d;
+  --text:      #e6edf3;
+  --text-sub:  #8b949e;
+  --accent:    #58a6ff;
+  --green:     #3fb950;
+  --red:       #f85149;
+  --yellow:    #d29922;
+  --purple:    #bc8cff;
+  --radius:    10px;
 }
-
 * { box-sizing: border-box; margin: 0; padding: 0; }
-
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', sans-serif;
+  font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+  font-size: 15px;
   line-height: 1.6;
 }
+.container { max-width: 1100px; margin: 0 auto; padding: 0 16px 60px; }
 
-.header {
-  background: var(--surface);
+/* 헤더 */
+.site-header {
+  background: linear-gradient(135deg, #0d1117 0%, #161b22 100%);
   border-bottom: 1px solid var(--border);
-  position: sticky; top: 0; z-index: 100;
-  padding: 12px 20px;
+  padding: 20px 0;
+  margin-bottom: 16px;
 }
 .header-inner {
-  max-width: 1200px; margin: 0 auto;
-  display: flex; justify-content: space-between; align-items: center;
+  display: flex; align-items: center; justify-content: space-between;
 }
-.logo { font-size: 1.4rem; font-weight: 700; color: var(--accent); }
-.header-right { display: flex; align-items: center; gap: 12px; }
+.logo { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+.header-meta { display: flex; align-items: center; gap: 12px; }
 .date-badge {
-  background: var(--surface2); padding: 4px 12px;
-  border-radius: 20px; font-size: 0.85rem; color: var(--text-muted);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 4px 14px;
+  font-size: 0.85rem;
+  color: var(--text-sub);
 }
-.admin-btn {
-  background: var(--accent); color: white;
-  padding: 6px 14px; border-radius: 8px;
-  text-decoration: none; font-size: 0.85rem; transition: opacity 0.2s;
+.admin-link {
+  color: var(--text-sub);
+  text-decoration: none;
+  font-size: 0.82rem;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: color 0.2s;
 }
-.admin-btn:hover { opacity: 0.85; }
+.admin-link:hover { color: var(--accent); border-color: var(--accent); }
 
+/* 아카이브 바 */
 .archive-bar {
-  background: var(--surface); padding: 8px 20px;
-  border-bottom: 1px solid var(--border);
-  font-size: 0.8rem; overflow-x: auto; white-space: nowrap;
-  display: flex; align-items: center; gap: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 16px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.82rem;
 }
-.archive-label { color: var(--text-muted); }
+.archive-label { color: var(--text-sub); margin-right: 4px; }
 .archive-link {
-  color: var(--accent); text-decoration: none;
-  padding: 2px 8px; border-radius: 4px;
-  border: 1px solid var(--border); transition: background 0.2s;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--surface2);
+  transition: background 0.2s;
 }
-.archive-link:hover { background: var(--surface2); }
+.archive-link:hover { background: var(--border); }
 
-.container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+/* 시장 요약 섹션 */
+.market-summary-section {
+  margin-bottom: 28px;
+}
+.section-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 14px;
+  padding-left: 4px;
+  border-left: 3px solid var(--accent);
+}
 
+/* 수치 인디케이터 */
+.market-indicators {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.indicator-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.indicator-card.call { border-color: var(--green); background: rgba(63,185,80,0.08); }
+.indicator-card.put  { border-color: var(--red);   background: rgba(248,81,73,0.08); }
+.indicator-card.neutral { border-color: var(--yellow); }
+.ind-label { font-size: 0.75rem; color: var(--text-sub); }
+.ind-value { font-size: 0.95rem; font-weight: 700; }
+.ind-sub   { font-size: 0.72rem; color: var(--text-sub); }
+
+/* 등락 색상 */
+.chg.up   { color: var(--green); }
+.chg.down { color: var(--red); }
+.chg.flat { color: var(--text-sub); }
+.no-val   { color: var(--text-sub); }
+
+/* 5단락 */
+.summary-paras {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 14px;
+}
+.summary-para {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+}
+.para-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+.para-body {
+  font-size: 0.88rem;
+  color: var(--text);
+  line-height: 1.65;
+}
+
+/* 탭 네비 */
+.tab-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+.tab-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-sub);
+  cursor: pointer;
+  font-size: 0.88rem;
+  padding: 8px 16px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tab-btn:hover  { border-color: var(--accent); color: var(--text); }
+.tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.badge {
+  background: rgba(255,255,255,0.2);
+  border-radius: 10px;
+  font-size: 0.75rem;
+  padding: 1px 7px;
+}
+
+/* 탭 컨텐츠 */
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.tab-header { margin-bottom: 18px; }
+.tab-header h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: 4px; }
+.tab-desc { font-size: 0.82rem; color: var(--text-sub); }
+
+/* 종목 그리드 */
+.stock-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+.stock-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+  transition: border-color 0.2s, transform 0.15s;
+}
+.stock-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+.stock-name {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.card-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+.card-source {
+  font-size: 0.78rem;
+  color: var(--text-sub);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* 배지 */
+.badge-sentiment, .badge-rec, .cat-badge, .opinion-badge {
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 7px;
+}
+.badge-sentiment.pos { background: rgba(63,185,80,0.15); color: var(--green); }
+.badge-sentiment.neg { background: rgba(248,81,73,0.15); color: var(--red); }
+.badge-sentiment.neu { background: var(--surface2); color: var(--text-sub); }
+.badge-rec.buy  { background: rgba(63,185,80,0.15); color: var(--green); }
+.badge-rec.sell { background: rgba(248,81,73,0.15); color: var(--red); }
+.badge-rec.hold { background: rgba(210,153,34,0.15); color: var(--yellow); }
+.badge-rec.watch { background: rgba(88,166,255,0.15); color: var(--accent); }
+.cat-badge.cat-sim   { background: rgba(248,81,73,0.15); color: var(--red); }
+.cat-badge.cat-new   { background: rgba(63,185,80,0.15); color: var(--green); }
+.cat-badge.cat-first { background: rgba(188,140,255,0.15); color: var(--purple); }
+.op-buy  { background: rgba(63,185,80,0.15); color: var(--green); }
+.op-sell { background: rgba(248,81,73,0.15); color: var(--red); }
+.op-hold { background: rgba(210,153,34,0.15); color: var(--yellow); }
+.op-neu  { background: var(--surface2); color: var(--text-sub); }
+
+/* 가격 */
+.price-display {
+  font-size: 0.88rem;
+  color: var(--accent);
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.price-trend {
+  font-size: 0.78rem;
+  color: var(--text-sub);
+  margin-bottom: 8px;
+}
+.target-price {
+  font-size: 0.78rem;
+  color: var(--yellow);
+  font-weight: 600;
+}
+.report-title {
+  font-size: 0.82rem;
+  color: var(--text-sub);
+  margin-bottom: 8px;
+  font-style: italic;
+}
+
+/* 이유 리스트 */
+.reason-list {
+  list-style: none;
+  margin-top: 8px;
+}
+.reason-list li {
+  font-size: 0.82rem;
+  color: var(--text-sub);
+  padding: 3px 0 3px 14px;
+  position: relative;
+  border-bottom: 1px solid var(--surface2);
+}
+.reason-list li:last-child { border-bottom: none; }
+.reason-list li::before {
+  content: "›";
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* 투자전략 */
+.strategy-box {
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 24px;
+  font-size: 0.93rem;
+  line-height: 1.8;
+  color: var(--text);
+}
+
+/* 기타 */
+.no-data { color: var(--text-sub); padding: 40px; text-align: center; font-size: 0.9rem; }
 .market-summary-text {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px 24px;
-  margin-bottom: 24px;
-}
-.market-text { font-size: 0.92rem; color: var(--text); line-height: 1.9; }
-
-.market-summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 12px; margin-bottom: 24px;
-}
-.market-card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 16px; text-align: center;
-}
-.market-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px; }
-.market-value { font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; }
-.change { font-size: 0.85rem; font-weight: 600; }
-.change.up   { color: var(--up); }
-.change.down { color: var(--down); }
-.change.flat { color: var(--text-muted); }
-
-.tab-nav { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
-.tab-btn {
-  background: var(--surface); border: 1px solid var(--border);
-  color: var(--text-muted); padding: 8px 16px;
-  border-radius: 8px; cursor: pointer; font-size: 0.9rem; transition: all 0.2s;
-}
-.tab-btn:hover { border-color: var(--accent); color: var(--text); }
-.tab-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
-.tab-content { display: none; }
-.tab-content.active { display: block; }
-.section-title {
-  font-size: 1.2rem; margin-bottom: 16px; color: var(--text);
-  border-left: 3px solid var(--accent); padding-left: 12px;
+  padding: 18px;
+  font-size: 0.9rem;
+  line-height: 1.7;
 }
 
-.stock-card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); margin-bottom: 16px;
-  overflow: hidden; transition: border-color 0.2s, transform 0.2s;
+/* 푸터 */
+.site-footer {
+  text-align: center;
+  margin-top: 60px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+  color: var(--text-sub);
+  font-size: 0.8rem;
 }
-.stock-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-.stock-card.signal-positive { border-left: 3px solid var(--up); }
-.stock-card.signal-negative { border-left: 3px solid var(--down); }
-.stock-card.signal-neutral  { border-left: 3px solid var(--text-muted); }
+.disclaimer { margin-top: 6px; font-size: 0.75rem; }
 
-.stock-card-header {
-  padding: 14px 16px 10px;
-  display: flex; justify-content: space-between; align-items: flex-start;
-  flex-wrap: wrap; gap: 8px;
-  border-bottom: 1px solid var(--border);
-}
-.stock-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.stock-name { font-size: 1.1rem; font-weight: 700; }
-.stock-code {
-  font-size: 0.75rem; color: var(--accent); font-family: monospace;
-  background: var(--surface2); padding: 2px 6px; border-radius: 4px;
-}
-.signal-badge {
-  font-size: 0.75rem; font-weight: 600; padding: 2px 8px; border-radius: 4px;
-}
-.signal-badge.positive { background: rgba(38,194,129,0.15); color: var(--up); }
-.signal-badge.negative { background: rgba(231,76,60,0.15);  color: var(--down); }
-.signal-badge.neutral  { background: var(--surface2); color: var(--text-muted); }
-
-.price-badge {
-  font-size: 0.82rem; font-weight: 600; color: var(--accent);
-  background: var(--surface2); padding: 4px 10px; border-radius: 6px;
-  white-space: nowrap;
-}
-.price-badge.code { color: var(--text-muted); }
-
-.stock-card-body { padding: 14px 16px; }
-.stock-desc { font-size: 0.88rem; color: var(--text); line-height: 1.7; margin-bottom: 10px; }
-
-.price-trend {
-  font-size: 0.82rem; color: var(--text-muted);
-  background: var(--surface2); border-radius: 6px;
-  padding: 8px 12px; margin-bottom: 10px; line-height: 1.6;
-}
-
-.detail-item {
-  font-size: 0.83rem; padding: 6px 10px; border-radius: 6px; margin-bottom: 6px;
-}
-.detail-item.catalyst { background: rgba(38,194,129,0.08); color: var(--up); }
-.detail-item.risk     { background: rgba(231,76,60,0.08);  color: var(--down); }
-
-.reasons {
-  font-size: 0.82rem; color: var(--text-muted);
-  padding-left: 16px; margin-top: 8px; line-height: 1.7;
-}
-.reasons li { margin-bottom: 4px; }
-.reasons a  { color: var(--accent); text-decoration: none; }
-.reasons a:hover { text-decoration: underline; }
-
-.report-card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); margin-bottom: 16px;
-  overflow: hidden; transition: border-color 0.2s, transform 0.2s;
-}
-.report-card:hover { border-color: var(--accent); transform: translateY(-2px); }
-.report-card.cat-simultaneous { border-left: 3px solid #f39c12; }
-.report-card.cat-new          { border-left: 3px solid var(--accent); }
-.report-card.cat-first        { border-left: 3px solid var(--text-muted); }
-
-.report-header {
-  padding: 14px 16px 8px;
-  border-bottom: 1px solid var(--border);
-}
-.report-meta-row {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 6px;
-}
-.cat-badge {
-  font-size: 0.72rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;
-}
-.cat-badge.cat-simultaneous { background: rgba(243,156,18,0.15); color: #f39c12; }
-.cat-badge.cat-new          { background: rgba(108,99,255,0.15); color: var(--accent); }
-.cat-badge.cat-first        { background: var(--surface2); color: var(--text-muted); }
-
-.opinion {
-  padding: 2px 10px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;
-}
-.opinion.buy  { background: rgba(38,194,129,0.15); color: var(--up); }
-.opinion.hold { background: rgba(255,165,0,0.15);  color: orange; }
-.opinion.sell { background: rgba(231,76,60,0.15);  color: var(--down); }
-
-.target-price { font-size: 0.85rem; color: var(--accent); font-weight: 600; }
-
-.report-broker {
-  padding: 6px 16px;
-  font-size: 0.8rem; color: var(--text-muted);
-  display: flex; gap: 12px;
-  border-bottom: 1px solid var(--border);
-}
-.broker { font-weight: 600; }
-
-.report-body { padding: 14px 16px; }
-
-.strategy-box {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 24px;
-  line-height: 1.9; font-size: 0.95rem;
-}
-
-.empty-msg { color: var(--text-muted); text-align: center; padding: 40px; }
-
-.footer {
-  text-align: center; padding: 20px;
-  color: var(--text-muted); font-size: 0.8rem;
-  border-top: 1px solid var(--border); margin-top: 40px;
-}
-
+/* 반응형 */
 @media (max-width: 600px) {
-  .tab-btn { font-size: 0.8rem; padding: 6px 10px; }
-  .stock-card-header { flex-direction: column; }
+  .stock-grid { grid-template-columns: 1fr; }
+  .summary-paras { grid-template-columns: 1fr; }
+  .market-indicators { flex-direction: column; }
+  .indicator-card { min-width: unset; }
 }
 </style>
 </head>
 <body>
-  <header class="header">
+<div class="container">
+
+  <!-- 헤더 -->
+  <header class="site-header">
     <div class="header-inner">
-      <h1 class="logo">📈 주식 브리핑</h1>
-      <div class="header-right">
-        <span class="date-badge">2026-05-23</span>
-        <a href="admin/" class="admin-btn">⚙️ 관리</a>
+      <h1 class="logo">📈 AI 주식 브리핑</h1>
+      <div class="header-meta">
+        <span class="date-badge">2026년 05월 23일</span>
+        <a href="admin/" class="admin-link">⚙ 관리</a>
       </div>
     </div>
   </header>
 
-  
+  <!-- 아카이브 바 -->
+  <div class="archive-bar"><span class="archive-label">📁 과거 브리핑:</span><a href="archive/2026-05-23.html" class="archive-link">2026-05-23</a><a href="archive/2026-05-22.html" class="archive-link">2026-05-22</a></div>
 
-  <main class="container">
+  <!-- 시장 요약 -->
+  <section class="market-summary-section">
+    <h2 class="section-title">📊 오늘의 시장 요약</h2>
     
-<div class="market-summary-text">
-  <h2 class="section-title">📰 오늘의 시장 요약</h2>
-  <div class="market-text">## 오늘의 한국 주식시장 핵심 이슈 요약 (2026.05.22)<br><br>**국민성장펀드 흥행과 코스닥 급등:** 인공지능(AI), 바이오, 2차전지, 로봇 등 첨단 전략산업에 투자하는 국민참여형 국민성장펀드가 22일 출시 10분 만에 온라인 완판되는 기록적 흥행을 보였다. 이에 힘입어 코스닥 지수가 5% 급등하며 시장 전반의 투자 심리를 크게 끌어올렸다. 장기 투자(5년 락업) 조건에도 불구하고 개인 투자자들의 폭발적인 관심이 집중되었다. [출처: 매일경제]<br><br>**원달러 환율 급등과 금융시장 불안:** 원달러 환율이 1,520원에 근접하는 급등세를 나타내며 외환시장에 긴장감이 고조됐다. 당국은 "필요시 단호한 조치를 취하겠다"고 경고하며 구두 개입에 나섰다. 환율 급등은 수입 물가 상승과 기업 실적 불확실성을 키워 증시 전반에 부담 요인으로 작용했다. [출처: 기타 미디어]<br><br>**미·이란 종전 협상 진전과 중동 리스크 완화 기대:** 미국과 이란의 종전 협상이 급물살을 타면서 파키스탄·카타르 고위급이 동시에 테헤란을 방문했다는 보도가 나왔다. 루비오 미 국무장관도 "약간의 진전이 있다"고 밝혔다. 협상 타결 시 호르무즈 해협 항행 자유 보장과 유가 안정으로 이어질 수 있어 에너지·운송 관련 종목에 긍정적 영향이 예상된다. [출처: 매일경제]<br><br>**삼성·반도체 업종 투자심리 위축:** 삼성전자의 성과급 제도 개선 미흡으로 인재 이탈 우려가 제기되는 가운데, 소액주주 단체가 합의 사항에 대한 법적 절차에 돌입하며 주주 갈등이 격화됐다. 또한 메모리 공급과잉 우려가 부각되며 반도체 슈퍼사이클 종료 가능성이 언급되어 반도체 관련 종목에 하방 압력이 가해졌다. [출처: 기타 미디어]</div>
-</div>
-
-    <nav class="tab-nav" role="tablist">
-      <button class="tab-btn active" data-tab="section1" role="tab">
-        🎬 유튜브 브리핑
-      </button>
-      <button class="tab-btn" data-tab="section2" role="tab">
-        📺 증권TV 분석
-      </button>
-      <button class="tab-btn" data-tab="section3" role="tab">
-        📊 애널리스트 리포트
-      </button>
-      <button class="tab-btn" data-tab="strategy" role="tab">
-        🧭 투자 전략
-      </button>
-    </nav>
-
-    <section id="section1" class="tab-content active">
-      <h2 class="section-title">🎬 오늘의 유튜브 브리핑</h2>
-      <p class="empty-msg">수집된 데이터가 없습니다.</p>
-    </section>
-
-    <section id="section2" class="tab-content">
-      <h2 class="section-title">📺 증권TV 핵심 분석</h2>
-      <p class="empty-msg">수집된 데이터가 없습니다.</p>
-    </section>
-
-    <section id="section3" class="tab-content">
-      <h2 class="section-title">📊 애널리스트 리포트</h2>
-      <p class="empty-msg">수집된 데이터가 없습니다.</p>
-    </section>
-
-    <section id="strategy" class="tab-content">
-      <h2 class="section-title">🧭 AI 투자 전략 제언</h2>
-      <div class="strategy-box">
-        분석할 종목 데이터가 없습니다. 데이터 수집 상태를 확인해 주세요.
+  <div class="market-summary-wrap">
+    
+    <div class="market-indicators">
+      <div class="indicator-card neutral">
+        <span class="ind-label">야간선물</span>
+        <span class="ind-value">🟡 중립</span>
+        <span class="ind-sub"></span>
       </div>
-    </section>
-  </main>
+      <div class="indicator-card">
+        <span class="ind-label">S&P500</span>
+        <span class="ind-value"><span class="no-val">N/A</span></span>
+      </div>
+      <div class="indicator-card">
+        <span class="ind-label">나스닥</span>
+        <span class="ind-value"><span class="no-val">N/A</span></span>
+      </div>
+      <div class="indicator-card">
+        <span class="ind-label">다우</span>
+        <span class="ind-value"><span class="no-val">N/A</span></span>
+      </div>
+      <div class="indicator-card">
+        <span class="ind-label">달러/원</span>
+        <span class="ind-value"><span class="no-val">N/A</span></span>
+      </div>
+      <div class="indicator-card">
+        <span class="ind-label">코스피</span>
+        <span class="ind-value"><span class="no-val">N/A</span></span>
+      </div>
+      <div class="indicator-card">
+        <span class="ind-label">코스닥</span>
+        <span class="ind-value"><span class="no-val">N/A</span></span>
+      </div>
+    </div>
+    <div class="summary-paras">
+      
+    <div class="summary-para">
+      <h3 class="para-title">🌙 야간선물 동향 및 콜/풋 예측</h3>
+      <p class="para-body">야간선물 데이터를 수집하지 못했습니다.</p>
+    </div>
+    <div class="summary-para">
+      <h3 class="para-title">🇺🇸 미국 증시 마감 동향</h3>
+      <p class="para-body">미국 증시 데이터를 수집하지 못했습니다.</p>
+    </div>
+    <div class="summary-para">
+      <h3 class="para-title">🇰🇷 전일 한국 증시 흐름</h3>
+      <p class="para-body">전일 한국 증시 데이터를 수집하지 못했습니다.</p>
+    </div>
+    <div class="summary-para">
+      <h3 class="para-title">🔮 오늘 예상 흐름</h3>
+      <p class="para-body">시장 데이터 부족으로 오늘 흐름 예측이 어렵습니다.</p>
+    </div>
+    <div class="summary-para">
+      <h3 class="para-title">🎯 주요 관심 섹터</h3>
+      <p class="para-body">섹터 데이터를 수집하지 못했습니다.</p>
+    </div>
+    </div>
+  </div>
+  </section>
 
-  <footer class="footer">
-    <p>⚠️ 본 브리핑은 AI 분석 기반으로 투자 권유가 아닙니다. 최종 판단은 본인의 책임입니다.</p>
-    <p>Generated at 2026-05-23 00:43 KST</p>
+  <!-- 탭 네비게이션 -->
+  <nav class="tab-nav">
+    <button class="tab-btn active" data-tab="tab1">
+      📹 유튜브 브리핑
+      <span class="badge">0</span>
+    </button>
+    <button class="tab-btn" data-tab="tab2">
+      📺 증권TV 분석
+      <span class="badge">0</span>
+    </button>
+    <button class="tab-btn" data-tab="tab3">
+      📋 애널리스트 리포트
+      <span class="badge">0</span>
+    </button>
+    <button class="tab-btn" data-tab="tab4">
+      💡 투자전략
+    </button>
+  </nav>
+
+  <!-- 탭 컨텐츠 -->
+  <div class="tab-content active" id="tab1">
+    <div class="tab-header">
+      <h2>유튜브·미디어 언급 종목</h2>
+      <p class="tab-desc">방송·유튜브 채널에서 언급된 주요 종목 분석 (최근 24시간)</p>
+    </div>
+    <p class="no-data">수집된 데이터가 없습니다.</p>
+  </div>
+
+  <div class="tab-content" id="tab2">
+    <div class="tab-header">
+      <h2>증권TV 전문가 추천 종목</h2>
+      <p class="tab-desc">증권TV 전문가 출연 방송 기반 추천 종목 (최근 48시간)</p>
+    </div>
+    <p class="no-data">수집된 데이터가 없습니다.</p>
+  </div>
+
+  <div class="tab-content" id="tab3">
+    <div class="tab-header">
+      <h2>증권사 애널리스트 리포트</h2>
+      <p class="tab-desc">오늘 발간된 주요 증권사 분석 리포트</p>
+    </div>
+    <p class="no-data">수집된 데이터가 없습니다.</p>
+  </div>
+
+  <div class="tab-content" id="tab4">
+    <div class="tab-header">
+      <h2>💡 종합 투자전략</h2>
+      <p class="tab-desc">섹션 1·2·3 통합 분석 기반 오늘의 투자 전략</p>
+    </div>
+    <div class="strategy-box">
+      <p>투자전략 생성에 실패했습니다.</p>
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <p>Generated by AI Stock Briefing v3 | 2026-05-23 09:44 KST</p>
+    <p class="disclaimer">※ 본 브리핑은 AI가 자동 생성한 참고 자료이며, 투자 결정은 본인 판단 하에 이루어져야 합니다.</p>
   </footer>
 
-  <script>
-document.addEventListener('DOMContentLoaded', function() {
-  const tabBtns     = document.querySelectorAll('.tab-btn');
-  const tabContents = document.querySelectorAll('.tab-content');
+</div>
 
-  tabBtns.forEach(btn => {
-    btn.addEventListener('click', function() {
-      const target = this.dataset.tab;
-      tabBtns.forEach(b => b.classList.remove('active'));
-      tabContents.forEach(c => c.classList.remove('active'));
-      this.classList.add('active');
-      const targetEl = document.getElementById(target);
-      if (targetEl) targetEl.classList.add('active');
-    });
+<script>
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
   });
 });
 </script>
