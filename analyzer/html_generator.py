@@ -31,7 +31,6 @@ def _indicator_badge(label: str, value, pct, direction: str = "") -> str:
     sign    = "▲" if pct_f > 0 else ("▼" if pct_f < 0 else "─")
     pct_str = f"{abs(pct_f):.2f}%"
 
-    # value가 숫자(0.0 포함)이면 포맷팅, None이거나 빈 문자열이면 N/A
     if isinstance(value, (int, float)) and value is not None:
         val_str = f"{value:,.2f}"
     elif value and str(value).strip():
@@ -55,13 +54,13 @@ def _build_market_indicators(market_overview: dict) -> str:
     us = market_overview.get("us_market",     {})
     kr = market_overview.get("korea_market",  {})
 
-    badges  = _indicator_badge("야간선물", nf.get("price"),                nf.get("change_pct"), direction=nf.get("direction",""))
-    badges += _indicator_badge("S&P500",   us.get("sp500",  {}).get("price"), us.get("sp500",  {}).get("change_pct"))
-    badges += _indicator_badge("나스닥",    us.get("nasdaq", {}).get("price"), us.get("nasdaq", {}).get("change_pct"))
-    badges += _indicator_badge("다우존스",  us.get("dow",    {}).get("price"), us.get("dow",    {}).get("change_pct"))
-    badges += _indicator_badge("달러/원",   us.get("usd_krw",{}).get("price"), us.get("usd_krw",{}).get("change_pct"))
-    badges += _indicator_badge("코스피",    kr.get("kospi",  {}).get("price"), kr.get("kospi",  {}).get("change_pct"))
-    badges += _indicator_badge("코스닥",    kr.get("kosdaq", {}).get("price"), kr.get("kosdaq", {}).get("change_pct"))
+    badges  = _indicator_badge("야간선물",  nf.get("price"),                    nf.get("change_pct"), direction=nf.get("direction", ""))
+    badges += _indicator_badge("S&P500",    us.get("sp500",  {}).get("price"),   us.get("sp500",  {}).get("change_pct"))
+    badges += _indicator_badge("나스닥",    us.get("nasdaq", {}).get("price"),   us.get("nasdaq", {}).get("change_pct"))
+    badges += _indicator_badge("다우존스",  us.get("dow",    {}).get("price"),   us.get("dow",    {}).get("change_pct"))
+    badges += _indicator_badge("달러/원",   us.get("usd_krw",{}).get("price"),   us.get("usd_krw",{}).get("change_pct"))
+    badges += _indicator_badge("코스피",    kr.get("kospi",  {}).get("price"),   kr.get("kospi",  {}).get("change_pct"))
+    badges += _indicator_badge("코스닥",    kr.get("kosdaq", {}).get("price"),   kr.get("kosdaq", {}).get("change_pct"))
     return f'<div class="ind-row">{badges}</div>'
 
 
@@ -105,15 +104,20 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
     hidden_picks        = data.get("hidden_picks", [])
     investment_strategy = data.get("investment_strategy", data.get("final_summary", ""))
 
-    # BUG-NEW-6 수정: overlap_count 를 channel_counts 로 재계산하여 Claude 오류 방어
+    # BUG-NEW-6 수정: overlap_count 를 channel_counts 기준으로 재계산 (Claude 오류 방어)
     for s in stocks:
         if s.get("channel_counts"):
             recalc = sum(1 for v in s["channel_counts"].values() if v > 0)
             if recalc > s.get("overlap_count", 0):
                 s["overlap_count"] = recalc
 
-    stocks       = [s for s in stocks       if s.get("overlap_count", 0) >= 2]
-    hidden_picks = [s for s in hidden_picks if s.get("signal", "") == "긍정"]
+    stocks = [s for s in stocks if s.get("overlap_count", 0) >= 2]
+
+    # BUG-H5 수정: hidden_picks signal 필터 — "긍정" 완전일치 + 부분일치 허용
+    hidden_picks = [
+        s for s in hidden_picks
+        if "긍정" in s.get("signal", "") or s.get("signal", "").lower() == "positive"
+    ]
 
     indicators_html   = _build_market_indicators(market_overview)
     formatted_summary = _render_market_summary(market_summary)
@@ -140,8 +144,8 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
             naver_code = verified_price.get("code", "")
 
         signal_class = (
-            "signal-positive" if signal == "긍정" else
-            "signal-negative" if signal == "부정" else "signal-neutral"
+            "signal-positive" if "긍정" in signal else
+            "signal-negative" if "부정" in signal else "signal-neutral"
         )
 
         channel_counts = stock.get("channel_counts", {})
@@ -343,7 +347,9 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
     # ── 아카이브 링크 ──────────────────────────────────────────────────────────
     archive_links = ""
     try:
-        archive_dir = "docs/archive"
+        # BUG-M6: __file__ 기준 절대 경로 사용 (다른 위치에서 호출 시 안전)
+        base_dir    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        archive_dir = os.path.join(base_dir, "docs", "archive")
         if os.path.exists(archive_dir):
             html_files = sorted(
                 [f for f in os.listdir(archive_dir) if f.endswith(".html")],
