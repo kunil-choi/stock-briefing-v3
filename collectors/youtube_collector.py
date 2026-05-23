@@ -43,7 +43,7 @@ AD_KEYWORDS = [
 ]
 
 
-# ─── 유틸리티 ──────────────────────────────────────────────────────────────
+# ── 유틸리티 ───────────────────────────────────────────────────────────────────
 
 def get_youtube_client(api_key: str = None):
     """YouTube API 클라이언트 생성"""
@@ -104,7 +104,7 @@ def get_recent_videos_via_playlist(youtube, channel_id: str, hours: int) -> list
 
             found_old = False
             for item in items:
-                snippet = item.get("snippet", {})
+                snippet      = item.get("snippet", {})
                 published_at = snippet.get("publishedAt", "")
                 if not published_at:
                     continue
@@ -139,7 +139,7 @@ def get_recent_videos_via_playlist(youtube, channel_id: str, hours: int) -> list
             time.sleep(0.2)
 
     except HttpError as e:
-        code = e.resp.status if hasattr(e, 'resp') else 0
+        code = e.resp.status if hasattr(e, "resp") else 0
         if "playlistNotFound" in str(e) or code == 404:
             print(f"  [플레이리스트 없음] {channel_id}")
         else:
@@ -151,7 +151,7 @@ def get_recent_videos_via_playlist(youtube, channel_id: str, hours: int) -> list
 
 
 def get_transcript(video_id: str, max_chars: int = 2000) -> str:
-    """영상 자막 추출 (youtube_transcript_api 호환 처리)"""
+    """영상 자막 추출"""
     if not _TRANSCRIPT_AVAILABLE:
         return ""
     try:
@@ -196,9 +196,8 @@ def is_ad_content(title: str) -> bool:
 
 def _normalize_channel_list(raw) -> list:
     """
-    channels.json의 카테고리 값을 통일된 list[{"id": ..., "name": ...}] 형태로 변환.
-    - dict 형태: {"채널명": "UC...", ...} 또는 {"채널명": {"id": "UC...", ...}, ...}
-    - list 형태: [{"id": "UC...", "name": "..."}, ...]
+    channels.json 카테고리 값을 list[{"id": ..., "name": ...}] 형태로 통일.
+    dict / list 양쪽 모두 처리.
     """
     if isinstance(raw, list):
         result = []
@@ -222,22 +221,22 @@ def _normalize_channel_list(raw) -> list:
     return []
 
 
-# ─── 섹션 1 수집 ──────────────────────────────────────────────────────────────
+# ── 섹션 1 수집 ────────────────────────────────────────────────────────────────
 
 def collect_section1_youtube(youtube, channels: dict) -> list:
     """
-    섹션1: 방송·유튜버·증권 채널 영상 수집
-    channels는 load_channels()의 반환값 (dict)
+    섹션1: 방송·유튜버·증권 채널 영상 수집.
+    BUG-8 수정: 제목 통과 시 자막 중복 수집 제거.
     """
     all_items = []
     categories = [
-        ("broadcast",  BROADCAST_HOURS,  "방송"),
-        ("youtuber",   YOUTUBER_HOURS,   "유튜버"),
-        ("top50",      YOUTUBER_HOURS,   "유튜버"),
+        ("broadcast", BROADCAST_HOURS, "방송"),
+        ("youtuber",  YOUTUBER_HOURS,  "유튜버"),
+        ("top50",     YOUTUBER_HOURS,  "유튜버"),
     ]
 
     for cat_key, hours, source_type in categories:
-        raw = channels.get(cat_key, {})
+        raw     = channels.get(cat_key, {})
         ch_list = _normalize_channel_list(raw)
         if not ch_list:
             continue
@@ -252,7 +251,6 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
             if not channel_id:
                 continue
 
-            # @handle 처리
             if channel_id.startswith("@"):
                 resolved = resolve_channel_id(youtube, channel_id)
                 if not resolved:
@@ -267,7 +265,7 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
                 if is_ad_content(title):
                     continue
 
-                transcript = ""
+                # BUG-8 수정: 제목이 주식 관련이면 자막 추가 수집, 아니면 자막으로 재확인
                 if is_stock_related(title):
                     transcript = get_transcript(v["video_id"])
                 else:
@@ -276,12 +274,12 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
                         continue
 
                 all_items.append({
-                    "source_type":  source_type,
-                    "source_name":  channel_name,
-                    "title":        title,
-                    "summary":      transcript[:500] if transcript else title,
-                    "link":         f"https://www.youtube.com/watch?v={v['video_id']}",
-                    "published":    v.get("published_at", ""),
+                    "source_type": source_type,
+                    "source_name": channel_name,
+                    "title":       title,
+                    "summary":     transcript[:500] if transcript else title,
+                    "link":        f"https://www.youtube.com/watch?v={v['video_id']}",
+                    "published":   v.get("published_at", ""),
                 })
                 collected += 1
 
@@ -293,15 +291,14 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
     return all_items
 
 
-# ─── 섹션 2 수집 ──────────────────────────────────────────────────────────────
+# ── 섹션 2 수집 ────────────────────────────────────────────────────────────────
 
 def collect_section2_securities_tv(youtube) -> list:
     """
-    섹션2: 증권TV 전문가 출연 채널 수집 (SECURITIES_TV_HOURS=48h)
-    SECURITIES_TV_CHANNELS: {"채널명": "UC...", ...} dict
+    섹션2: 증권TV 전문가 출연 채널 수집 (SECURITIES_TV_HOURS=48h).
+    SECURITIES_TV_CHANNELS dict를 _normalize_channel_list로 안전하게 순회.
     """
     all_items = []
-    # ✅ dict를 올바르게 순회: .items()로 (이름, ID) 쌍 추출
     ch_list = _normalize_channel_list(SECURITIES_TV_CHANNELS)
     print(f"  [섹션2] 증권TV {len(ch_list)}개 채널 ({SECURITIES_TV_HOURS}h)")
 
@@ -313,7 +310,7 @@ def collect_section2_securities_tv(youtube) -> list:
             print(f"    [스킵] {channel_name} — 채널ID 없음")
             continue
 
-        videos = get_recent_videos_via_playlist(youtube, channel_id, SECURITIES_TV_HOURS)
+        videos    = get_recent_videos_via_playlist(youtube, channel_id, SECURITIES_TV_HOURS)
         collected = 0
 
         for v in videos:
@@ -327,12 +324,12 @@ def collect_section2_securities_tv(youtube) -> list:
                 continue
 
             all_items.append({
-                "source_type":  "경제방송",
-                "source_name":  channel_name,
-                "title":        title,
-                "summary":      transcript[:500] if transcript else title,
-                "link":         f"https://www.youtube.com/watch?v={v['video_id']}",
-                "published":    v.get("published_at", ""),
+                "source_type": "경제방송",
+                "source_name": channel_name,
+                "title":       title,
+                "summary":     transcript[:500] if transcript else title,
+                "link":        f"https://www.youtube.com/watch?v={v['video_id']}",
+                "published":   v.get("published_at", ""),
             })
             collected += 1
 
