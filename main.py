@@ -25,8 +25,12 @@ def main():
     # 채널 목록 로드
     print("\n[채널 로드]")
     channels = load_channels()
+    for cat, lst in channels.items():
+        confirmed = [c for c in lst if isinstance(c, dict) and c.get("id")]
+        print(f"  {cat}: 전체 {len(lst)}개 / 유효 ID {len(confirmed)}개")
 
     # 시장 데이터 수집
+    print("\n[시장 데이터 수집]")
     market_overview = collect_market_overview()
 
     all_data = []
@@ -37,7 +41,7 @@ def main():
     all_data.extend(news_data)
     print(f"  → 총 {len(news_data)}건")
 
-    # 2. 유튜브 수집 (YouTube API 클라이언트 생성)
+    # 2. 유튜브 수집
     youtube = get_youtube_client(YOUTUBE_API_KEY)
 
     if youtube:
@@ -62,12 +66,19 @@ def main():
 
     print(f"\n========== 전체 {len(all_data)}건 수집 완료 ==========")
 
+    # source_type 분포 출력
+    from collections import Counter
+    type_counter = Counter(d.get("source_type", "기타") for d in all_data)
+    for stype, cnt in type_counter.most_common():
+        print(f"  {stype}: {cnt}건")
+
     # 원본 데이터 백업
     os.makedirs("data", exist_ok=True)
     today_str = datetime.now().strftime("%Y%m%d")
     save_payload = {"market_overview": market_overview, "items": all_data}
     with open(f"data/raw_{today_str}.json", "w", encoding="utf-8") as f:
         json.dump(save_payload, f, ensure_ascii=False, indent=2, default=str)
+    print(f"\n[저장] data/raw_{today_str}.json 완료")
 
     os.makedirs("docs", exist_ok=True)
     os.makedirs("docs/archive", exist_ok=True)
@@ -94,7 +105,7 @@ def main():
     with open("docs/index.html", "w", encoding="utf-8") as f:
         f.write(html)
 
-    print(f"\n✅ 브리핑 페이지 생성 완료")
+    print(f"\n✅ 브리핑 페이지 생성 완료: docs/index.html")
     print(f"=== 완료: {datetime.now()} ===")
 
 
