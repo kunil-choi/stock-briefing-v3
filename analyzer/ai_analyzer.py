@@ -12,7 +12,7 @@ KST = timezone(timedelta(hours=9))
 CB  = "```"
 
 
-# ── 종목 목록 로드 (V2 그대로) ────────────────────────────────────────────────
+# ── 종목 목록 로드 ────────────────────────────────────────────────────────────
 
 def load_stock_names() -> dict:
     import requests
@@ -37,11 +37,11 @@ def load_stock_names() -> dict:
         try:
             url    = "http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
             params = {
-                "bld":          "dbms/MDC/STAT/standard/MDCSTAT01901",
-                "mktId":        market_id,
-                "share":        "1",
-                "money":        "1",
-                "csvxls_isNo":  "false",
+                "bld":         "dbms/MDC/STAT/standard/MDCSTAT01901",
+                "mktId":       market_id,
+                "share":       "1",
+                "money":       "1",
+                "csvxls_isNo": "false",
             }
             res   = requests.post(url, data=params, headers=headers, timeout=15)
             items = res.json().get("OutBlock_1", [])
@@ -70,7 +70,7 @@ def load_stock_names() -> dict:
             "유한양행": "000100", "한미약품": "128940", "크래프톤": "259960",
             "엔씨소프트": "036570", "카카오게임즈": "293490", "HMM": "011200",
             "대한항공": "003490", "한화오션": "042660", "HD현대일렉트릭": "267260",
-            "효성중공업": "298040", "LS일렉트릭": "010120", "두산로보틱스": "454910",
+            "효성중공업": "298040", "LS ELECTRIC": "010120", "두산로보틱스": "454910",
             "레인보우로보틱스": "277810", "리가켐바이오": "141080",
         }
 
@@ -84,10 +84,22 @@ def load_stock_names() -> dict:
 # ── 종목 언급 추출 ────────────────────────────────────────────────────────────
 
 def extract_mentions(all_data: list, stock_map: dict) -> dict:
+    """
+    수집된 전체 데이터에서 종목명 언급을 추출.
+    source_type 매핑:
+      "뉴스"      → 뉴스
+      "경제방송"  → 경제방송
+      "유튜버"    → 유튜브
+      "증권사"    → 유튜브  (증권사 채널은 유튜브 카테고리로 집계)
+      "애널리스트"→ 애널리스트
+    """
     type_map = {
-        "뉴스": "뉴스", "경제방송": "경제방송",
-        "유튜버": "유튜브", "유튜브": "유튜브",
-        "방송": "경제방송", "증권": "경제방송",
+        "뉴스":     "뉴스",
+        "경제방송": "경제방송",
+        "유튜버":   "유튜브",
+        "증권사":   "유튜브",      # QUALITY-1: 증권사 채널은 유튜브 버킷으로 집계
+        "유튜브":   "유튜브",
+        "방송":     "경제방송",
         "애널리스트": "애널리스트",
     }
     skip_names = {
@@ -97,6 +109,7 @@ def extract_mentions(all_data: list, stock_map: dict) -> dict:
         "글로벌", "인터내셔널", "코리아", "홀딩스",
     }
     mentions = {}
+
     for item in all_data:
         raw_type    = item.get("source_type", "기타")
         source_type = type_map.get(raw_type, raw_type)
@@ -108,20 +121,29 @@ def extract_mentions(all_data: list, stock_map: dict) -> dict:
             item.get("summary", ""),
             item.get("content", ""),
         ])
+
+        # 애널리스트 리포트는 stock_name 필드도 검색 텍스트에 포함
+        # BUG-NEW-3 수정: stock_name 필드 명시적 활용
+        if item.get("stock_name"):
+            full_text = item["stock_name"] + " " + full_text
+
         for stock_name, code in stock_map.items():
             if len(stock_name) < 2 or stock_name in skip_names:
                 continue
             if stock_name not in full_text:
                 continue
+
             if stock_name not in mentions:
                 mentions[stock_name] = {
                     "code": code, "뉴스": [], "경제방송": [],
                     "유튜브": [], "애널리스트": [], "total": 0,
                 }
+
             ch_key  = source_type if source_type in ["뉴스", "경제방송", "유튜브", "애널리스트"] else "뉴스"
             already = any(m.get("content_id") == content_id for m in mentions[stock_name][ch_key])
             if already:
                 continue
+
             idx     = full_text.find(stock_name)
             context = full_text[max(0, idx - 50): idx + 150].strip()
             mentions[stock_name][ch_key].append({
@@ -131,6 +153,7 @@ def extract_mentions(all_data: list, stock_map: dict) -> dict:
                 "content_id":  content_id,
             })
             mentions[stock_name]["total"] += 1
+
     return mentions
 
 
@@ -164,11 +187,10 @@ def generate_market_summary(market_overview: dict, all_data: list,
     us = market_overview.get("us_market",    {})
     kr = market_overview.get("korea_market", {})
 
-    nf_price = nf.get("price", "N/A")
-    nf_pct   = _fmt_pct(nf.get("change_pct"))
-    # BUG-7 수정: direction 을 한국어 설명으로 변환
+    nf_price   = nf.get("price", "N/A")
+    nf_pct     = _fmt_pct(nf.get("change_pct"))
     nf_dir_raw = nf.get("direction", "neutral")
-    nf_dir = "상승(콜)" if nf_dir_raw == "call" else ("하락(풋)" if nf_dir_raw == "put" else "보합/중립")
+    nf_dir     = "상승(콜)" if nf_dir_raw == "call" else ("하락(풋)" if nf_dir_raw == "put" else "보합/중립")
 
     sp_price = us.get("sp500",  {}).get("price", "N/A")
     sp_pct   = _fmt_pct(us.get("sp500",  {}).get("change_pct"))
@@ -220,20 +242,17 @@ def generate_market_summary(market_overview: dict, all_data: list,
         result = result.replace('```', '')
         return result.strip()
 
-    # 폴백 (BUG-7 수정: nf_dir 중복 없이 자연스럽게)
+    # 폴백
     return (
         f"야간선물 시장 동향: 코스피200 야간선물은 {nf_price}포인트({nf_pct})로 마감하여 "
-        f"{nf_dir} 신호를 나타내고 있습니다. 외국인 및 기관 포지션 동향과 함께 "
-        f"장 시작 전 주목이 필요합니다.\n\n"
+        f"{nf_dir} 신호를 나타내고 있습니다. 장 시작 전 외국인·기관 포지션 동향에 주목이 필요합니다.\n\n"
         f"미국 증시 마감 요약: S&P500 {sp_price}({sp_pct}), "
         f"나스닥 {nq_price}({nq_pct}), 다우 {dw_price}({dw_pct})로 마감했습니다. "
-        f"달러/원 환율은 {fx_price}원({fx_pct})으로 마감했습니다.\n\n"
+        f"달러/원 환율은 {fx_price}원({fx_pct})입니다.\n\n"
         f"전일 국내 증시 흐름: 코스피 {kp_price}({kp_pct}), "
-        f"코스닥 {kd_price}({kd_pct})로 마감했습니다. "
-        f"전반적인 수급 흐름은 미국 증시 영향을 받았습니다.\n\n"
+        f"코스닥 {kd_price}({kd_pct})로 마감했습니다.\n\n"
         f"오늘 국내 증시 예상 흐름: 야간선물 방향({nf_dir})과 미국 증시 흐름을 "
-        f"고려할 때 장 초반 {nf_dir} 흐름으로 출발이 예상됩니다. "
-        f"환율 변동 및 외국인 수급에 주목하세요.\n\n"
+        f"고려할 때 장 초반 {nf_dir} 흐름으로 출발이 예상됩니다.\n\n"
         f"주요 섹터 포커스: 반도체, 방산, 바이오 섹터에 주목이 필요합니다. "
         f"글로벌 AI 수요 및 지정학적 이슈가 시장 흐름을 좌우할 수 있습니다."
     )
@@ -275,11 +294,13 @@ def build_analysis_prompt(filtered_mentions: dict, all_data: list,
         f"2. signal은 긍정/부정/중립 발언 횟수를 합산해 다수결로 결정하세요.\n"
         f"3. channel_counts는 각 채널별 실제 콘텐츠 수를 그대로 기재하세요.\n"
         f"4. total_count는 모든 채널 콘텐츠 수의 합계입니다.\n"
-        f"5. overlap_count는 언급된 채널 종류의 수입니다.\n"
+        f"5. overlap_count는 언급된 채널 종류의 수입니다(최솟값 2 이상).\n"
         f"6. reasons의 source_url은 반드시 위 발언 데이터의 '링크' 값을 그대로 사용하세요. "
         f"링크가 '링크없음'이면 빈 문자열(\"\")로 기재하세요.\n"
         f"7. reasons detail은 채널별 실제 발언 내용을 구체적으로 요약하세요.\n"
-        f"8. hidden_picks는 한 채널에서만 언급됐지만 투자 가치가 높은 긍정적 종목 최대 3개.\n"
+        # BUG-NEW-10 수정: hidden_picks 정의를 데이터 실제 범위에 맞게 수정
+        f"8. hidden_picks는 위 종목 중 언급 횟수가 상대적으로 적지만 투자 가치가 높은 "
+        f"긍정 신호 종목 최대 3개를 별도 선정하세요 (stocks 목록과 중복 가능).\n"
         f"9. description 200자, price_trend/catalyst/risk 각 150자, reasons detail 각 100자.\n"
         f"10. market_summary는 빈 문자열로 두세요 (별도 생성됩니다).\n"
         f"11. investment_strategy는 구체적 투자 전략 400자.\n"
@@ -328,7 +349,7 @@ def build_analysis_prompt(filtered_mentions: dict, all_data: list,
 
 # ── URL 복원 ──────────────────────────────────────────────────────────────────
 
-def _restore_source_url(reason, real_channel_data):
+def _restore_source_url(reason: dict, real_channel_data: dict):
     ch    = reason.get("source_type", "")
     sname = reason.get("source_name", "")
     if reason.get("source_url"):
@@ -353,37 +374,35 @@ def _restore_source_url(reason, real_channel_data):
             return
 
 
-# ── JSON 파싱 강화 (BUG-10 수정) ─────────────────────────────────────────────
+# ── JSON 파싱 강화 ────────────────────────────────────────────────────────────
 
 def _try_parse_json(text: str):
     """
-    Claude 응답에서 JSON 추출을 단계적으로 시도.
-    1단계: 원본 그대로 파싱
-    2단계: 개행 제거 후 파싱
-    3단계: 마크다운 코드블록 제거 후 파싱
-    4단계: 제어문자 제거 후 파싱
+    Claude 응답에서 JSON을 단계적으로 추출·파싱.
+    1단계: 마크다운 코드블록 추출 후 원본 파싱
+    2단계: 개행 제거
+    3단계: 제어문자 제거
+    4단계: 후행 콤마 제거
     """
-    # 1단계: JSON 블록 추출 후 원본 파싱
     match = re.search(r'```json\s*([\s\S]*?)```', text)
     if match:
         candidate = match.group(1).strip()
     else:
-        # JSON 오브젝트 최대 범위 추출
         start = text.find('{')
         end   = text.rfind('}')
         if start == -1 or end == -1:
             return None
         candidate = text[start:end + 1]
 
-    for attempt, cleaner in enumerate([
-        lambda s: s,                                              # 원본
-        lambda s: s.replace('\n', ' ').replace('\r', ''),        # 개행 제거
-        lambda s: re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', s),  # 제어문자 제거
-        lambda s: re.sub(r',\s*([}\]])', r'\1', s),              # 후행 콤마 제거
-    ], 1):
+    cleaners = [
+        lambda s: s,
+        lambda s: s.replace('\n', ' ').replace('\r', ''),
+        lambda s: re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', s),
+        lambda s: re.sub(r',\s*([}\]])', r'\1', s),
+    ]
+    for attempt, cleaner in enumerate(cleaners, 1):
         try:
-            cleaned = cleaner(candidate)
-            result  = json.loads(cleaned)
+            result = json.loads(cleaner(candidate))
             if attempt > 1:
                 print(f"  [JSON] {attempt}단계 복구 성공")
             return result
@@ -411,8 +430,7 @@ def analyze_and_generate_html(all_data, api_key, channels_data=None,
 
     if not stock_map:
         data = {
-            "briefing_date": today_date,
-            "market_summary": "종목 목록 로드 실패.",
+            "briefing_date": today_date, "market_summary": "종목 목록 로드 실패.",
             "hot_sectors": [], "stocks": [], "hidden_picks": [],
             "investment_strategy": "데이터 수집 완료, 종목 목록 로드 실패.",
         }
@@ -441,7 +459,6 @@ def analyze_and_generate_html(all_data, api_key, channels_data=None,
 
     # 2단계: 5단락 시장 요약
     print("\n[2단계] 5단락 시장 요약 생성 중...")
-    market_summary_text = ""
     if market_overview:
         market_summary_text = generate_market_summary(
             market_overview, all_data, api_key, today_date
@@ -457,11 +474,11 @@ def analyze_and_generate_html(all_data, api_key, channels_data=None,
 
     data = None
     if result_text:
-        data = _try_parse_json(result_text)  # BUG-10 수정: 강화된 파싱
+        data = _try_parse_json(result_text)
         if data:
-            print(f"[3단계] 파싱 성공: 종목 {len(data.get('stocks', []))}개")
+            print(f"  [3단계] 파싱 성공: 종목 {len(data.get('stocks', []))}개")
         else:
-            print("[3단계] JSON 파싱 최종 실패")
+            print("  [3단계] JSON 파싱 최종 실패")
 
     if not data:
         data = {
@@ -479,12 +496,15 @@ def analyze_and_generate_html(all_data, api_key, channels_data=None,
         if name in filtered:
             real = filtered[name]
             stock["channel_counts"] = {
-                "뉴스":      len(real["뉴스"]),
-                "경제방송":  len(real["경제방송"]),
-                "유튜브":    len(real["유튜브"]),
-                "애널리스트":len(real["애널리스트"]),
+                "뉴스":       len(real["뉴스"]),
+                "경제방송":   len(real["경제방송"]),
+                "유튜브":     len(real["유튜브"]),
+                "애널리스트": len(real["애널리스트"]),
             }
-            stock["total_count"] = real["total"]
+            stock["total_count"]   = real["total"]
+            stock["overlap_count"] = sum(
+                1 for v in stock["channel_counts"].values() if v > 0
+            )
             for reason in stock.get("reasons", []):
                 _restore_source_url(reason, real)
 
