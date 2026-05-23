@@ -100,10 +100,18 @@ def collect_naver_research() -> list:
     네이버 금융 리서치 company_list.naver 수집.
     source_type 을 "애널리스트" 로 명시.
 
-    BUG-C2 수정: 컬럼 인덱스 안전 파싱
-    - 실제 컬럼 수(5~6개)를 먼저 확인하고,
-      날짜 컬럼을 cols[4]로 고정하되 텍스트가 날짜 형식인지 검증.
-    - 형식 불일치 시 cols를 역순 탐색하여 날짜 컬럼을 자동 감지.
+    컬럼 구조 (네이버 금융 기준):
+      cols[0]: 종목명
+      cols[1]: 리포트 제목 (링크 포함)
+      cols[2]: 증권사
+      cols[3]: 첨부 (PDF 링크, 없으면 빈 td)
+      cols[4]: 작성일 (YY.MM.DD 또는 YYYY.MM.DD)
+      cols[5]: 조회수
+
+    안전 파싱:
+    - 날짜 컬럼을 _find_date_col()로 자동 감지
+    - 종목명/증권사 컬럼도 텍스트 유무로 검증
+    - 빈 행(헤더/구분선) 자동 스킵
     """
     results = []
 
@@ -121,12 +129,15 @@ def collect_naver_research() -> list:
                 if len(cols) < 5:
                     continue
 
-                stock_name   = cols[0].get_text(strip=True)
+                # 빈 행 또는 헤더 행 스킵
+                stock_name = cols[0].get_text(strip=True)
+                if not stock_name or stock_name in ("종목명", "기업명"):
+                    continue
+
                 report_title = cols[1].get_text(strip=True)
                 broker       = cols[2].get_text(strip=True)
 
-                # BUG-C2 수정: 날짜 컬럼 자동 감지
-                # 기본적으로 cols[4]를 시도하고, 날짜 형식이 아니면 cols[3], cols[5] 순서로 탐색
+                # 날짜 컬럼 자동 감지
                 date_str = _find_date_col(cols)
                 if not date_str:
                     continue
@@ -135,8 +146,14 @@ def collect_naver_research() -> list:
                     continue
                 page_has_recent = True
 
-                if not stock_name or not broker:
-                    continue
+                if not broker:
+                    # 증권사명이 없으면 리포트 제목에서 추출 시도
+                    for known_broker in BROKERS:
+                        if known_broker in report_title:
+                            broker = known_broker
+                            break
+                    if not broker:
+                        broker = "기타증권사"
 
                 link_tag = cols[1].find("a")
                 link     = _build_link(link_tag.get("href", "")) if link_tag else ""

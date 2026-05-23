@@ -6,10 +6,12 @@ import requests as req_lib
 ANTHROPIC_API_URL     = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_API_VERSION = "2023-06-01"
 
-# BUG-NEW-7 수정: 실제 API가 인식하는 정확한 모델 ID 사용
+# 모델 우선순위: claude-sonnet-4-5 → claude-3-7-sonnet → 3-5-sonnet → haiku 폴백
 CLAUDE_MODELS = [
-    "claude-3-5-sonnet-20241022",   # 1순위: 안정적 고성능
-    "claude-3-5-haiku-20241022",    # 2순위: 경량 폴백
+    "claude-sonnet-4-5",            # 1순위: 최신 claude-sonnet-4-5 (사용자 지정)
+    "claude-3-7-sonnet-20250219",   # 2순위: claude-3-7
+    "claude-3-5-sonnet-20241022",   # 3순위: 안정적 고성능
+    "claude-3-5-haiku-20241022",    # 4순위: 경량 폴백
 ]
 
 

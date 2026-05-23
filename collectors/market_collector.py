@@ -97,12 +97,34 @@ def get_us_market_data() -> dict:
         }
         for key, symbol in tickers.items():
             try:
-                t         = yf.Ticker(symbol)
-                info      = t.fast_info
-                price     = _safe_float(getattr(info, "last_price",     None))
-                prev      = _safe_float(getattr(info, "previous_close", None))
-                change    = round(price - prev, 2) if (price and prev) else None
-                chg_pct   = round((change / prev) * 100, 2) if (change and prev) else None
+                t    = yf.Ticker(symbol)
+                info = t.fast_info
+
+                # fast_info 속성명이 버전마다 다를 수 있으므로 여러 이름 시도
+                price = None
+                for attr in ("last_price", "lastPrice", "regularMarketPrice"):
+                    val = getattr(info, attr, None)
+                    if val is not None:
+                        price = _safe_float(val)
+                        break
+
+                prev = None
+                for attr in ("previous_close", "previousClose", "regularMarketPreviousClose"):
+                    val = getattr(info, attr, None)
+                    if val is not None:
+                        prev = _safe_float(val)
+                        break
+
+                # fast_info 실패 시 history 폴백
+                if price is None:
+                    hist = t.history(period="2d")
+                    if not hist.empty:
+                        price = _safe_float(hist["Close"].iloc[-1])
+                        if len(hist) >= 2:
+                            prev = _safe_float(hist["Close"].iloc[-2])
+
+                change  = round(price - prev, 2) if (price and prev) else None
+                chg_pct = round((change / prev) * 100, 2) if (change and prev) else None
                 result[key] = {
                     "price":      round(price, 2) if price else None,
                     "change":     change,

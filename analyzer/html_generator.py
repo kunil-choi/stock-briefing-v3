@@ -91,10 +91,118 @@ def _render_market_summary(market_summary: str) -> str:
     return html
 
 
-# ── 메인 HTML 생성 ────────────────────────────────────────────────────────────
+# ── 섹션2: 경제방송TV 전문가 추천 렌더링 ──────────────────────────────────────
+
+def _build_section2_html(all_data: list) -> str:
+    """섹션2: 경제방송TV에서 수집된 전문가 출연 영상 카드 렌더링"""
+    if not all_data:
+        return ""
+    items = [d for d in all_data if d.get("source_type") == "경제방송TV"]
+    if not items:
+        return ""
+
+    html = ""
+    seen_titles = set()
+    for item in items:
+        title = item.get("title", "")
+        if title in seen_titles:
+            continue
+        seen_titles.add(title)
+
+        source_name = item.get("source_name", "")
+        published   = item.get("published", "")
+        link        = item.get("link", "")
+        summary     = item.get("summary", "")[:200]
+
+        link_html = (
+            f' <a href="{link}" target="_blank" class="source-link">🔗 영상 보기</a>'
+            if link else ""
+        )
+        html += (
+            f'<div class="sec2-card">'
+            f'<div class="sec2-header">'
+            f'<span class="sec2-channel">{source_name}</span>'
+            f'<span class="sec2-date">{published}</span>'
+            f'{link_html}'
+            f'</div>'
+            f'<div class="sec2-title">{title}</div>'
+            + (f'<p class="sec2-summary">{summary}</p>' if summary else "")
+            + f'</div>\n'
+        )
+    return html
+
+
+# ── 섹션3: 애널리스트 리포트 렌더링 ──────────────────────────────────────────
+
+def _build_section3_html(all_data: list) -> str:
+    """섹션3: 애널리스트 리포트를 3개 카테고리로 분류하여 렌더링"""
+    if not all_data:
+        return ""
+    analyst_items = [d for d in all_data if d.get("source_type") == "애널리스트"]
+    if not analyst_items:
+        return ""
+
+    simultaneous   = [r for r in analyst_items if r.get("analyst_category") == "simultaneous"]
+    new_coverage   = [r for r in analyst_items if r.get("analyst_category") == "new_coverage"]
+    first_mention  = [r for r in analyst_items if r.get("analyst_category") == "first_in_6months"]
+
+    def _report_card(r):
+        stock  = r.get("stock_name", "")
+        broker = r.get("source_name", "")
+        title  = r.get("report_title", "")
+        date   = r.get("date", "")
+        link   = r.get("link", "")
+        naver_url = (
+            link if link else
+            f"https://finance.naver.com/research/company_list.naver"
+            f"?searchType=itemCode&itemName={url_quote(stock)}"
+        )
+        link_html = f'<a href="{naver_url}" target="_blank" class="source-link">🔗 리포트</a>'
+        is_new    = r.get("new_coverage", False)
+        badge     = '<span class="new-cov-badge">신규커버리지</span>' if is_new else ""
+        # 동시언급이면 복수 증권사 표시
+        brokers_str = broker
+        return (
+            f'<div class="report-card">'
+            f'<div class="report-header">'
+            f'<span class="report-stock">{stock}</span>{badge}'
+            f'<span class="report-broker">{brokers_str}</span>'
+            f'{link_html}'
+            f'</div>'
+            f'<div class="report-title">{title}</div>'
+            f'<div class="report-date">{date}</div>'
+            f'</div>\n'
+        )
+
+    html = ""
+    if simultaneous:
+        html += '<div class="sec3-group">\n'
+        html += '<h3 class="sec3-subtitle">① 증권사 동시 언급</h3>\n'
+        for r in simultaneous[:10]:
+            html += _report_card(r)
+        html += '</div>\n'
+
+    if new_coverage:
+        html += '<div class="sec3-group">\n'
+        html += '<h3 class="sec3-subtitle">② 신규 커버리지 개시</h3>\n'
+        for r in new_coverage[:10]:
+            html += _report_card(r)
+        html += '</div>\n'
+
+    if first_mention:
+        html += '<div class="sec3-group">\n'
+        html += '<h3 class="sec3-subtitle">③ 6개월 내 첫 언급</h3>\n'
+        for r in first_mention[:10]:
+            html += _report_card(r)
+        html += '</div>\n'
+
+    return html
+
+
+
 
 def generate_html(data, channels_data=None, gh_repo="", gh_token="",
-                  market_overview=None):
+                  market_overview=None, all_data=None):
     now_kst             = datetime.now(KST)
     briefing_date       = data.get("briefing_date", now_kst.strftime("%Y-%m-%d"))
     briefing_datetime   = now_kst.strftime("%Y-%m-%d %H:%M")
@@ -153,7 +261,7 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
         if channel_counts:
             parts = [
                 f"{ch} {cnt}회"
-                for ch in ["뉴스", "경제방송", "유튜브", "애널리스트"]
+                for ch in ["뉴스", "경제방송", "경제방송TV", "유튜브", "애널리스트"]
                 for cnt in [channel_counts.get(ch, 0)] if cnt > 0
             ]
             overlap_badge = (
@@ -344,6 +452,10 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
                 f'"data:image/png;base64,{c}";\n'
             )
 
+    # ── 섹션2/3 데이터 준비 ────────────────────────────────────────────────────
+    section2_html = _build_section2_html(all_data or [])
+    section3_html = _build_section3_html(all_data or [])
+
     # ── 아카이브 링크 ──────────────────────────────────────────────────────────
     archive_links = ""
     try:
@@ -458,6 +570,38 @@ body { font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Segoe UI',sans
 .chart-modal img { max-width:95%; max-height:80%; border-radius:8px; }
 .chart-modal .close-btn { position:absolute; top:20px; right:30px;
                            color:#fff; font-size:2em; cursor:pointer; }
+
+/* ── 섹션2: 경제방송TV ── */
+.sec2-card { background:#141420; border-radius:10px; padding:14px;
+             margin-bottom:10px; border:1px solid #1e1e2e;
+             border-left:3px solid #ffa94d; }
+.sec2-card:hover { border-color:#ffa94d80; }
+.sec2-header { display:flex; align-items:center; gap:8px;
+               margin-bottom:6px; flex-wrap:wrap; }
+.sec2-channel { background:#ffa94d20; color:#ffa94d; padding:2px 8px;
+                border-radius:8px; font-size:.78em; font-weight:700; }
+.sec2-date { color:#666; font-size:.75em; }
+.sec2-title { color:#ddd; font-size:.9em; font-weight:600; margin-bottom:4px; }
+.sec2-summary { color:#999; font-size:.82em; line-height:1.6; }
+
+/* ── 섹션3: 애널리스트 리포트 ── */
+.sec3-group { margin-bottom:20px; }
+.sec3-subtitle { color:#a8b4ff; font-size:.95em; margin-bottom:10px;
+                 padding-left:10px; border-left:2px solid #667eea; }
+.report-card { background:#141420; border-radius:10px; padding:12px;
+               margin-bottom:8px; border:1px solid #1e1e2e;
+               border-left:3px solid #51cf66; }
+.report-card:hover { border-color:#51cf6680; }
+.report-header { display:flex; align-items:center; gap:8px;
+                 margin-bottom:4px; flex-wrap:wrap; }
+.report-stock { font-weight:700; color:#fff; font-size:.92em; }
+.report-broker { color:#667eea; font-size:.78em;
+                 background:#667eea15; padding:2px 8px; border-radius:6px; }
+.report-title { color:#bbb; font-size:.85em; margin-bottom:2px; }
+.report-date { color:#666; font-size:.75em; }
+.new-cov-badge { background:#ffd43b20; color:#ffd43b; padding:2px 8px;
+                 border-radius:6px; font-size:.75em; font-weight:700;
+                 border:1px solid #ffd43b40; margin-left:4px; }
 """
 
     # ── HTML 조립 ──────────────────────────────────────────────────────────────
@@ -493,8 +637,35 @@ body { font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Segoe UI',sans
         '    <h2 class="section-title">🔥 주목 섹터</h2>\n'
         f'    {sectors_html}\n'
         '  </div>\n\n'
+    )
+
+    # 섹션2: 경제방송TV 전문가 출연 추천 (데이터 있을 때만)
+    if section2_html:
+        html += (
+            '  <div class="section">\n'
+            '    <h2 class="section-title">📺 섹션 2 · 경제방송TV 전문가 추천</h2>\n'
+            '    <p style="color:#888;font-size:.82em;margin-bottom:12px">'
+            '전일(D-1) 기준 전문가 출연 종목추천 프로그램</p>\n'
+            f'    {section2_html}\n'
+            '  </div>\n\n'
+        )
+
+    # 섹션3: 애널리스트 리포트 (데이터 있을 때만)
+    if section3_html:
+        html += (
+            '  <div class="section">\n'
+            '    <h2 class="section-title">📋 섹션 3 · 애널리스트 리포트</h2>\n'
+            '    <p style="color:#888;font-size:.82em;margin-bottom:12px">'
+            '최근 24시간 이내 증권사 리서치 리포트</p>\n'
+            f'    {section3_html}\n'
+            '  </div>\n\n'
+        )
+
+    html += (
         '  <div class="section">\n'
-        '    <h2 class="section-title">🎯 관심 종목</h2>\n'
+        '    <h2 class="section-title">🎯 종합 분석 · 관심 종목</h2>\n'
+        '    <p style="color:#888;font-size:.82em;margin-bottom:12px">'
+        '섹션 1~3 교차 분석 (2개 이상 채널 공통 언급)</p>\n'
         f'    {stocks_html}\n'
         '  </div>\n'
     )

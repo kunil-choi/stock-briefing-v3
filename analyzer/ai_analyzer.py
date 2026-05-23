@@ -121,13 +121,14 @@ def extract_mentions(all_data: list, stock_map: dict) -> dict:
       "애널리스트"→ 애널리스트
     """
     type_map = {
-        "뉴스":       "뉴스",
-        "경제방송":   "경제방송",
-        "유튜버":     "유튜브",
-        "증권사":     "유튜브",
-        "유튜브":     "유튜브",
-        "방송":       "경제방송",
-        "애널리스트": "애널리스트",
+        "뉴스":         "뉴스",
+        "경제방송":     "경제방송",
+        "경제방송TV":   "경제방송TV",   # 섹션2 전용 (전문가 출연 채널)
+        "유튜버":       "유튜브",
+        "증권사":       "유튜브",
+        "유튜브":       "유튜브",
+        "방송":         "경제방송",
+        "애널리스트":   "애널리스트",
     }
     mentions = {}
 
@@ -156,11 +157,11 @@ def extract_mentions(all_data: list, stock_map: dict) -> dict:
 
             if stock_name not in mentions:
                 mentions[stock_name] = {
-                    "code": code, "뉴스": [], "경제방송": [],
+                    "code": code, "뉴스": [], "경제방송": [], "경제방송TV": [],
                     "유튜브": [], "애널리스트": [], "total": 0,
                 }
 
-            ch_key  = source_type if source_type in ["뉴스", "경제방송", "유튜브", "애널리스트"] else "뉴스"
+            ch_key  = source_type if source_type in ["뉴스", "경제방송", "경제방송TV", "유튜브", "애널리스트"] else "뉴스"
             already = any(m.get("content_id") == content_id for m in mentions[stock_name][ch_key])
             if already:
                 continue
@@ -182,7 +183,7 @@ def filter_mentions(mentions: dict, min_channel_types: int = 2) -> dict:
     filtered = {}
     for name, data in mentions.items():
         channel_types = sum(
-            1 for t in ["뉴스", "경제방송", "유튜브", "애널리스트"] if len(data[t]) > 0
+            1 for t in ["뉴스", "경제방송", "경제방송TV", "유튜브", "애널리스트"] if len(data[t]) > 0
         )
         if channel_types >= min_channel_types:
             filtered[name] = data
@@ -290,7 +291,7 @@ def build_analysis_prompt(filtered_mentions: dict, all_data: list,
         if rank > 15:
             break
         stock_contexts += f"\n\n### [{rank}] {name} (총 {data['total']}회 언급)\n"
-        for ch_type in ["뉴스", "경제방송", "유튜브", "애널리스트"]:
+        for ch_type in ["뉴스", "경제방송", "경제방송TV", "유튜브", "애널리스트"]:
             items = data[ch_type]
             if not items:
                 continue
@@ -342,7 +343,7 @@ def build_analysis_prompt(filtered_mentions: dict, all_data: list,
         '      "catalyst": "상승촉매 150자",\n'
         '      "risk": "리스크 150자",\n'
         '      "total_count": 5,\n'
-        '      "channel_counts": {"뉴스":1,"경제방송":1,"유튜브":3,"애널리스트":0},\n'
+        '      "channel_counts": {"뉴스":1,"경제방송":1,"경제방송TV":1,"유튜브":3,"애널리스트":0},\n'
         '      "source_types": ["뉴스","경제방송","유튜브"],\n'
         '      "overlap_count": 3,\n'
         '      "reasons": [\n'
@@ -382,11 +383,12 @@ def _restore_source_url(reason: dict, real_channel_data: dict):
 
     ch = reason.get("source_type", "")
     ch_key = {
-        "뉴스":       "뉴스",
-        "경제방송":   "경제방송",
-        "유튜브":     "유튜브",
-        "증권사":     "유튜브",    # BUG-M4 수정
-        "애널리스트": "애널리스트",
+        "뉴스":         "뉴스",
+        "경제방송":     "경제방송",
+        "경제방송TV":   "경제방송TV",
+        "유튜브":       "유튜브",
+        "증권사":       "유튜브",    # BUG-M4 수정
+        "애널리스트":   "애널리스트",
     }.get(ch, "")
 
     if not ch_key or ch_key not in real_channel_data:
@@ -479,7 +481,7 @@ def analyze_and_generate_html(all_data, api_key, channels_data=None,
                 market_overview, all_data, api_key, today_date
             )
         return generate_html(data, channels_data, gh_repo, gh_token,
-                             market_overview=market_overview)
+                             market_overview=market_overview, all_data=all_data)
 
     mentions = extract_mentions(all_data, stock_map)
     print(f"  [추출] 언급 종목 총 {len(mentions)}개")
@@ -497,7 +499,7 @@ def analyze_and_generate_html(all_data, api_key, channels_data=None,
                 market_overview, all_data, api_key, today_date
             )
         return generate_html(data, channels_data, gh_repo, gh_token,
-                             market_overview=market_overview)
+                             market_overview=market_overview, all_data=all_data)
 
     # 2단계: 5단락 시장 요약
     print("\n[2단계] 5단락 시장 요약 생성 중...")
@@ -538,10 +540,11 @@ def analyze_and_generate_html(all_data, api_key, channels_data=None,
         if name in filtered:
             real = filtered[name]
             stock["channel_counts"] = {
-                "뉴스":       len(real["뉴스"]),
-                "경제방송":   len(real["경제방송"]),
-                "유튜브":     len(real["유튜브"]),
-                "애널리스트": len(real["애널리스트"]),
+                "뉴스":         len(real["뉴스"]),
+                "경제방송":     len(real["경제방송"]),
+                "경제방송TV":   len(real["경제방송TV"]),
+                "유튜브":       len(real["유튜브"]),
+                "애널리스트":   len(real["애널리스트"]),
             }
             stock["total_count"]   = real["total"]
             stock["overlap_count"] = sum(
@@ -564,11 +567,12 @@ def analyze_and_generate_html(all_data, api_key, channels_data=None,
                     continue
             # 2순위: filtered 전체에서 source_name 기반 탐색
             ch_key = {
-                "뉴스":       "뉴스",
-                "경제방송":   "경제방송",
-                "유튜브":     "유튜브",
-                "증권사":     "유튜브",    # BUG-M4 수정
-                "애널리스트": "애널리스트",
+                "뉴스":         "뉴스",
+                "경제방송":     "경제방송",
+                "경제방송TV":   "경제방송TV",
+                "유튜브":       "유튜브",
+                "증권사":       "유튜브",    # BUG-M4 수정
+                "애널리스트":   "애널리스트",
             }.get(reason.get("source_type", ""), "")
             if not ch_key:
                 continue
@@ -601,4 +605,4 @@ def analyze_and_generate_html(all_data, api_key, channels_data=None,
     print("[저장] data/briefing_data.json 완료")
 
     return generate_html(data, channels_data, gh_repo, gh_token,
-                         market_overview=market_overview)
+                         market_overview=market_overview, all_data=all_data)
