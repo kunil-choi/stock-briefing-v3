@@ -34,7 +34,7 @@ YOUTUBER_HOURS      = 24
 SECURITIES_TV_HOURS = 48
 REPORT_DAYS         = 1
 
-# 섹션2 전용: 증권TV 방송 채널 (전문가 출연 프로그램 위주)
+# 섹션2 전용: 경제방송 TV 채널 (전문가 출연 프로그램 위주)
 SECURITIES_TV_CHANNELS = {
     "한국경제TV":   "UCp7vLUO-BI9UkVFJWFSJ-ig",
     "매일경제TV":   "UCbSSCqKMmBOCR5KxFsVzmvA",
@@ -53,7 +53,6 @@ def load_channels():
     try:
         with open(CHANNELS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-        # channels.json의 실제 최상위 키에 맞게 수정
         for cat in ["broadcast", "youtuber", "securities"]:
             if cat not in data:
                 data[cat] = []
