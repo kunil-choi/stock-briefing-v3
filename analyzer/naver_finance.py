@@ -9,7 +9,7 @@ import json
 import time
 import base64
 import requests
-from urllib.parse import quote as url_quote          # BUG-C 수정
+from urllib.parse import quote as url_quote
 from datetime import datetime, timedelta, timezone
 from bs4 import BeautifulSoup
 
@@ -31,7 +31,7 @@ _NAVER_HEADERS = {
 
 def load_stock_names() -> dict:
     cache_path = "data/stock_names_cache.json"
-    today = datetime.now(KST).strftime("%Y-%m-%d")
+    today      = datetime.now(KST).strftime("%Y-%m-%d")
 
     if os.path.exists(cache_path):
         try:
@@ -50,7 +50,7 @@ def load_stock_names() -> dict:
         print(f"  [{market_name}] {count}개 로드")
 
     if len(stock_map) < 50:
-        print("  [종목목록] 네이버 금융 실패 → 주요 종목 폴백 사용")
+        print("  [종목목록] 네이버 금융 실패 → 폴백 사용")
         stock_map = _get_fallback_stocks()
 
     os.makedirs("data", exist_ok=True)
@@ -83,7 +83,7 @@ def _load_naver_market_stocks(sosok: int, stock_map: dict, max_pages: int = 10) 
                         if name and code and name not in stock_map:
                             stock_map[name] = code
                             page_count += 1
-                            added += 1
+                            added      += 1
             if page_count == 0:
                 break
             time.sleep(0.2)
@@ -101,31 +101,26 @@ def get_stock_price(stock_code: str) -> dict:
     if not stock_code or stock_code == "NONE":
         return {}
     try:
-        url = f"https://finance.naver.com/item/sise.nhn?code={stock_code}"
+        url  = f"https://finance.naver.com/item/sise.nhn?code={stock_code}"
         resp = requests.get(url, headers=_NAVER_HEADERS, timeout=10)
         resp.encoding = "euc-kr"
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        # BUG-D 보강: 셀렉터 우선순위 확장
         price_el = (
-            soup.select_one("#_nowVal") or
-            soup.select_one("p.no_today em#_nowVal") or
-            soup.select_one(".no_today em") or
+            soup.select_one("#_nowVal")                  or
+            soup.select_one("p.no_today em#_nowVal")     or
+            soup.select_one(".no_today em")              or
             soup.select_one("strong#_nowVal")
         )
         if not price_el:
             return {"code": stock_code, "price": "", "change": "", "change_pct": ""}
 
-        price  = price_el.get_text(strip=True).replace(",", "")
-        change = ""
-        rate   = ""
+        price = price_el.get_text(strip=True).replace(",", "")
 
         change_el = soup.select_one("#_diff")
         rate_el   = soup.select_one("#_rate")
-        if change_el:
-            change = change_el.get_text(strip=True).replace(",", "")
-        if rate_el:
-            rate = rate_el.get_text(strip=True).replace("%", "").strip()
+        change    = change_el.get_text(strip=True).replace(",", "") if change_el else ""
+        rate      = rate_el.get_text(strip=True).replace("%", "").strip() if rate_el else ""
 
         sign = ""
         if soup.select_one(".no_today .up"):
@@ -149,11 +144,12 @@ def get_stock_price(stock_code: str) -> dict:
         return {"code": stock_code, "price": "", "change": "", "change_pct": ""}
 
 
-def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
-    code = code_override or ""
+def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict | None:
+    """종목명 또는 코드로 현재가 조회. 실패 시 None 반환."""
+    code = code_override.strip() if code_override else ""
     if not code:
         result = verify_stock_via_naver(stock_name)
-        code = result.get("code", "") if result else ""
+        code   = result.get("code", "") if result else ""
     if not code:
         return None
     price_info = get_stock_price(code)
@@ -170,7 +166,7 @@ def get_stock_price_history(stock_code: str, days: int = 14) -> list:
     if not stock_code or stock_code == "NONE":
         return []
     try:
-        url = (
+        url  = (
             f"https://finance.naver.com/item/sise_day.naver"
             f"?code={stock_code}&page=1"
         )
@@ -178,9 +174,10 @@ def get_stock_price_history(stock_code: str, days: int = 14) -> list:
         resp.encoding = "euc-kr"
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        rows = soup.select("table.type_2 tbody tr")
-        history = []
-        seen_dates = set()    # BUG-E 수정: 중복 날짜 제거
+        rows       = soup.select("table.type_2 tbody tr")
+        history    = []
+        seen_dates = set()
+
         for row in rows:
             cells = row.select("td span")
             if len(cells) < 6:
@@ -195,7 +192,7 @@ def get_stock_price_history(stock_code: str, days: int = 14) -> list:
                 continue
             if not close_text or not close_text.isdigit():
                 continue
-            if date_text in seen_dates:     # BUG-E 수정: 중복 스킵
+            if date_text in seen_dates:
                 continue
             seen_dates.add(date_text)
 
@@ -215,15 +212,16 @@ def get_stock_price_history(stock_code: str, days: int = 14) -> list:
 
 
 def fetch_naver_daily_prices(stock_code: str, days: int = 14) -> list:
+    """get_stock_price_history 의 alias."""
     return get_stock_price_history(stock_code, days=days)
 
 
 # ══════════════════════════════════════════════════════════════
-#  4. 통합 조회
+#  4. 통합 조회 (현재가 + 히스토리 + 요약)
 # ══════════════════════════════════════════════════════════════
 
 def get_stock_full_info(stock_code: str) -> dict:
-    base = get_stock_price(stock_code)
+    base    = get_stock_price(stock_code)
     if not base.get("price"):
         return base
     history = get_stock_price_history(stock_code, days=14)
@@ -247,20 +245,20 @@ def get_stock_full_info(stock_code: str) -> dict:
             result["period_high"]       = f"{max(highs):,}" if highs else ""
             result["period_low"]        = f"{min(lows):,}"  if lows  else ""
 
-            change_fmt     = base.get("change", "")
-            change_pct_fmt = base.get("change_pct", "")
-            price_fmt      = base.get("price", "")
+            change     = base.get("change", "")
+            change_pct = base.get("change_pct", "")
+            price_str  = base.get("price", "")
 
-            if change_fmt.startswith("+"):
-                arrow, change_abs = "▲", change_fmt[1:]
-            elif change_fmt.startswith("-"):
-                arrow, change_abs = "▼", change_fmt[1:]
+            if change.startswith("+"):
+                arrow, change_abs = "▲", change[1:]
+            elif change.startswith("-"):
+                arrow, change_abs = "▼", change[1:]
             else:
-                arrow, change_abs = "", change_fmt
+                arrow, change_abs = "", change
 
             result["price_display"] = (
-                f"{price_fmt}원 {arrow}{change_abs} ({change_pct_fmt})"
-                if arrow and change_abs else f"{price_fmt}원"
+                f"{price_str}원 {arrow}{change_abs} ({change_pct})"
+                if arrow and change_abs else f"{price_str}원"
             )
             trend_word = "상승" if period_diff >= 0 else "하락"
             result["history_summary"] = (
@@ -272,6 +270,7 @@ def get_stock_full_info(stock_code: str) -> dict:
             _fill_price_display(result, base)
     else:
         _fill_price_display(result, base)
+
     return result
 
 
@@ -300,32 +299,34 @@ def _fill_price_display(result: dict, base: dict) -> None:
 def search_code_by_autocomplete(stock_name: str) -> dict:
     if not stock_name:
         return {}
+
+    # 1차: 네이버 자동완성 API
     try:
         url    = "https://ac.stock.naver.com/ac"
         params = {"q": stock_name, "target": "stock,index,marketindicator"}
         resp   = requests.get(url, params=params, headers=_NAVER_HEADERS, timeout=8)
-        if resp.status_code != 200:
-            return {}
-        data  = resp.json()
-        items = data.get("items", []) or data.get("result", {}).get("items", [])
-        for item_group in items:
-            if isinstance(item_group, list):
-                for item in item_group:
-                    name = item.get("name", "") or item.get("ko", "")
-                    code = item.get("code", "") or item.get("symbolCode", "")
+        if resp.status_code == 200:
+            data  = resp.json()
+            # 실제 응답 구조: {"items": [[{name, code, typeCode}, ...], ...]}
+            items = data.get("items", [])
+            for item_group in items:
+                if isinstance(item_group, list):
+                    for item in item_group:
+                        name = item.get("name", "")
+                        code = item.get("code", "")
+                        if code and len(code) == 6 and code.isdigit():
+                            print(f"  [자동완성] '{stock_name}' → '{name}'({code})")
+                            return {"code": code, "name": name}
+                elif isinstance(item_group, dict):
+                    name = item_group.get("name", "")
+                    code = item_group.get("code", "")
                     if code and len(code) == 6 and code.isdigit():
                         print(f"  [자동완성] '{stock_name}' → '{name}'({code})")
                         return {"code": code, "name": name}
-            elif isinstance(item_group, dict):
-                name = item_group.get("name", "") or item_group.get("ko", "")
-                code = item_group.get("code", "") or item_group.get("symbolCode", "")
-                if code and len(code) == 6 and code.isdigit():
-                    print(f"  [자동완성] '{stock_name}' → '{name}'({code})")
-                    return {"code": code, "name": name}
     except Exception as e:
         print(f"  [자동완성 실패] {stock_name}: {e}")
 
-    # BUG-C 수정: urllib.parse.quote 사용
+    # 2차 폴백: 네이버 금융 검색
     try:
         url  = f"https://finance.naver.com/search/searchResult.naver?query={url_quote(stock_name)}"
         resp = requests.get(url, headers=_NAVER_HEADERS, timeout=8)
@@ -350,33 +351,61 @@ def search_code_by_autocomplete(stock_name: str) -> dict:
 # ══════════════════════════════════════════════════════════════
 
 def verify_stock_via_naver(stock_name: str) -> dict:
+    """
+    종목명으로 네이버 금융에서 종목 코드 확인.
+    QUALITY-2 수정: 정확 일치 우선, 부분 일치는 보조로만 사용.
+    """
     if not stock_name:
         return {}
+
+    # 1단계: 자동완성 API (정확도 높음)
     result = search_code_by_autocomplete(stock_name)
     if result.get("code"):
         return {"code": result["code"], "name": result.get("name", stock_name), "verified": True}
+
+    # 2단계: 검색 결과에서 정확 일치 우선
     try:
         url  = f"https://finance.naver.com/search/searchResult.naver?query={url_quote(stock_name)}"
         resp = requests.get(url, headers=_NAVER_HEADERS, timeout=8)
         resp.encoding = "euc-kr"
         soup = BeautifulSoup(resp.text, "html.parser")
+
+        exact_match   = None
+        partial_match = None
+
         for row in soup.select("table.type_1 tbody tr"):
             tit = row.select_one("td.tit a")
-            if tit and tit.get("href"):
-                m = re.search(r"code=(\d{6})", tit["href"])
-                if m:
-                    name = tit.get_text(strip=True)
-                    code = m.group(1)
-                    if stock_name in name or name in stock_name:
-                        print(f"  [종목확인] '{stock_name}' → '{name}'({code})")
-                        return {"code": code, "name": name, "verified": True}
+            if not tit or not tit.get("href"):
+                continue
+            m = re.search(r"code=(\d{6})", tit["href"])
+            if not m:
+                continue
+            name = tit.get_text(strip=True)
+            code = m.group(1)
+
+            # 정확 일치 우선
+            if name == stock_name:
+                exact_match = {"code": code, "name": name, "verified": True}
+                break
+            # 포함 관계 (부분 일치) — 보조
+            if partial_match is None and (stock_name in name or name in stock_name):
+                partial_match = {"code": code, "name": name, "verified": True}
+
+        if exact_match:
+            print(f"  [종목확인-정확] '{stock_name}' → '{exact_match['name']}'({exact_match['code']})")
+            return exact_match
+        if partial_match:
+            print(f"  [종목확인-부분] '{stock_name}' → '{partial_match['name']}'({partial_match['code']})")
+            return partial_match
+
     except Exception as e:
         print(f"  [종목확인 실패] {stock_name}: {e}")
+
     return {}
 
 
 # ══════════════════════════════════════════════════════════════
-#  7. 기업 정보 조회
+#  7. 기업 정보 조회 (업종 + 동종업종)
 # ══════════════════════════════════════════════════════════════
 
 def fetch_naver_company_info(stock_code: str) -> dict:
@@ -405,19 +434,21 @@ def fetch_naver_company_info(stock_code: str) -> dict:
         if sector or peers:
             return {"sector": sector, "peers": peers}
 
+        # 추가 폴백 셀렉터
         for sel in ["dl.corp_info dt", "table.tb_type1 td"]:
             el = soup.select_one(sel)
             if el:
                 text = el.get_text(strip=True)
                 if text:
                     return {"sector": text, "peers": []}
+
     except Exception as e:
         print(f"  [기업정보 조회 실패] {stock_code}: {e}")
     return {}
 
 
 # ══════════════════════════════════════════════════════════════
-#  8. 캔들스틱 차트 생성
+#  8. 캔들스틱 차트 생성 (Base64 PNG)
 # ══════════════════════════════════════════════════════════════
 
 def generate_candlestick_base64(history: list, stock_name: str = "") -> str:
@@ -429,10 +460,10 @@ def generate_candlestick_base64(history: list, stock_name: str = "") -> str:
         import matplotlib
         matplotlib.use("Agg")
 
-        data = list(reversed(history))   # 오래된 날짜 순 정렬
+        data = list(reversed(history))   # 오래된 날짜 → 최신 순 정렬
 
         dates, opens, highs, lows, closes = [], [], [], [], []
-        seen = set()   # BUG-E 수정: 중복 날짜 제거
+        seen = set()
         for row in data:
             date_str = row.get("date", "")
             if date_str in seen:
@@ -441,10 +472,13 @@ def generate_candlestick_base64(history: list, stock_name: str = "") -> str:
                 dt = datetime.strptime(date_str, "%Y.%m.%d")
             except ValueError:
                 continue
-            o = int(row.get("open",  "0") or "0")
-            h = int(row.get("high",  "0") or "0")
-            l = int(row.get("low",   "0") or "0")
-            c = int(row.get("close", "0") or "0")
+            try:
+                o = int(row.get("open",  "0") or "0")
+                h = int(row.get("high",  "0") or "0")
+                l = int(row.get("low",   "0") or "0")
+                c = int(row.get("close", "0") or "0")
+            except (ValueError, TypeError):
+                continue
             if not all([o, h, l, c]):
                 continue
             seen.add(date_str)
@@ -497,49 +531,49 @@ def generate_candlestick_base64(history: list, stock_name: str = "") -> str:
 
 def _get_fallback_stocks() -> dict:
     return {
-        "삼성전자":        "005930", "SK하이닉스":        "000660",
-        "LG에너지솔루션":  "373220", "삼성바이오로직스":  "207940",
-        "현대차":          "005380", "기아":              "000270",
-        "셀트리온":        "068270", "POSCO홀딩스":       "005490",
-        "KB금융":          "105560", "신한지주":          "055550",
-        "하나금융지주":    "086790", "우리금융지주":      "316140",
-        "LG화학":          "051910", "삼성SDI":           "006400",
-        "현대모비스":      "012330", "카카오":            "035720",
-        "NAVER":           "035420", "LG전자":            "066570",
-        "삼성물산":        "028260", "SK텔레콤":          "017670",
-        "KT":              "030200", "한화에어로스페이스": "012450",
-        "두산에너빌리티":  "034020", "HD현대중공업":      "329180",
-        "HD한국조선해양":  "009540", "현대건설":          "000720",
-        "LIG넥스원":       "079550", "한국항공우주":      "047810",
-        "현대로템":        "064350", "한화시스템":        "272210",
-        "한화오션":        "042660", "삼성전기":          "009150",
-        "삼성SDS":         "018260", "LS ELECTRIC":       "010120",
-        "HD현대일렉트릭":  "267260", "효성중공업":        "298040",
-        "카카오페이":      "377300", "카카오뱅크":        "323410",
-        "HMM":             "011200", "고려아연":          "010130",
-        "대한항공":        "003490", "포스코퓨처엠":      "003670",
-        "엘앤에프":        "066970", "SK이노베이션":      "096770",
-        "삼성생명":        "032830", "삼성화재":          "000810",
-        "한국전력":        "015760", "한국가스공사":      "036460",
-        "현대미포조선":    "010620", "HL만도":            "204320",
-        "현대위아":        "011210",
-        "에코프로":        "086520", "에코프로비엠":      "247540",
-        "HLB":             "028300", "유한양행":          "000100",
-        "알테오젠":        "196170", "레인보우로보틱스":  "277810",
-        "두산로보틱스":    "454910", "HPSP":              "403870",
-        "피에스케이":      "319660", "엔씨소프트":        "036570",
-        "크래프톤":        "259960", "하이브":            "352820",
-        "SM":              "041510", "JYP Ent":           "035900",
-        "이수페타시스":    "007660", "솔브레인":          "357780",
-        "리노공업":        "058470", "이오테크닉스":      "039030",
-        "주성엔지니어링":  "036930", "한미약품":          "128940",
-        "종근당":          "185750", "셀트리온제약":      "068760",
-        "메디톡스":        "086900", "휴젤":              "145020",
-        "클래시스":        "214150", "덴티움":            "145720",
-        "코스맥스":        "044820", "한국콜마":          "161890",
-        "펄어비스":        "263750", "넷마블":            "251270",
-        "카카오게임즈":    "293490", "파크시스템스":      "140860",
-        "테크윙":          "089030", "포스코DX":          "022100",
-        "포스코인터내셔널":"047050", "SKC":               "011790",
-        "케이씨텍":        "064760",
+        "삼성전자":         "005930", "SK하이닉스":        "000660",
+        "LG에너지솔루션":   "373220", "삼성바이오로직스":  "207940",
+        "현대차":           "005380", "기아":              "000270",
+        "셀트리온":         "068270", "POSCO홀딩스":       "005490",
+        "KB금융":           "105560", "신한지주":          "055550",
+        "하나금융지주":     "086790", "우리금융지주":      "316140",
+        "LG화학":           "051910", "삼성SDI":           "006400",
+        "현대모비스":       "012330", "카카오":            "035720",
+        "NAVER":            "035420", "LG전자":            "066570",
+        "삼성물산":         "028260", "SK텔레콤":          "017670",
+        "KT":               "030200", "한화에어로스페이스": "012450",
+        "두산에너빌리티":   "034020", "HD현대중공업":      "329180",
+        "HD한국조선해양":   "009540", "현대건설":          "000720",
+        "LIG넥스원":        "079550", "한국항공우주":      "047810",
+        "현대로템":         "064350", "한화시스템":        "272210",
+        "한화오션":         "042660", "삼성전기":          "009150",
+        "삼성SDS":          "018260", "LS ELECTRIC":       "010120",
+        "HD현대일렉트릭":   "267260", "효성중공업":        "298040",
+        "카카오페이":       "377300", "카카오뱅크":        "323410",
+        "HMM":              "011200", "고려아연":          "010130",
+        "대한항공":         "003490", "포스코퓨처엠":      "003670",
+        "엘앤에프":         "066970", "SK이노베이션":      "096770",
+        "삼성생명":         "032830", "삼성화재":          "000810",
+        "한국전력":         "015760", "한국가스공사":      "036460",
+        "현대미포조선":     "010620", "HL만도":            "204320",
+        "현대위아":         "011210",
+        "에코프로":         "086520", "에코프로비엠":      "247540",
+        "HLB":              "028300", "유한양행":          "000100",
+        "알테오젠":         "196170", "레인보우로보틱스":  "277810",
+        "두산로보틱스":     "454910", "HPSP":              "403870",
+        "피에스케이":       "319660", "엔씨소프트":        "036570",
+        "크래프톤":         "259960", "하이브":            "352820",
+        "SM":               "041510", "JYP Ent":           "035900",
+        "이수페타시스":     "007660", "솔브레인":          "357780",
+        "리노공업":         "058470", "이오테크닉스":      "039030",
+        "주성엔지니어링":   "036930", "한미약품":          "128940",
+        "종근당":           "185750", "셀트리온제약":      "068760",
+        "메디톡스":         "086900", "휴젤":              "145020",
+        "클래시스":         "214150", "덴티움":            "145720",
+        "코스맥스":         "044820", "한국콜마":          "161890",
+        "펄어비스":         "263750", "넷마블":            "251270",
+        "카카오게임즈":     "293490", "파크시스템스":      "140860",
+        "테크윙":           "089030", "포스코DX":          "022100",
+        "포스코인터내셔널": "047050", "SKC":               "011790",
+        "케이씨텍":         "064760",
     }
