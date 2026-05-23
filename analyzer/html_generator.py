@@ -1,7 +1,6 @@
 # analyzer/html_generator.py
 import os
-import re
-import requests
+from urllib.parse import quote as url_quote   # BUG-6 수정: requests.utils.quote 대신 urllib 사용
 from datetime import datetime, timedelta, timezone
 
 KST = timezone(timedelta(hours=9))
@@ -12,24 +11,31 @@ PARA_TITLES = [
 ]
 
 
-# ─── 인디케이터 배지 ──────────────────────────────────────────────────────────
+# ── 인디케이터 배지 ────────────────────────────────────────────────────────────
 
 def _indicator_badge(label: str, value, pct, direction: str = "") -> str:
     try:
-        pct_f = float(str(pct).replace(",","").replace("%","").replace("+",""))
+        pct_f = float(
+            str(pct).replace(",", "").replace("%", "").replace("+", "")
+        ) if pct is not None else 0.0
     except Exception:
         pct_f = 0.0
 
-    if direction == "call":   color_cls = "ind-call"
-    elif direction == "put":  color_cls = "ind-put"
-    elif pct_f > 0:           color_cls = "ind-call"
-    elif pct_f < 0:           color_cls = "ind-put"
-    else:                     color_cls = "ind-neutral"
+    if direction == "call":        color_cls = "ind-call"
+    elif direction == "put":       color_cls = "ind-put"
+    elif pct_f > 0:                color_cls = "ind-call"
+    elif pct_f < 0:                color_cls = "ind-put"
+    else:                          color_cls = "ind-neutral"
 
     sign    = "▲" if pct_f > 0 else ("▼" if pct_f < 0 else "─")
     pct_str = f"{abs(pct_f):.2f}%"
-    val_str = (f"{value:,.2f}" if isinstance(value, (int, float)) and value
-               else str(value) if value else "N/A")
+
+    # BUG-9 수정: value == 0.0 도 숫자로 정상 표시
+    if isinstance(value, (int, float)) and value is not None:
+        val_str = f"{value:,.2f}"
+    else:
+        val_str = str(value) if value else "N/A"
+
     return (
         f'<div class="ind-badge {color_cls}">'
         f'<span class="ind-label">{label}</span>'
@@ -45,17 +51,17 @@ def _build_market_indicators(market_overview: dict) -> str:
     nf = market_overview.get("night_futures", {})
     us = market_overview.get("us_market", {})
     kr = market_overview.get("korea_market", {})
-    badges  = _indicator_badge("야간선물", nf.get("price"), nf.get("change_pct"), direction=nf.get("direction",""))
+    badges  = _indicator_badge("야간선물", nf.get("price"),            nf.get("change_pct"), direction=nf.get("direction", ""))
     badges += _indicator_badge("S&P500",  us.get("sp500",  {}).get("price"), us.get("sp500",  {}).get("change_pct"))
     badges += _indicator_badge("나스닥",   us.get("nasdaq", {}).get("price"), us.get("nasdaq", {}).get("change_pct"))
     badges += _indicator_badge("다우존스", us.get("dow",    {}).get("price"), us.get("dow",    {}).get("change_pct"))
     badges += _indicator_badge("달러/원",  us.get("usd_krw",{}).get("price"), us.get("usd_krw",{}).get("change_pct"))
-    badges += _indicator_badge("코스피",  kr.get("kospi",  {}).get("price"), kr.get("kospi",  {}).get("change_pct"))
-    badges += _indicator_badge("코스닥",  kr.get("kosdaq", {}).get("price"), kr.get("kosdaq", {}).get("change_pct"))
+    badges += _indicator_badge("코스피",   kr.get("kospi",  {}).get("price"), kr.get("kospi",  {}).get("change_pct"))
+    badges += _indicator_badge("코스닥",   kr.get("kosdaq", {}).get("price"), kr.get("kosdaq", {}).get("change_pct"))
     return f'<div class="ind-row">{badges}</div>'
 
 
-# ─── 5단락 시장 요약 렌더링 ───────────────────────────────────────────────────
+# ── 5단락 시장 요약 렌더링 ────────────────────────────────────────────────────
 
 def _render_market_summary(market_summary: str) -> str:
     if not market_summary:
@@ -68,7 +74,7 @@ def _render_market_summary(market_summary: str) -> str:
         if ":" in para:
             idx   = para.index(":")
             title = para[:idx].strip()
-            body  = para[idx+1:].strip()
+            body  = para[idx + 1:].strip()
         else:
             title = PARA_TITLES[i] if i < len(PARA_TITLES) else f"요약 {i+1}"
             body  = para
@@ -82,7 +88,7 @@ def _render_market_summary(market_summary: str) -> str:
     return html
 
 
-# ─── 메인 HTML 생성 ───────────────────────────────────────────────────────────
+# ── 메인 HTML 생성 ────────────────────────────────────────────────────────────
 
 def generate_html(data, channels_data=None, gh_repo="", gh_token="",
                   market_overview=None):
@@ -102,7 +108,7 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
     formatted_summary = _render_market_summary(market_summary)
     sectors_html      = "".join(f'<span class="sector-badge">{s}</span>\n' for s in hot_sectors)
 
-    # ── 종목 카드 ─────────────────────────────────────────────────────────
+    # ── 종목 카드 ──────────────────────────────────────────────────────────────
     stocks_html = ""
     for stock in stocks:
         name        = stock.get("name", "")
@@ -126,12 +132,15 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
             "signal-positive" if signal == "긍정" else
             "signal-negative" if signal == "부정" else "signal-neutral"
         )
+
         channel_counts = stock.get("channel_counts", {})
         total_count    = stock.get("total_count", overlap)
         if channel_counts:
-            parts = [f"{ch} {cnt}회"
-                     for ch in ["뉴스","경제방송","유튜브","애널리스트"]
-                     for cnt in [channel_counts.get(ch, 0)] if cnt > 0]
+            parts = [
+                f"{ch} {cnt}회"
+                for ch in ["뉴스", "경제방송", "유튜브", "애널리스트"]
+                for cnt in [channel_counts.get(ch, 0)] if cnt > 0
+            ]
             overlap_badge = (
                 f'<span class="overlap-badge">총 {total_count}회 언급 '
                 f'({" / ".join(parts)})</span>'
@@ -141,16 +150,17 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
 
         source_tags = "".join(f'<span class="source-tag">{st}</span>' for st in source_types)
 
+        # BUG-6 수정: url_quote 사용
         price_info_text = ""
         if isinstance(verified_price, dict):
             p  = verified_price
-            cv = str(p.get("change", "") or "")   # ✅ None 방지
-            sign = "▲" if cv.startswith("+") else ("▼" if cv.startswith("-") else "")
-            cd   = cv.lstrip("+-")
-            price_info_text = (
-                f' ({p.get("price","??")}원 {sign}{cd} {p.get("change_pct","")})' if sign and cd
-                else f' ({p.get("price","??")}원)'
-            )
+            cv = str(p.get("change", "") or "")
+            sign_c = "▲" if cv.startswith("+") else ("▼" if cv.startswith("-") else "")
+            cd     = cv.lstrip("+-")
+            if sign_c and cd:
+                price_info_text = f' ({p.get("price","??")}원 {sign_c}{cd} {p.get("change_pct","")})'
+            else:
+                price_info_text = f' ({p.get("price","??")}원)'
         elif market_type == "해외":
             price_info_text = " (해외 종목)"
 
@@ -164,7 +174,7 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
             naver_url = (
                 f"https://finance.naver.com/item/main.naver?code={naver_code}"
                 if naver_code else
-                f"https://finance.naver.com/search/searchResult.naver?query={requests.utils.quote(name)}"
+                f"https://finance.naver.com/search/searchResult.naver?query={url_quote(name)}"
             )
             chart_btn_html = (
                 f' <a href="{naver_url}" target="_blank"'
@@ -180,7 +190,7 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
             if not rurl and "애널리스트" in rs:
                 rurl = (
                     "https://finance.naver.com/research/company_list.naver"
-                    f"?searchType=itemCode&itemName={requests.utils.quote(name)}"
+                    f"?searchType=itemCode&itemName={url_quote(name)}"
                 )
             link_html = (
                 f' <a href="{rurl}" target="_blank" class="source-link">🔗 바로보기</a>'
@@ -214,7 +224,7 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
             f'</div></div>\n'
         )
 
-    # ── 히든픽 카드 ───────────────────────────────────────────────────────
+    # ── 히든픽 카드 ────────────────────────────────────────────────────────────
     hidden_html = ""
     for hp in hidden_picks:
         hp_name      = hp.get("name", "")
@@ -233,7 +243,7 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
         hp_price_html = ""
         if isinstance(hp_verified, dict):
             p  = hp_verified
-            cv = str(p.get("change", "") or "")   # ✅ None 방지
+            cv = str(p.get("change", "") or "")
             cc = ("price-up" if cv.startswith("+") else
                   "price-down" if cv.startswith("-") else "price-note")
             hp_price_html = (
@@ -256,7 +266,7 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
             hp_naver_url = (
                 f"https://finance.naver.com/item/main.naver?code={hp_naver_code}"
                 if hp_naver_code else
-                f"https://finance.naver.com/search/searchResult.naver?query={requests.utils.quote(hp_name)}"
+                f"https://finance.naver.com/search/searchResult.naver?query={url_quote(hp_name)}"
             )
             hp_chart_btn = f' <a href="{hp_naver_url}" target="_blank" class="chart-icon">📈 차트</a>'
 
@@ -269,7 +279,7 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
             if not rurl and "애널리스트" in rs:
                 rurl = (
                     "https://finance.naver.com/research/company_list.naver"
-                    f"?searchType=itemCode&itemName={requests.utils.quote(hp_name)}"
+                    f"?searchType=itemCode&itemName={url_quote(hp_name)}"
                 )
             link_html = (
                 f' <a href="{rurl}" target="_blank" class="source-link">🔗 바로보기</a>'
@@ -299,27 +309,27 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
             f'</div></div>\n'
         )
 
-    # ── 차트 JS ───────────────────────────────────────────────────────────
+    # ── 차트 JS ────────────────────────────────────────────────────────────────
     chart_data_js = "var chartDataMap = {};\n"
     for stock in stocks:
         b64 = stock.get("chart_base64")
         if b64:
-            c = b64.replace('\n','').replace('\r','')
+            c = b64.replace('\n', '').replace('\r', '')
             chart_data_js += f'chartDataMap["{stock.get("rank","")}"] = "data:image/png;base64,{c}";\n'
     for hp in hidden_picks:
         b64 = hp.get("chart_base64")
         if b64:
-            c = b64.replace('\n','').replace('\r','')
+            c = b64.replace('\n', '').replace('\r', '')
             chart_data_js += f'chartDataMap["hp_{hp.get("rank","")}"] = "data:image/png;base64,{c}";\n'
 
-    # ── 아카이브 링크 ─────────────────────────────────────────────────────
+    # ── 아카이브 링크 ──────────────────────────────────────────────────────────
     archive_links = ""
     try:
         archive_dir = "docs/archive"
         if os.path.exists(archive_dir):
             html_files = sorted(
                 [f for f in os.listdir(archive_dir) if f.endswith(".html")],
-                reverse=True
+                reverse=True,
             )
             repo_owner = gh_repo.split("/")[0] if gh_repo and "/" in gh_repo else ""
             repo_name  = gh_repo.split("/")[1] if gh_repo and "/" in gh_repo else ""
@@ -334,7 +344,7 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
     except Exception as e:
         print(f"  [아카이브] 오류: {e}")
 
-    # ── CSS ───────────────────────────────────────────────────────────────
+    # ── CSS ────────────────────────────────────────────────────────────────────
     css = """
 * { margin:0; padding:0; box-sizing:border-box; }
 body { font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
@@ -430,7 +440,7 @@ body { font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Segoe UI',sans
                            color:#fff; font-size:2em; cursor:pointer; }
 """
 
-    # ── HTML 조립 ─────────────────────────────────────────────────────────
+    # ── HTML 조립 ──────────────────────────────────────────────────────────────
     html = (
         '<!DOCTYPE html>\n<html lang="ko">\n<head>\n'
         '<meta charset="UTF-8">\n'
