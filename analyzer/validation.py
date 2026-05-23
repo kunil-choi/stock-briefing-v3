@@ -82,7 +82,9 @@ def _listify(value: Any) -> List[Any]:
 def _normalize_reason(reason: Any) -> dict:
     if isinstance(reason, dict):
         return {
-            "source_type": str(reason.get("source_type") or reason.get("section") or "").strip(),
+            "source_type": str(
+                reason.get("source_type") or reason.get("section") or ""
+            ).strip(),
             "source_name": str(
                 reason.get("source_name") or reason.get("channel") or
                 reason.get("firm") or ""
@@ -91,7 +93,9 @@ def _normalize_reason(reason: Any) -> dict:
                 reason.get("detail") or reason.get("summary") or
                 reason.get("reason") or ""
             ).strip(),
-            "source_url": str(reason.get("source_url") or reason.get("url") or "").strip(),
+            "source_url": str(
+                reason.get("source_url") or reason.get("url") or ""
+            ).strip(),
         }
     text = str(reason).strip()
     if not text:
@@ -111,13 +115,9 @@ def _normalize_reasons(stock: dict):
 # ── 원본 데이터 정규화 ────────────────────────────────────────────────────────
 
 def _normalize_all_data(all_data) -> list:
-    """
-    all_data 가 V3 flat list 이면 그대로 반환.
-    (V2 호환 dict 구조 분기는 dead code이므로 제거)
-    """
+    """V3 flat list 그대로 반환. dict 가 전달된 경우 빈 리스트."""
     if isinstance(all_data, list):
         return all_data
-    # 예외적으로 dict가 전달된 경우 빈 리스트 반환
     return []
 
 
@@ -161,9 +161,9 @@ def _cached_verify_factory(stock_map: dict | None):
         if stock_map and stock_name in stock_map:
             return str(stock_map[stock_name]).zfill(6)
         if stock_map:
-            name_clean  = stock_name.replace(" ", "")
-            best_match  = None
-            best_len    = 9999
+            name_clean = stock_name.replace(" ", "")
+            best_match = None
+            best_len   = 9999
             for key, code in stock_map.items():
                 key_clean = str(key).replace(" ", "")
                 if name_clean in key_clean or key_clean in name_clean:
@@ -224,7 +224,7 @@ def validate_stocks(data: dict, api_key: str, all_data=None, stock_map=None) -> 
         source_pool = {}
         for item in all_data:
             st   = item.get("source_type", "기타")
-            # BUG-NEW-3 / BUG-11 수정: summary, transcript, stock_name 모두 포함
+            # BUG-NEW-3: summary, transcript, stock_name 모두 포함
             text = " ".join([
                 item.get("title",      ""),
                 item.get("summary",    ""),
@@ -378,8 +378,8 @@ def validate_stocks(data: dict, api_key: str, all_data=None, stock_map=None) -> 
             "- 오류가 없으면 원본 JSON을 그대로 반환하세요\n"
             "- 종목을 삭제하지 마세요. 내용만 교정하세요\n"
             "- source_url, naver_code, code, verified_price, chart_base64, "
-            "rank, total_count, overlap_count 는 절대 변경하지 마세요\n"
-            "- 반드시 JSON만 반환하세요"
+            "rank, total_count, overlap_count, market_summary 는 절대 변경하지 마세요\n"
+            "- 반드시 JSON만 반환하세요 (```json 블록으로 감싸세요)"
         )
 
         print("  [API] 팩트체크 Claude 호출...")
@@ -389,12 +389,11 @@ def validate_stocks(data: dict, api_key: str, all_data=None, stock_map=None) -> 
             print("[검증-C] API 응답 없음 → 원본 유지")
             return data
 
-        json_match = re.search(r"\{[\s\S]*\}", fc_result)
-        if not json_match:
+        # BUG-H4 수정: greedy regex 대신 _try_parse_json 방식으로 통일
+        corrected = _try_parse_json_local(fc_result)
+        if not corrected:
             print("[검증-C] JSON 파싱 실패 → 원본 유지")
             return data
-
-        corrected = json.loads(json_match.group())
 
         for key in ["stocks", "hidden_picks"]:
             orig_list = data.get(key, [])
@@ -428,9 +427,8 @@ def validate_stocks(data: dict, api_key: str, all_data=None, stock_map=None) -> 
             if corr_list:
                 data[key] = corr_list
 
-        # str 타입으로 체크 후 반영
-        if isinstance(corrected.get("market_summary"), str) and corrected["market_summary"]:
-            data["market_summary"] = corrected["market_summary"]
+        # BUG-C1 수정: market_summary 는 보호 필드 — 팩트체크 후 덮어쓰기 금지
+        # (investment_strategy 만 교정 허용)
         if isinstance(corrected.get("investment_strategy"), str) and corrected["investment_strategy"]:
             data["investment_strategy"] = corrected["investment_strategy"]
 
@@ -444,3 +442,39 @@ def validate_stocks(data: dict, api_key: str, all_data=None, stock_map=None) -> 
     print(f"[검증 완료] 총 {total}개 종목")
     print("=" * 60)
     return data
+
+
+def _try_parse_json_local(text: str):
+    """
+    BUG-H4 수정: validation.py 내부용 JSON 파싱 헬퍼.
+    greedy regex 대신 단계적 파싱으로 교체.
+    (ai_analyzer._try_parse_json 와 동일 로직 — 순환 임포트 방지를 위해 로컬 정의)
+    """
+    import re as _re, json as _json
+
+    match = _re.search(r'```json\s*([\s\S]*?)```', text)
+    if match:
+        candidate = match.group(1).strip()
+    else:
+        start = text.find('{')
+        end   = text.rfind('}')
+        if start == -1 or end == -1:
+            return None
+        candidate = text[start:end + 1]
+
+    cleaners = [
+        lambda s: s,
+        lambda s: s.replace('\n', ' ').replace('\r', ''),
+        lambda s: _re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', s),
+        lambda s: _re.sub(r',\s*([}\]])', r'\1', s),
+    ]
+    for attempt, cleaner in enumerate(cleaners, 1):
+        try:
+            result = _json.loads(cleaner(candidate))
+            if attempt > 1:
+                print(f"  [JSON-C] {attempt}단계 복구 성공")
+            return result
+        except _json.JSONDecodeError:
+            continue
+
+    return None
