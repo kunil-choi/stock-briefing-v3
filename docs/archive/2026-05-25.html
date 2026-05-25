@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 주식 브리핑 - 2026-05-25</title>
+<style>
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+       background:#0a0a14; color:#e0e0e0; line-height:1.6; }
+.container { max-width:860px; margin:0 auto; padding:20px; }
+.header { text-align:center; padding:30px 0; border-bottom:1px solid #1e1e2e; margin-bottom:30px; }
+.header h1 { font-size:1.8em; color:#fff; margin-bottom:8px; }
+.header .date { color:#888; font-size:.95em; }
+.header .desc { color:#aaa; font-size:.85em; margin-top:8px; }
+.section { margin-bottom:35px; }
+.section-title { font-size:1.3em; color:#fff; margin-bottom:15px;
+                 padding-left:12px; border-left:3px solid #667eea; }
+.ind-row { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px; }
+.ind-badge { display:flex; flex-direction:column; align-items:center;
+             padding:10px 16px; border-radius:12px; min-width:90px; border:1px solid transparent; }
+.ind-call    { background:#ff6b6b18; border-color:#ff6b6b50; }
+.ind-put     { background:#339af018; border-color:#339af050; }
+.ind-neutral { background:#ffd43b18; border-color:#ffd43b50; }
+.ind-label { font-size:.72em; color:#888; margin-bottom:4px; }
+.ind-value { font-size:1.05em; font-weight:700; color:#fff; }
+.ind-call .ind-value { color:#ff6b6b; }
+.ind-put  .ind-value { color:#339af0; }
+.ind-pct { font-size:.78em; margin-top:2px; }
+.ind-call .ind-pct    { color:#ff6b6b; }
+.ind-put  .ind-pct    { color:#339af0; }
+.ind-neutral .ind-pct { color:#ffd43b; }
+.summary-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+@media(max-width:600px){ .summary-grid{ grid-template-columns:1fr; } }
+.summary-block { background:#141420; border-radius:12px; padding:18px; border:1px solid #1e1e2e; }
+.summary-subtitle { color:#667eea; font-size:1em; margin-bottom:8px; }
+.summary-text { color:#ccc; font-size:.88em; line-height:1.7; }
+.sector-badge { display:inline-block; background:linear-gradient(135deg,#667eea20,#764ba220);
+                color:#a8b4ff; padding:6px 14px; border-radius:20px;
+                margin:4px; font-size:.85em; border:1px solid #667eea40; }
+.stock-card,.hidden-pick-card { background:#141420; border-radius:12px;
+    padding:20px; margin-bottom:16px; border:1px solid #1e1e2e; transition:border-color .3s; }
+.stock-card:hover,.hidden-pick-card:hover { border-color:#667eea60; }
+.hidden-pick-card { border-left:3px solid #ffd43b; }
+.stock-header { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+.stock-rank { background:#667eea; color:#fff; padding:2px 10px; border-radius:12px;
+              font-size:.85em; font-weight:700; }
+.stock-name { font-size:1.15em; font-weight:700; color:#fff; }
+.stock-signal { padding:3px 10px; border-radius:10px; font-size:.8em; font-weight:600; }
+.signal-positive { background:#ff6b6b20; color:#ff6b6b; border:1px solid #ff6b6b40; }
+.signal-negative { background:#339af020; color:#339af0; border:1px solid #339af040; }
+.signal-neutral  { background:#ffd43b20; color:#ffd43b; border:1px solid #ffd43b40; }
+.overlap-badge { background:#51cf6620; color:#51cf66; padding:3px 10px;
+                 border-radius:10px; font-size:.8em; border:1px solid #51cf6640; }
+.source-tags { margin-bottom:12px; }
+.source-tag { display:inline-block; background:#1e1e2e; color:#888;
+              padding:3px 8px; border-radius:6px; font-size:.75em; margin:2px; }
+.price-box { margin-bottom:12px; padding:10px; background:#1a1a2e; border-radius:8px; }
+.current-price { font-size:1.3em; font-weight:700; color:#fff; margin-right:10px; }
+.price-up   { color:#ff6b6b; font-weight:600; }
+.price-down { color:#339af0; font-weight:600; }
+.price-note { color:#888; font-size:.85em; }
+.chart-icon { cursor:pointer; color:#667eea; font-size:.85em;
+              padding:3px 8px; border-radius:6px; background:#667eea15;
+              border:1px solid #667eea30; margin-left:4px;
+              white-space:nowrap; text-decoration:none; display:inline-block; }
+.chart-icon:hover { background:#667eea30; }
+.info-block { margin-bottom:12px; }
+.info-block h4 { color:#a8b4ff; font-size:.9em; margin-bottom:4px;
+                 display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.info-block p { color:#bbb; font-size:.88em; }
+.reasons-section { margin-top:12px; }
+.reasons-section h4 { color:#a8b4ff; font-size:.9em; margin-bottom:8px; }
+.reason-item { background:#1a1a2e; border-radius:8px; padding:10px; margin-bottom:6px; }
+.reason-header { display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap; }
+.reason-source { color:#667eea; font-size:.82em; font-weight:600; }
+.source-link { color:#51cf66; font-size:.78em; text-decoration:none; }
+.source-link:hover { text-decoration:underline; }
+.reason-detail { color:#aaa; font-size:.85em; }
+.strategy-block { background:linear-gradient(135deg,#141420,#1a1a2e);
+                  border:1px solid #667eea30; border-radius:12px; padding:20px; }
+.strategy-block p { color:#ccc; font-size:.92em; line-height:1.8; }
+.disclaimer { text-align:center; color:#666; font-size:.78em;
+              margin-top:30px; padding:15px; border-top:1px solid #1e1e2e; }
+.archive-section { margin-top:20px; }
+.archive-link { display:inline-block; color:#667eea; text-decoration:none;
+                padding:4px 10px; margin:3px; border:1px solid #667eea30;
+                border-radius:6px; font-size:.82em; }
+.archive-link:hover { background:#667eea20; }
+.chart-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+               background:rgba(0,0,0,.85); z-index:1000;
+               justify-content:center; align-items:center; }
+.chart-modal img { max-width:95%; max-height:80%; border-radius:8px; }
+.chart-modal .close-btn { position:absolute; top:20px; right:30px;
+                           color:#fff; font-size:2em; cursor:pointer; }
+
+/* ── 섹션2: 경제방송TV ── */
+.sec2-card { background:#141420; border-radius:10px; padding:14px;
+             margin-bottom:10px; border:1px solid #1e1e2e;
+             border-left:3px solid #ffa94d; }
+.sec2-card:hover { border-color:#ffa94d80; }
+.sec2-header { display:flex; align-items:center; gap:8px;
+               margin-bottom:6px; flex-wrap:wrap; }
+.sec2-channel { background:#ffa94d20; color:#ffa94d; padding:2px 8px;
+                border-radius:8px; font-size:.78em; font-weight:700; }
+.sec2-date { color:#666; font-size:.75em; }
+.sec2-title { color:#ddd; font-size:.9em; font-weight:600; margin-bottom:4px; }
+.sec2-summary { color:#999; font-size:.82em; line-height:1.6; }
+
+/* ── 섹션3: 애널리스트 리포트 ── */
+.sec3-group { margin-bottom:20px; }
+.sec3-subtitle { color:#a8b4ff; font-size:.95em; margin-bottom:10px;
+                 padding-left:10px; border-left:2px solid #667eea; }
+.report-card { background:#141420; border-radius:10px; padding:12px;
+               margin-bottom:8px; border:1px solid #1e1e2e;
+               border-left:3px solid #51cf66; }
+.report-card:hover { border-color:#51cf6680; }
+.report-header { display:flex; align-items:center; gap:8px;
+                 margin-bottom:4px; flex-wrap:wrap; }
+.report-stock { font-weight:700; color:#fff; font-size:.92em; }
+.report-broker { color:#667eea; font-size:.78em;
+                 background:#667eea15; padding:2px 8px; border-radius:6px; }
+.report-title { color:#bbb; font-size:.85em; margin-bottom:2px; }
+.report-date { color:#666; font-size:.75em; }
+.new-cov-badge { background:#ffd43b20; color:#ffd43b; padding:2px 8px;
+                 border-radius:6px; font-size:.75em; font-weight:700;
+                 border:1px solid #ffd43b40; margin-left:4px; }
+
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>📊 AI 주식 브리핑</h1>
+    <div class="date">2026-05-25 07:00 기준</div>
+    <div class="desc">최근 뉴스·경제방송·유튜브·증권사 보고서에서 공통 언급된 종목 브리핑</div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">📡 시장 지표</h2>
+    <div class="ind-row"><div class="ind-badge ind-call"><span class="ind-label">야간선물</span><span class="ind-value">1,228.15</span><span class="ind-pct">▲ 0.01%</span></div><div class="ind-badge ind-call"><span class="ind-label">S&P500</span><span class="ind-value">7,473.47</span><span class="ind-pct">▲ 0.37%</span></div><div class="ind-badge ind-call"><span class="ind-label">나스닥</span><span class="ind-value">26,343.97</span><span class="ind-pct">▲ 0.19%</span></div><div class="ind-badge ind-call"><span class="ind-label">다우존스</span><span class="ind-value">50,579.70</span><span class="ind-pct">▲ 0.58%</span></div><div class="ind-badge ind-call"><span class="ind-label">달러/원</span><span class="ind-value">1,519.26</span><span class="ind-pct">▲ 0.76%</span></div><div class="ind-badge ind-call"><span class="ind-label">코스피</span><span class="ind-value">7,847.71</span><span class="ind-pct">▲ 0.41%</span></div><div class="ind-badge ind-call"><span class="ind-label">코스닥</span><span class="ind-value">1,161.13</span><span class="ind-pct">▲ 4.99%</span></div></div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">🌍 시장 요약</h2>
+    <div class="summary-grid">
+<div class="summary-block"><h3 class="summary-subtitle">🌙 1) 야간선물 시장 동향</h3><p class="summary-text">코스피200 야간선물은 1228.15에 거래를 마치며 전일 대비 0.01% 상승하는 모습을 보였습니다. 상승폭은 미미했지만 플러스 영역을 유지하며 콜 방향성을 나타냈습니다. 미국 증시가 3대 지수 모두 상승 마감한 영향으로 안정적인 흐름을 이어갔으나, 달러/원 환율이 1519.26원으로 0.76% 급등하며 1500원대 '뉴노멀'이 굳어지는 모습은 부담 요인입니다. 야간선물의 보합 수준 마감은 투자자들의 관망세가 지속되고 있음을 시사합니다.</p></div>
+<div class="summary-block"><h3 class="summary-subtitle">🇺🇸 2) 미국 증시 마감 요약</h3><p class="summary-text">전날 미국 증시는 일제히 상승 마감했습니다. S&P500 지수는 0.37% 오른 7473.47에, 나스닥 지수는 0.19% 상승한 26343.97에 거래를 마쳤습니다. 다우존스 지수는 0.58% 올라 50579.7을 기록하며 3대 지수 중 가장 큰 상승폭을 보였습니다. 경제지표에 대한 우려가 완화되며 투자심리가 회복된 것으로 분석됩니다. 다만 달러화 강세로 원/달러 환율이 1519.26원까지 상승하며 국내 증시에는 변동성 확대 요인으로 작용할 전망입니다.</p></div>
+<div class="summary-block"><h3 class="summary-subtitle">🇰🇷 3) 전일 국내 증시 흐름</h3><p class="summary-text">전일 국내 증시는 강한 상승세를 나타냈습니다. 코스피 지수는 0.41% 오른 7847.71에 마감했으며, 코스닥 지수는 4.99%나 급등하며 1161.13을 기록했습니다. 특히 코스닥의 5% 가까운 상승은 중소형주와 기술주에 대한 매수세가 집중된 결과로 풀이됩니다. 정부가 청년 자산형성 지원과 AI 보안 규제 완화 등 시장 친화적 정책을 내놓으면서 투자심리가 개선됐습니다. K자형 성장 우려에도 불구하고 시장은 긍정적으로 반응했습니다.</p></div>
+<div class="summary-block"><h3 class="summary-subtitle">📊 4) 오늘 국내 증시 예상 흐름</h3><p class="summary-text">오늘 국내 증시는 혼조세 속 제한적 상승이 예상됩니다. 미국 증시의 상승 마감과 야간선물의 플러스 흐름은 긍정적이나, 1500원대로 고착화되는 환율이 부담 요인입니다. 김용범 부총리는 고금리·고물가·고환율 '3고' 상황을 성장 위한 마찰음이라 평가했지만, 시장에서는 수출기업 실적 개선 기대와 수입 물가 부담이 교차하고 있습니다. 국민성장펀드 2차 판매 기대감과 AI 규제 완화 등 정책 호재가 지지선 역할을 할 것으로 보입니다.</p></div>
+<div class="summary-block"><h3 class="summary-subtitle">🔥 5) 주요 섹터 포커스</h3><p class="summary-text">금융 섹터는 엇갈린 이슈에 주목해야 합니다. 스타벅스 불매운동 확산으로 제휴카드를 운영하는 카드사들이 타격을 받을 수 있으나, 우리은행이 잠실 VIP 전용 점포를 오픈하는 등 자산가 대상 서비스는 확대되고 있습니다. 외식업 관련주는 플랫폼 수수료와 배달료가 연 1300만원에 달해 수익성 악화 우려가 큽니다. AI 보안 관련주는 당국의 망분리 규제 완화로 수혜가 예상되며, 자동차보험주는 보험료 인상 가능성에 주가 변동성이 커질 전망입니다.</p></div>
+</div>
+
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">🔥 주목 섹터</h2>
+    
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">🎯 종합 분석 · 관심 종목</h2>
+    <p style="color:#888;font-size:.82em;margin-bottom:12px">섹션 1~3 교차 분석 (2개 이상 채널 공통 언급)</p>
+    
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">💰 AI 투자 전략</h2>
+    <div class="strategy-block">
+      <p>분석할 종목이 없습니다.</p>
+    </div>
+  </div>
+
+  <div class="section archive-section">
+    <h2 class="section-title">📅 지난 브리핑</h2>
+    <a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-24.html" class="archive-link">2026-05-24</a>
+<a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-23.html" class="archive-link">2026-05-23</a>
+<a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-22.html" class="archive-link">2026-05-22</a>
+
+  </div>
+
+  <div class="disclaimer">
+    ⚠️ 본 브리핑은 AI가 자동 생성한 참고 자료이며, 투자 권유가 아닙니다.<br>
+    투자 판단의 책임은 투자자 본인에게 있습니다.
+  </div>
+</div>
+
+<div class="chart-modal" id="chartModal" onclick="closeChart()">
+  <span class="close-btn" onclick="closeChart()">&times;</span>
+  <img id="chartImg" src="" alt="차트">
+</div>
+
+<script>
+var chartDataMap = {};
+
+function openChartWindow(n,k){var s=chartDataMap[k];if(s){document.getElementById("chartImg").src=s;document.getElementById("chartModal").style.display="flex";}}
+function closeChart(){document.getElementById("chartModal").style.display="none";}
+document.addEventListener("keydown",function(e){if(e.key==="Escape")closeChart();});
+</script>
+</body>
+</html>
