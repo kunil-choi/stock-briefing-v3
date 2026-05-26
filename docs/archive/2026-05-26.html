@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 주식 브리핑 - 2026-05-26</title>
+<style>
+
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+       background:#0a0a14; color:#e0e0e0; line-height:1.6; }
+.container { max-width:860px; margin:0 auto; padding:20px; }
+.header { text-align:center; padding:30px 0; border-bottom:1px solid #1e1e2e; margin-bottom:30px; }
+.header h1 { font-size:1.8em; color:#fff; margin-bottom:8px; }
+.header .date { color:#888; font-size:.95em; }
+.header .desc { color:#aaa; font-size:.85em; margin-top:8px; }
+.section { margin-bottom:35px; }
+.section-title { font-size:1.3em; color:#fff; margin-bottom:15px;
+                 padding-left:12px; border-left:3px solid #667eea; }
+.ind-row { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px; }
+.ind-badge { display:flex; flex-direction:column; align-items:center;
+             padding:10px 16px; border-radius:12px; min-width:90px; border:1px solid transparent; }
+.ind-call    { background:#ff6b6b18; border-color:#ff6b6b50; }
+.ind-put     { background:#339af018; border-color:#339af050; }
+.ind-neutral { background:#ffd43b18; border-color:#ffd43b50; }
+.ind-label { font-size:.72em; color:#888; margin-bottom:4px; }
+.ind-value { font-size:1.05em; font-weight:700; color:#fff; }
+.ind-call .ind-value { color:#ff6b6b; }
+.ind-put  .ind-value { color:#339af0; }
+.ind-pct { font-size:.78em; margin-top:2px; }
+.ind-call .ind-pct    { color:#ff6b6b; }
+.ind-put  .ind-pct    { color:#339af0; }
+.ind-neutral .ind-pct { color:#ffd43b; }
+.summary-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+@media(max-width:600px){ .summary-grid{ grid-template-columns:1fr; } }
+.summary-block { background:#141420; border-radius:12px; padding:18px; border:1px solid #1e1e2e; }
+.summary-subtitle { color:#667eea; font-size:1em; margin-bottom:8px; }
+.summary-text { color:#ccc; font-size:.88em; line-height:1.7; }
+.sector-badge { display:inline-block; background:linear-gradient(135deg,#667eea20,#764ba220);
+                color:#a8b4ff; padding:6px 14px; border-radius:20px;
+                margin:4px; font-size:.85em; border:1px solid #667eea40; }
+.stock-card,.hidden-pick-card { background:#141420; border-radius:12px;
+    padding:20px; margin-bottom:16px; border:1px solid #1e1e2e; transition:border-color .3s; }
+.stock-card:hover,.hidden-pick-card:hover { border-color:#667eea60; }
+.hidden-pick-card { border-left:3px solid #ffd43b; }
+.stock-header { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
+.stock-rank { background:#667eea; color:#fff; padding:2px 10px; border-radius:12px;
+              font-size:.85em; font-weight:700; }
+.stock-name { font-size:1.15em; font-weight:700; color:#fff; }
+.stock-signal { padding:3px 10px; border-radius:10px; font-size:.8em; font-weight:600; }
+.signal-positive { background:#ff6b6b20; color:#ff6b6b; border:1px solid #ff6b6b40; }
+.signal-negative { background:#339af020; color:#339af0; border:1px solid #339af040; }
+.signal-neutral  { background:#ffd43b20; color:#ffd43b; border:1px solid #ffd43b40; }
+.overlap-badge { background:#51cf6620; color:#51cf66; padding:3px 10px;
+                 border-radius:10px; font-size:.8em; border:1px solid #51cf6640; }
+.source-tags { margin-bottom:12px; }
+.source-tag { display:inline-block; background:#1e1e2e; color:#888;
+              padding:3px 8px; border-radius:6px; font-size:.75em; margin:2px; }
+.price-box { margin-bottom:12px; padding:10px; background:#1a1a2e; border-radius:8px; }
+.current-price { font-size:1.3em; font-weight:700; color:#fff; margin-right:10px; }
+.price-up   { color:#ff6b6b; font-weight:600; }
+.price-down { color:#339af0; font-weight:600; }
+.price-note { color:#888; font-size:.85em; }
+.chart-icon { cursor:pointer; color:#667eea; font-size:.85em;
+              padding:3px 8px; border-radius:6px; background:#667eea15;
+              border:1px solid #667eea30; margin-left:4px;
+              white-space:nowrap; text-decoration:none; display:inline-block; }
+.chart-icon:hover { background:#667eea30; }
+.info-block { margin-bottom:12px; }
+.info-block h4 { color:#a8b4ff; font-size:.9em; margin-bottom:4px;
+                 display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.info-block p { color:#bbb; font-size:.88em; }
+.reasons-section { margin-top:12px; }
+.reasons-section h4 { color:#a8b4ff; font-size:.9em; margin-bottom:8px; }
+.reason-item { background:#1a1a2e; border-radius:8px; padding:10px; margin-bottom:6px; }
+.reason-header { display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap; }
+.reason-source { color:#667eea; font-size:.82em; font-weight:600; }
+.source-link { color:#51cf66; font-size:.78em; text-decoration:none; }
+.source-link:hover { text-decoration:underline; }
+.reason-detail { color:#aaa; font-size:.85em; }
+.strategy-block { background:linear-gradient(135deg,#141420,#1a1a2e);
+                  border:1px solid #667eea30; border-radius:12px; padding:20px; }
+.strategy-block p { color:#ccc; font-size:.92em; line-height:1.8; }
+.disclaimer { text-align:center; color:#666; font-size:.78em;
+              margin-top:30px; padding:15px; border-top:1px solid #1e1e2e; }
+.archive-section { margin-top:20px; }
+.archive-link { display:inline-block; color:#667eea; text-decoration:none;
+                padding:4px 10px; margin:3px; border:1px solid #667eea30;
+                border-radius:6px; font-size:.82em; }
+.archive-link:hover { background:#667eea20; }
+.chart-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%;
+               background:rgba(0,0,0,.85); z-index:1000;
+               justify-content:center; align-items:center; }
+.chart-modal img { max-width:95%; max-height:80%; border-radius:8px; }
+.chart-modal .close-btn { position:absolute; top:20px; right:30px;
+                           color:#fff; font-size:2em; cursor:pointer; }
+
+/* ── 섹션2: 경제방송TV ── */
+.sec2-card { background:#141420; border-radius:10px; padding:14px;
+             margin-bottom:10px; border:1px solid #1e1e2e;
+             border-left:3px solid #ffa94d; }
+.sec2-card:hover { border-color:#ffa94d80; }
+.sec2-header { display:flex; align-items:center; gap:8px;
+               margin-bottom:6px; flex-wrap:wrap; }
+.sec2-channel { background:#ffa94d20; color:#ffa94d; padding:2px 8px;
+                border-radius:8px; font-size:.78em; font-weight:700; }
+.sec2-date { color:#666; font-size:.75em; }
+.sec2-title { color:#ddd; font-size:.9em; font-weight:600; margin-bottom:4px; }
+.sec2-summary { color:#999; font-size:.82em; line-height:1.6; }
+
+/* ── 섹션3: 애널리스트 리포트 ── */
+.sec3-group { margin-bottom:20px; }
+.sec3-subtitle { color:#a8b4ff; font-size:.95em; margin-bottom:10px;
+                 padding-left:10px; border-left:2px solid #667eea; }
+.report-card { background:#141420; border-radius:10px; padding:12px;
+               margin-bottom:8px; border:1px solid #1e1e2e;
+               border-left:3px solid #51cf66; }
+.report-card:hover { border-color:#51cf6680; }
+.report-header { display:flex; align-items:center; gap:8px;
+                 margin-bottom:4px; flex-wrap:wrap; }
+.report-stock { font-weight:700; color:#fff; font-size:.92em; }
+.report-broker { color:#667eea; font-size:.78em;
+                 background:#667eea15; padding:2px 8px; border-radius:6px; }
+.report-title { color:#bbb; font-size:.85em; margin-bottom:2px; }
+.report-date { color:#666; font-size:.75em; }
+.new-cov-badge { background:#ffd43b20; color:#ffd43b; padding:2px 8px;
+                 border-radius:6px; font-size:.75em; font-weight:700;
+                 border:1px solid #ffd43b40; margin-left:4px; }
+
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>📊 AI 주식 브리핑</h1>
+    <div class="date">2026-05-26 07:14 기준</div>
+    <div class="desc">최근 뉴스·경제방송·유튜브·증권사 보고서에서 공통 언급된 종목 브리핑</div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">📡 시장 지표</h2>
+    <div class="ind-row"><div class="ind-badge ind-call"><span class="ind-label">야간선물</span><span class="ind-value">1,228.15</span><span class="ind-pct">▲ 0.01%</span></div><div class="ind-badge ind-call"><span class="ind-label">S&P500</span><span class="ind-value">7,473.47</span><span class="ind-pct">▲ 0.37%</span></div><div class="ind-badge ind-call"><span class="ind-label">나스닥</span><span class="ind-value">26,343.97</span><span class="ind-pct">▲ 0.19%</span></div><div class="ind-badge ind-call"><span class="ind-label">다우존스</span><span class="ind-value">50,579.70</span><span class="ind-pct">▲ 0.58%</span></div><div class="ind-badge ind-put"><span class="ind-label">달러/원</span><span class="ind-value">1,517.23</span><span class="ind-pct">▼ 0.22%</span></div><div class="ind-badge ind-call"><span class="ind-label">코스피</span><span class="ind-value">7,847.71</span><span class="ind-pct">▲ 0.41%</span></div><div class="ind-badge ind-call"><span class="ind-label">코스닥</span><span class="ind-value">1,161.13</span><span class="ind-pct">▲ 4.99%</span></div></div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">🌍 시장 요약</h2>
+    <div class="summary-grid">
+<div class="summary-block"><h3 class="summary-subtitle">🌙 1) 야간선물 시장 동향</h3><p class="summary-text">코스피200 야간선물은 1228.15로 전일 대비 0.01% 소폭 상승하며 보합권에서 마감했습니다. 미국 증시가 일제히 상승 마감한 가운데 야간선물이 상승 방향성을 유지한 것은 긍정적 신호입니다. 다만 상승폭이 제한적인 점은 환율 불안 등 대내외 변수에 대한 경계감이 여전함을 보여줍니다. 달러-원 환율이 1517.23원으로 0.22% 하락하며 16년 만에 최저 수준의 원화 가치 약세를 기록한 점이 투자심리에 부담으로 작용하고 있습니다.</p></div>
+<div class="summary-block"><h3 class="summary-subtitle">🇺🇸 2) 미국 증시 마감 요약</h3><p class="summary-text">전일 미국 증시는 3대 지수가 일제히 상승했습니다. S&P500은 7473.47로 0.37%, 나스닥은 26343.97로 0.19%, 다우존스는 50579.7로 0.58% 올랐습니다. 다우지수가 상대적으로 강세를 보이며 가치주 선호 현상이 나타났습니다. 기술주 중심의 나스닥이 상대적으로 약한 상승률을 보인 가운데, 전반적으로 안정적인 상승세가 이어지며 글로벌 증시에 긍정적 모멘텀을 제공했습니다.</p></div>
+<div class="summary-block"><h3 class="summary-subtitle">🇰🇷 3) 전일 국내 증시 흐름</h3><p class="summary-text">전일 국내 증시는 코스피와 코스닥이 동반 강세를 보였습니다. 코스피는 7847.71로 0.41% 상승했으며, 코스닥은 1161.13으로 4.99% 급등하며 강한 반등세를 나타냈습니다. 특히 코스닥의 5% 가까운 상승률은 중소형주와 기술주에 대한 매수세가 집중됐음을 보여줍니다. 다만 서학개미들이 국내로 복귀하는 가운데 원화 가치가 16년 만에 최저 수준을 기록한 점은 우려스러운 대목입니다.</p></div>
+<div class="summary-block"><h3 class="summary-subtitle">📊 4) 오늘 국내 증시 예상 흐름</h3><p class="summary-text">오늘 국내 증시는 미국 증시 상승과 야간선물 강보합에 힘입어 소폭 상승 출발이 예상됩니다. 다만 고금리·고물가·고환율 3고 현상 지속과 원화 약세 심화가 상승폭을 제한할 것으로 보입니다. 당국이 삼전닉스 레버리지 상품의 과열 차단에 나서는 등 시장 안정화 조치를 강화하고 있어 단기 변동성 확대 가능성에도 주의가 필요합니다. 정부의 기본금융 정책 추진과 금융권 채무조정 확대 등 정책 모멘텀은 긍정적 요인입니다.</p></div>
+<div class="summary-block"><h3 class="summary-subtitle">🔥 5) 주요 섹터 포커스</h3><p class="summary-text">방산 섹터가 주목받고 있습니다. 잇단 전쟁으로 방산 중소기업 매출이 급증하면서 수출입은행이 방산금융에 100조원을 투입하고, 한화는 캐나다와 조선·방산·우주 분야에서 전방위 협력을 추진합니다. 바이오 섹터에서는 고령화에 따른 시니어 레지던스 사업 확대와 오토텔릭바이오의 고혈압·당뇨 복합제 임상 성공 소식이 긍정적입니다. 금융 섹터는 기본금융 도입과 AI보험사 전환 등 혁신 움직임이 활발하지만, 작년 4300억원 규모의 역대 최대 금융사고가 리스크 요인입니다.</p></div>
+</div>
+
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">🔥 주목 섹터</h2>
+    <span class="sector-badge">반도체</span>
+<span class="sector-badge">AI·온디바이스</span>
+<span class="sector-badge">단일종목 레버리지 ETF</span>
+
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">🎯 종합 분석 · 관심 종목</h2>
+    <p style="color:#888;font-size:.82em;margin-bottom:12px">섹션 1~3 교차 분석 (2개 이상 채널 공통 언급)</p>
+    <div class="stock-card"><div class="stock-header"><span class="stock-rank">#1</span><span class="stock-name">삼성전자</span><span class="stock-signal signal-neutral">중립</span><span class="overlap-badge">총 9회 언급 (뉴스 2회 / 유튜브 7회)</span></div><div class="source-tags"><span class="source-tag">뉴스</span><span class="source-tag">유튜브</span></div><div class="info-block"><h4>📋 종목 요약</h4><p>삼성전자는 대한민국 대표 반도체·전자 기업으로 메모리 반도체, 시스템LSI, 스마트폰 등 다양한 사업을 영위하고 있습니다. 최근 온디바이스 AI와 피지컬 AI 시장 진출, 챗GPT 사내 전면 도입 등 AI 전환을 가속화하고 있으며, 단일종목 레버리지 ETF 출시로 투자자 관심이 집중되고 있습니다.</p></div><div class="info-block"><h4>📈 주가 흐름 (292500원) <a href="https://finance.naver.com/item/main.naver?code=005930" target="_blank" class="chart-icon" title="네이버 금융">📈 차트</a></h4><p>1년 새 1000% 급등한 AI 관련주 대비 상대적으로 저평가 상태를 보이고 있으나, 금융당국이 삼성전자·SK하이닉스 레버리지 ETF의 변동성을 우려하며 과열 차단에 나서고 있어 단기 변동성이 예상됩니다. 반도체 업황 회복과 AI 수요 증가가 주가 상승 동력으로 작용할 전망입니다.</p></div><div class="info-block"><h4>🚀 상승 촉매</h4><p>챗GPT 사내 전면 허용으로 AI 기술 내재화 가속, 온디바이스 AI와 피지컬 AI 시장 확대로 신규 성장 동력 확보, TIGER 삼성전자 레버리지 ETF 신규 상장으로 투자 수요 증가, 반도체 업계 내 긍정적 소문 확산 등이 주가 상승 촉매로 작용하고 있습니다.</p></div><div class="info-block"><h4>⚠️ 리스크</h4><p>금융당국의 레버리지 ETF 과열 차단 조치로 단기 변동성 확대 가능, 내부에서 '삼성후자'라는 불만이 제기될 정도로 경쟁사 대비 상대적 저성과 우려, AI 버블 붕괴 가능성에 대한 경계감, 글로벌 반도체 경기 둔화 시 실적 악화 리스크가 존재합니다.</p></div><div class="reasons-section"><h4>📢 채널별 언급 내용</h4><div class="reason-item"><div class="reason-header"><span class="reason-source">[뉴스] 서울경제 증권</span> <a href="https://m.sedaily.com/article/20047961" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">1년 새 1000% 급등한 종목 대비 삼성전자가 저평가 상태이며, 내부에서 '삼성후자' 불만이 나오고 있다는 부정적 언급</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[뉴스] 서울경제 증권</span> <a href="https://m.sedaily.com/article/20047672" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">금융위가 삼성전자·하이닉스 레버리지 ETF 변동성에 대해 유의 경고를 발표하며 과열 우려 표명</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 815머니톡</span> <a href="https://www.youtube.com/watch?v=jXbAfC34RgE" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">삼성전자가 챗GPT 사내 사용을 전면 허용 추진한다는 긍정적 AI 전환 소식 전달</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 815머니톡</span> <a href="https://www.youtube.com/watch?v=ENcCtW29LEA" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">온디바이스 AI와 피지컬 AI 시장 확대로 삼성전자의 사업 영역이 크게 확장될 것이라는 긍정적 전망</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 815머니톡</span> <a href="https://www.youtube.com/watch?v=bOgfyMwgrY0" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">AI 버블 이제 시작이지만 붕괴 직전 탈출 신호를 경계해야 한다는 중립적 투자 의견 제시</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 신사임당</span> <a href="https://www.youtube.com/watch?v=-OFx1cZ7S94" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">반도체 업계에 퍼진 소문으로 삼성전자가 조만간 중요한 이벤트를 앞두고 있다는 긍정적 기대감 표현</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 힐링여행자</span> <a href="https://www.youtube.com/watch?v=09S1WWJjpVg" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">TIGER 삼성전자 단일종목 레버리지 ETF 신규 상장으로 투자 기회 확대되나 위험성도 함께 언급</p></div></div></div>
+
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">💎 히든픽</h2>
+    <div class="hidden-pick-card"><div class="stock-header"><span class="stock-rank">Hidden #1</span><span class="stock-name">삼성전자</span></div><div class="price-box"><span class="current-price">292500원</span><span class="price-note">하락7000 (-2.34%)</span></div><div class="info-block"><h4>📋 기업 소개</h4><p>삼성전자는 글로벌 반도체 시장을 선도하는 대한민국 대표 기업으로, 메모리 반도체(DRAM, NAND)에서 세계 1위 점유율을 보유하고 있습니다. 최근 온디바이스 AI와 피지컬 AI 기술 개발에 박차를 가하며 차세대 성장 동력을 확보하고 있으며, 챗GPT 사내 전면 도입으로 AI 기술 내재화를 가속화하고 있습니다. 단일종목 레버리지 ETF 출시로 개인투자자 접근성이 대폭 개선되었습니다.</p></div><div class="info-block"><h4>🚀 주목 이유 <a href="https://finance.naver.com/item/main.naver?code=005930" target="_blank" class="chart-icon">📈 차트</a></h4><p>챗GPT 사내 전면 허용으로 AI 기술 경쟁력 강화, 온디바이스 AI 시장 선점으로 스마트폰·가전 사업 시너지 창출, 반도체 업계 내 긍정적 소문 확산, TIGER 레버리지 ETF 출시로 신규 투자 수요 유입 예상</p></div><div class="info-block"><h4>⚠️ 리스크</h4><p>금융당국의 레버리지 ETF 과열 차단 정책으로 단기 변동성 확대, AI 버블 붕괴 우려, 경쟁사 대비 상대적 저성과 지속 가능성, 글로벌 경기 둔화 시 반도체 수요 감소 리스크 존재</p></div><div class="reasons-section"><h4>📢 채널별 언급 내용</h4><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 815머니톡</span> <a href="https://www.youtube.com/watch?v=ENcCtW29LEA" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">온디바이스 AI와 피지컬 AI 시장 확대로 삼성전자의 사업 영역과 수익성이 크게 개선될 것이라는 긍정 전망</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 신사임당</span> <a href="https://www.youtube.com/watch?v=-OFx1cZ7S94" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">반도체 업계에 긍정적 소문이 확산되며 삼성전자가 조만간 중요한 호재를 발표할 것이라는 기대감 고조</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 815머니톡</span> <a href="https://www.youtube.com/watch?v=jXbAfC34RgE" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">삼성전자의 챗GPT 사내 전면 허용 추진은 AI 기술 내재화와 업무 효율성 향상의 중요한 전환점</p></div></div></div>
+
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">💰 AI 투자 전략</h2>
+    <div class="strategy-block">
+      <p>현재 시장은 AI 기술 전환과 반도체 업황 회복 기대감이 공존하는 상황입니다. 삼성전자는 온디바이스 AI와 피지컬 AI 시장 진출, 챗GPT 사내 도입 등 AI 기술 내재화를 적극 추진하며 중장기 성장 동력을 확보하고 있습니다. 단일종목 레버리지 ETF 출시로 투자 접근성이 개선되었으나, 금융당국의 과열 차단 조치로 단기 변동성이 예상되므로 분할 매수 전략이 유효합니다. 반도체 업계 내 긍정적 소문과 AI 시장 확대 기대감을 고려할 때, 현재 상대적 저평가 구간에서 중장기 관점의 점진적 비중 확대가 권장됩니다. 다만 AI 버블 붕괴 가능성과 글로벌 경기 둔화 리스크에 대비해 손절 라인을 설정하고, 레버리지 상품 투자 시 변동성 관리에 각별한 주의가 필요합니다. 핵심은 AI 기술 전환이라는 장기 트렌드에 집중하되, 단기 과열 국면에서는 신중한 접근이 필요합니다.</p>
+    </div>
+  </div>
+
+  <div class="section archive-section">
+    <h2 class="section-title">📅 지난 브리핑</h2>
+    <a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-25.html" class="archive-link">2026-05-25</a>
+<a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-24.html" class="archive-link">2026-05-24</a>
+<a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-23.html" class="archive-link">2026-05-23</a>
+<a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-22.html" class="archive-link">2026-05-22</a>
+
+  </div>
+
+  <div class="disclaimer">
+    ⚠️ 본 브리핑은 AI가 자동 생성한 참고 자료이며, 투자 권유가 아닙니다.<br>
+    투자 판단의 책임은 투자자 본인에게 있습니다.
+  </div>
+</div>
+
+<div class="chart-modal" id="chartModal" onclick="closeChart()">
+  <span class="close-btn" onclick="closeChart()">&times;</span>
+  <img id="chartImg" src="" alt="차트">
+</div>
+
+<script>
+var chartDataMap = {};
+
+function openChartWindow(n,k){var s=chartDataMap[k];if(s){document.getElementById("chartImg").src=s;document.getElementById("chartModal").style.display="flex";}}
+function closeChart(){document.getElementById("chartModal").style.display="none";}
+document.addEventListener("keydown",function(e){if(e.key==="Escape")closeChart();});
+</script>
+</body>
+</html>
