@@ -29,6 +29,8 @@ _NAVER_HEADERS = {
 #  1. 종목 목록 로드
 # ══════════════════════════════════════════════════════════════
 
+# naver_finance.py — load_stock_names() 함수 내부만 수정
+
 def load_stock_names() -> dict:
     cache_path = "data/stock_names_cache.json"
     today      = datetime.now(KST).strftime("%Y-%m-%d")
@@ -37,9 +39,11 @@ def load_stock_names() -> dict:
         try:
             with open(cache_path, "r", encoding="utf-8") as f:
                 cache = json.load(f)
-            if cache.get("date") == today and len(cache.get("stocks", {})) > 100:
-                print(f"  [종목목록] 캐시 사용 ({len(cache['stocks'])}개, {today})")
-                return cache["stocks"]
+            # BUG-CR-2: 키 통일 — stock_map 우선, stocks는 레거시 호환
+            stock_map_cached = cache.get("stock_map") or cache.get("stocks", {})
+            if cache.get("date") == today and len(stock_map_cached) > 100:
+                print(f"  [종목목록] 캐시 사용 ({len(stock_map_cached)}개, {today})")
+                return stock_map_cached
         except Exception:
             pass
 
@@ -55,7 +59,8 @@ def load_stock_names() -> dict:
 
     os.makedirs("data", exist_ok=True)
     with open(cache_path, "w", encoding="utf-8") as f:
-        json.dump({"date": today, "stocks": stock_map}, f, ensure_ascii=False)
+        # BUG-CR-2: stock_map 키로 통일 저장
+        json.dump({"date": today, "stock_map": stock_map}, f, ensure_ascii=False)
     print(f"  [종목목록] 총 {len(stock_map)}개 로드 완료")
     return stock_map
 
