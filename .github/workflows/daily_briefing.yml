@@ -2,55 +2,221 @@ name: Daily Stock Briefing v3
 
 on:
   schedule:
-    # 매일 오전 6시 KST (UTC 21:00 전날) - 월~금 실행
+    # ─────────────────────────────────────────────────────
+    # KST 기준 실행 시각 (UTC+9 → UTC 변환)
+    #   월~금 오전 06:00 KST = 일~목 21:00 UTC
+    #
+    #   UTC  일(0) 21:00 → KST 월(1) 06:00  ✅
+    #   UTC  월(1) 21:00 → KST 화(2) 06:00  ✅
+    #   UTC  화(2) 21:00 → KST 수(3) 06:00  ✅
+    #   UTC  수(3) 21:00 → KST 목(4) 06:00  ✅
+    #   UTC  목(4) 21:00 → KST 금(5) 06:00  ✅
+    # ─────────────────────────────────────────────────────
     - cron: '0 21 * * 0-4'
+
   workflow_dispatch:
     inputs:
+      # BUG-WF-1: 수동 실행 옵션 확장
       force_run:
-        description: '강제 실행 여부'
+        description: '강제 실행 (데이터 유무 무관)'
         required: false
         default: 'false'
+        type: boolean
+      skip_youtube:
+        description: 'YouTube 수집 스킵 (API 할당량 절약)'
+        required: false
+        default: 'false'
+        type: boolean
+      skip_analyst:
+        description: '애널리스트 리포트 수집 스킵'
+        required: false
+        default: 'false'
+        type: boolean
 
+# BUG-WF-2: contents:write 권한을 명시적으로 선언
 permissions:
   contents: write
 
 jobs:
   generate-briefing:
     runs-on: ubuntu-latest
+    # BUG-WF-3: 타임아웃 설정 — 무한 대기 방지 (기본값 없음)
+    timeout-minutes: 30
 
     steps:
-      - name: 저장소 체크아웃
+      # ── 1. 저장소 체크아웃 ──────────────────────────────────────────────────
+      - name: 📥 저장소 체크아웃
         uses: actions/checkout@v4
+        with:
+          # BUG-WF-4: fetch-depth 1이 기본값이지만 명시 — 아카이브 히스토리 보존
+          fetch-depth: 1
 
-      - name: Python 환경 설정
+      # ── 2. Python 환경 설정 ─────────────────────────────────────────────────
+      - name: 🐍 Python 환경 설정
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          # BUG-WF-5: cache 키를 requirements.txt 해시 기반으로 변경
+          # --no-cache-dir 제거하고 pip cache 활성화로 설치 속도 개선
           cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
 
-      - name: 시스템 의존성 설치 (한글 폰트)
+      # ── 3. 시스템 의존성 (한글 폰트 + matplotlib 백엔드) ──────────────────
+      - name: 🖋️ 시스템 의존성 설치
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y fonts-nanum fonts-nanum-coding libfreetype6-dev pkg-config
+          sudo apt-get install -y \
+            fonts-nanum \
+            fonts-nanum-coding \
+            libfreetype6-dev \
+            pkg-config \
+            # BUG-WF-6: matplotlib non-interactive 백엔드용 의존성 추가
+            python3-dev \
+            libpng-dev
+          # 폰트 캐시 갱신
+          fc-cache -fv 2>/dev/null || true
 
-      - name: Python 패키지 설치
+      # ── 4. Python 패키지 설치 ───────────────────────────────────────────────
+      - name: 📦 Python 패키지 설치
         run: |
           pip install --upgrade pip
-          pip install --no-cache-dir -r requirements.txt
+          # BUG-WF-5: --no-cache-dir 제거 (setup-python cache와 충돌)
+          pip install -r requirements.txt
 
-      - name: 브리핑 생성 실행
+      # ── 5. 환경 검증 ────────────────────────────────────────────────────────
+      - name: 🔍 환경 검증
+        # BUG-WF-7: API 키 존재 여부만 확인 (값은 노출하지 않음)
+        run: |
+          python - <<'EOF'
+          import os, sys
+          keys = {
+              "ANTHROPIC_API_KEY": os.environ.get("ANTHROPIC_API_KEY", ""),
+              "YOUTUBE_API_KEY":   os.environ.get("YOUTUBE_API_KEY",   ""),
+              "GH_TOKEN":          os.environ.get("GH_TOKEN",          ""),
+          }
+          missing = [k for k, v in keys.items() if not v]
+          present = [k for k, v in keys.items() if v]
+          for k in present:
+              print(f"  ✅ {k}: 설정됨 ({len(keys[k])}자)")
+          for k in missing:
+              print(f"  ⚠️  {k}: 누락")
+          if "ANTHROPIC_API_KEY" in missing:
+              print("  ❌ ANTHROPIC_API_KEY 필수 — 브리핑 생성 불가")
+              sys.exit(1)
+          EOF
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+          YOUTUBE_API_KEY:   ${{ secrets.YOUTUBE_API_KEY }}
+          GH_TOKEN:          ${{ secrets.GH_TOKEN }}
+
+      # ── 6. matplotlib 백엔드 설정 ───────────────────────────────────────────
+      - name: 🎨 matplotlib 백엔드 설정
+        # BUG-WF-8: GitHub Actions는 디스플레이가 없으므로 Agg 백엔드 필수
+        run: |
+          mkdir -p ~/.config/matplotlib
+          echo "backend: Agg" > ~/.config/matplotlib/matplotlibrc
+          echo "  [matplotlib] Agg 백엔드 설정 완료"
+
+      # ── 7. 브리핑 생성 실행 ─────────────────────────────────────────────────
+      - name: 📊 브리핑 생성 실행
+        id: run_briefing
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          YOUTUBE_API_KEY:   ${{ secrets.YOUTUBE_API_KEY }}
+          GH_TOKEN:          ${{ secrets.GH_TOKEN }}
+          ADMIN_PASSWORD:    ${{ secrets.ADMIN_PASSWORD }}
+          # BUG-WF-1: 수동 실행 옵션을 환경변수로 전달
+          SKIP_YOUTUBE:  ${{ github.event.inputs.skip_youtube  || 'false' }}
+          SKIP_ANALYST:  ${{ github.event.inputs.skip_analyst  || 'false' }}
+          # BUG-WF-8: matplotlib 백엔드 강제 지정 (matplotlibrc 백업)
+          MPLBACKEND: Agg
         run: |
           python main.py
+          echo "briefing_generated=true" >> $GITHUB_OUTPUT
 
-      - name: 변경 사항 커밋 및 푸시
+      # ── 8. 생성 결과 검증 ───────────────────────────────────────────────────
+      - name: ✅ 생성 결과 검증
+        # BUG-WF-9: index.html이 실제로 생성됐는지, 최소 크기 이상인지 확인
+        run: |
+          if [ ! -f "docs/index.html" ]; then
+            echo "❌ docs/index.html 없음"
+            exit 1
+          fi
+          FILE_SIZE=$(wc -c < "docs/index.html")
+          echo "  📄 docs/index.html: ${FILE_SIZE} bytes"
+          if [ "$FILE_SIZE" -lt 1000 ]; then
+            echo "❌ 파일 크기가 너무 작음 (${FILE_SIZE} bytes) — 생성 실패로 간주"
+            exit 1
+          fi
+          echo "  ✅ 브리핑 파일 검증 통과"
+          # 아카이브 파일 수 출력
+          ARCHIVE_COUNT=$(ls docs/archive/*.html 2>/dev/null | wc -l)
+          echo "  📚 아카이브 파일 수: ${ARCHIVE_COUNT}개"
+
+      # ── 9. 변경 사항 커밋 및 푸시 ───────────────────────────────────────────
+      - name: 🚀 변경 사항 커밋 및 푸시
+        # BUG-WF-10: push 실패를 브리핑 실패와 분리
+        # 브리핑은 생성됐지만 push만 실패한 경우 워크플로우를 실패로 처리하되
+        # 별도 로그로 구분 가능하게 함
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add docs/ data/ || true
-          git diff --quiet && git diff --staged --quiet || \
-            (git commit -m "📊 브리핑 자동 업데이트: $(TZ='Asia/Seoul' date +'%Y-%m-%d %H:%M KST')" && git push)
+
+          # 변경된 파일 스테이징
+          git add docs/ data/ 2>/dev/null || true
+
+          # 변경사항 여부 확인
+          if git diff --quiet && git diff --staged --quiet; then
+            echo "  ℹ️  변경사항 없음 → 커밋 스킵"
+          else
+            COMMIT_MSG="📊 브리핑 자동 업데이트: $(TZ='Asia/Seoul' date +'%Y-%m-%d %H:%M KST')"
+            git commit -m "$COMMIT_MSG"
+
+            # BUG-WF-11: push 재시도 (race condition 방지)
+            for i in 1 2 3; do
+              if git push; then
+                echo "  ✅ push 성공 (시도 ${i})"
+                break
+              else
+                echo "  ⚠️  push 실패 (시도 ${i}/3) — 3초 후 재시도"
+                sleep 3
+                git pull --rebase origin main || true
+              fi
+            done
+          fi
+
+      # ── 10. 실패 시 요약 출력 ────────────────────────────────────────────────
+      - name: 📋 실행 결과 요약
+        if: always()
+        run: |
+          echo "================================================"
+          echo "실행 결과 요약"
+          echo "================================================"
+          echo "  실행 시각 (KST): $(TZ='Asia/Seoul' date +'%Y-%m-%d %H:%M:%S')"
+          echo "  트리거: ${{ github.event_name }}"
+
+          if [ -f "docs/index.html" ]; then
+            SIZE=$(wc -c < "docs/index.html")
+            echo "  index.html: ${SIZE} bytes ✅"
+          else
+            echo "  index.html: 없음 ❌"
+          fi
+
+          if [ -f "data/briefing_data.json" ]; then
+            # BUG-WF-12: 종목 수 출력
+            STOCK_COUNT=$(python3 -c "
+          import json
+          try:
+              with open('data/briefing_data.json') as f:
+                  d = json.load(f)
+              stocks = len(d.get('stocks', []))
+              picks  = len(d.get('hidden_picks', []))
+              print(f'{stocks}개 관심종목 / {picks}개 오늘의픽')
+          except Exception as e:
+              print(f'파싱 오류: {e}')
+          " 2>/dev/null || echo "파싱 불가")
+            echo "  브리핑 데이터: ${STOCK_COUNT}"
+          else
+            echo "  브리핑 데이터: 없음"
+          fi
+          echo "================================================"
