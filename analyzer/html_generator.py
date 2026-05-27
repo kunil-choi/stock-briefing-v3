@@ -131,7 +131,12 @@ def _build_analyst_html(all_data: list) -> str:
 
     simultaneous  = [r for r in analyst_items if r.get("analyst_category") == "simultaneous"]
     new_coverage  = [r for r in analyst_items if r.get("analyst_category") == "new_coverage"]
-    first_mention = [r for r in analyst_items if r.get("analyst_category") == "first_in_6months"]
+# 변경:
+# BUG-AC-12: analyst_collector의 카테고리명 변경(single_broker)에 맞춰 양쪽 모두 허용
+    first_mention = [
+       r for r in analyst_items
+       if r.get("analyst_category") in ("single_broker", "first_in_6months")
+    ]
 
     def _report_card(r):
         stock     = r.get("stock_name", "")
@@ -176,7 +181,8 @@ def _build_analyst_html(all_data: list) -> str:
 
     if first_mention:
         html += '<div class="sec3-group">\n'
-        html += '<h3 class="sec3-subtitle">③ 6개월 내 첫 언급</h3>\n'
+        # 변경:
+        html += '<h3 class="sec3-subtitle">③ 단독 언급</h3>\n'
         for r in first_mention[:10]:
             html += _report_card(r)
         html += '</div>\n'
