@@ -109,14 +109,23 @@ def main():
             confirmed = [c for c in lst if isinstance(c, dict) and c.get("id")]
             print(f"  {cat}: 전체 {len(lst)}개 / 유효 ID {len(confirmed)}개")
 
-    # 시장 데이터 수집
-    print("\n[시장 데이터 수집]")
-    market_overview = _collect_safe("시장데이터", collect_market_overview)
-    if not market_overview:
-        market_overview = {}
-        print("  ⚠️ 시장 데이터 수집 실패 → 빈 dict 사용")
+# main.py 의 시장 데이터 수집 부분만 교체
 
-    all_data: list = []
+# 시장 데이터 수집
+    print("\n[시장 데이터 수집]")
+    # BUG-CR-4: collect_market_overview는 dict 반환 → _collect_safe 사용 불가
+    market_overview = {}
+    try:
+      market_overview = collect_market_overview()
+      if not isinstance(market_overview, dict):
+          print("  ⚠️ 시장 데이터가 dict 형식이 아님 → 빈 dict 사용")
+          market_overview = {}
+      else:
+          print(f"  → 시장 데이터 수집 완료 ({len(market_overview)}개 항목)")
+    except Exception as e:
+      print(f"  ⚠️ 시장 데이터 수집 실패: {e}")
+      market_overview = {}
+
 
     # ── 1. 뉴스 RSS ───────────────────────────────────────────────────────────
     print(f"\n[1/4] 뉴스 RSS 수집 중...")
