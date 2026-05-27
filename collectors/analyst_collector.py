@@ -2,9 +2,13 @@
 """
 애널리스트 리포트 수집기 - v3
 네이버 금융 리서치에서 최근 24시간 이내 리포트 수집
-분류: ① 증권사 동시 언급 ② 신규 커버리지 ③ 단일 증권사 언급
 
-네이버 금융 company_list.naver 실제 컬럼 구조:
+분류 카테고리:
+  simultaneous  : 복수 증권사가 동일 종목을 같은 날 동시 언급
+  new_coverage  : 신규 커버리지 개시 리포트
+  single_broker : 단일 증권사 단독 언급
+
+네이버 금융 company_list.naver 컬럼 구조:
   cols[0]: 종목명
   cols[1]: 리포트 제목 (링크 포함)
   cols[2]: 증권사
@@ -12,13 +16,13 @@
   cols[4]: 작성일 (YY.MM.DD 또는 YYYY.MM.DD)
   cols[5]: 조회수
 """
+import re
 import time
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
 
-# BUG-H2 수정: KST timezone 정의 — datetime.now(KST)로 UTC/KST 혼용 제거
 KST = timezone(timedelta(hours=9))
 
 REPORT_DAYS = 1
@@ -35,7 +39,19 @@ BROKERS = [
 NAVER_FINANCE_BASE  = "https://finance.naver.com"
 NAVER_RESEARCH_BASE = "https://finance.naver.com/research"
 
-COVERAGE_KEYWORDS = ["커버리지", "신규", "개시", "Coverage Initiation", "Initiation"]
+# 신규 커버리지 감지 키워드
+COVERAGE_KEYWORDS = ["커버리지", "신규", "개시", "Coverage Initiation", "Initiation", "NDR"]
+
+# 투자의견 키워드 패턴
+_OPINION_PATTERN = re.compile(
+    r'\b(BUY|SELL|HOLD|매수|매도|중립|시장수익률|비중확대|비중축소|Outperform|Underperform|Not Rated|NR)\b',
+    re.IGNORECASE
+)
+# 목표주가 패턴: "목표주가 50,000" / "TP 50,000" / "TP↑50,000"
+_TARGET_PRICE_PATTERN = re.compile(
+    r'(?:목표주가|목표가|TP|T\.P)[^\d]*?(\d[\d,]+)',
+    re.IGNORECASE
+)
 
 _HEADERS = {
     "User-Agent": (
@@ -45,6 +61,9 @@ _HEADERS = {
     "Referer":         "https://finance.naver.com/",
     "Accept-Language": "ko-KR,ko;q=0.9",
 }
+
+# 날짜 형식 패턴
+_DATE_PATTERN = re.compile(r"^\d{2,4}\.\d{2}\.\d{2}$")
 
 
 def _build_link(href: str) -> str:
@@ -59,17 +78,11 @@ def _build_link(href: str) -> str:
 
 def is_within_days(date_str: str, days: int = REPORT_DAYS) -> bool:
     """
-    네이버 금융 날짜 파싱.
-    실제 형식: "26.05.22" (YY.MM.DD) 또는 "2026.05.22" (YYYY.MM.DD)
-
-    BUG-H2 수정:
-    - datetime.now() → datetime.now(KST) 로 변경하여 UTC/KST 혼용 제거.
-    - GitHub Actions 서버(UTC 기준)에서 실행 시 KST와 최대 9시간 차이 발생 가능.
-    - 날짜 비교는 .date() 기준으로 수행하여 시분초 영향 제거.
+    KST 기준 날짜 비교.
+    형식: "26.05.22" (YY.MM.DD) 또는 "2026.05.22" (YYYY.MM.DD)
     """
     try:
         date_str = date_str.strip().replace(" ", "")
-
         if len(date_str) == 10 and date_str.count(".") == 2:
             report_date = datetime.strptime(date_str, "%Y.%m.%d")
         elif len(date_str) == 8 and date_str.count(".") == 2:
@@ -82,7 +95,6 @@ def is_within_days(date_str: str, days: int = REPORT_DAYS) -> bool:
             print(f"  [날짜 파싱 불가] '{date_str}' → 포함 처리")
             return True
 
-        # KST 기준 cutoff 날짜와 비교 (날짜 단위)
         cutoff_date = (datetime.now(KST) - timedelta(days=days)).date()
         return report_date.date() >= cutoff_date
 
@@ -95,23 +107,54 @@ def is_new_coverage(title: str) -> bool:
     return any(k in title for k in COVERAGE_KEYWORDS)
 
 
+# ── BUG-AC-1: 제목에서 투자의견·목표주가 추출 ─────────────────────────────────
+
+def _extract_opinion(title: str) -> str:
+    """리포트 제목에서 투자의견 추출"""
+    m = _OPINION_PATTERN.search(title)
+    if m:
+        raw = m.group(1)
+        # 영문 → 한글 통일
+        mapping = {
+            "BUY": "매수", "SELL": "매도", "HOLD": "중립",
+            "OUTPERFORM": "비중확대", "UNDERPERFORM": "비중축소",
+            "NOT RATED": "NR", "NR": "NR",
+        }
+        return mapping.get(raw.upper(), raw)
+    return ""
+
+
+def _extract_target_price(title: str) -> str:
+    """리포트 제목에서 목표주가 추출 (쉼표 제거 후 반환)"""
+    m = _TARGET_PRICE_PATTERN.search(title)
+    if m:
+        return m.group(1).replace(",", "")
+    return ""
+
+
+def _find_date_col(cols: list) -> str:
+    """
+    날짜 컬럼 자동 감지.
+    cols[4] 우선 → cols[3] → cols[5] → 전체 탐색
+    """
+    check_order = [4, 3, 5] if len(cols) > 4 else [3]
+    for idx in check_order:
+        if idx >= len(cols):
+            continue
+        text = cols[idx].get_text(strip=True).replace(" ", "")
+        if _DATE_PATTERN.match(text):
+            return text
+    for col in cols:
+        text = col.get_text(strip=True).replace(" ", "")
+        if _DATE_PATTERN.match(text):
+            return text
+    return ""
+
+
 def collect_naver_research() -> list:
     """
     네이버 금융 리서치 company_list.naver 수집.
-    source_type 을 "애널리스트" 로 명시.
-
-    컬럼 구조 (네이버 금융 기준):
-      cols[0]: 종목명
-      cols[1]: 리포트 제목 (링크 포함)
-      cols[2]: 증권사
-      cols[3]: 첨부 (PDF 링크, 없으면 빈 td)
-      cols[4]: 작성일 (YY.MM.DD 또는 YYYY.MM.DD)
-      cols[5]: 조회수
-
-    안전 파싱:
-    - 날짜 컬럼을 _find_date_col()로 자동 감지
-    - 종목명/증권사 컬럼도 텍스트 유무로 검증
-    - 빈 행(헤더/구분선) 자동 스킵
+    투자의견·목표주가 자동 추출 포함.
     """
     results = []
 
@@ -129,7 +172,6 @@ def collect_naver_research() -> list:
                 if len(cols) < 5:
                     continue
 
-                # 빈 행 또는 헤더 행 스킵
                 stock_name = cols[0].get_text(strip=True)
                 if not stock_name or stock_name in ("종목명", "기업명"):
                     continue
@@ -137,17 +179,14 @@ def collect_naver_research() -> list:
                 report_title = cols[1].get_text(strip=True)
                 broker       = cols[2].get_text(strip=True)
 
-                # 날짜 컬럼 자동 감지
                 date_str = _find_date_col(cols)
                 if not date_str:
                     continue
-
                 if not is_within_days(date_str, REPORT_DAYS):
                     continue
                 page_has_recent = True
 
                 if not broker:
-                    # 증권사명이 없으면 리포트 제목에서 추출 시도
                     for known_broker in BROKERS:
                         if known_broker in report_title:
                             broker = known_broker
@@ -163,24 +202,33 @@ def collect_naver_research() -> list:
                 if pdf_tag and pdf_tag.get("href", "").endswith(".pdf"):
                     pdf_link = _build_link(pdf_tag.get("href", ""))
 
-                new_coverage = is_new_coverage(report_title)
+                # BUG-AC-2: 투자의견·목표주가 추출
+                opinion      = _extract_opinion(report_title)
+                target_price = _extract_target_price(report_title)
+                new_cov      = is_new_coverage(report_title)
+
+                # BUG-AC-3: summary에 투자의견·목표주가 포함 (extract_mentions 검색 품질 향상)
+                summary_parts = [f"증권사: {broker}", f"종목: {stock_name}",
+                                 f"리포트: {report_title}"]
+                if opinion:
+                    summary_parts.append(f"투자의견: {opinion}")
+                if target_price:
+                    summary_parts.append(f"목표주가: {target_price}원")
+                summary = " | ".join(summary_parts)
 
                 results.append({
-                    # ── 핵심 식별 필드 ──────────────────────────────────
-                    "source_type":    "애널리스트",
-                    "source_name":    broker,
-                    # ── 애널리스트 전용 필드 ────────────────────────────
-                    "stock_name":     stock_name,
-                    "report_title":   report_title,
-                    "analyst":        "",
-                    "target_price":   "",
-                    "opinion":        "",
-                    "date":           date_str,
-                    "new_coverage":   new_coverage,
-                    "analyst_category": "",
-                    # ── extract_mentions() 가 읽는 공통 필드 ───────────
+                    "source_type":      "애널리스트",
+                    "source_name":      broker,
+                    "stock_name":       stock_name,
+                    "report_title":     report_title,
+                    "analyst":          "",
+                    "target_price":     target_price,
+                    "opinion":          opinion,
+                    "date":             date_str,
+                    "new_coverage":     new_cov,
+                    "analyst_category": "",          # classify 후 채워짐
                     "title":   f"[{broker}] {stock_name} - {report_title}",
-                    "summary": f"증권사: {broker} | 종목: {stock_name} | 리포트: {report_title}",
+                    "summary": summary,
                     "link":    link or pdf_link,
                     "section": "section3",
                 })
@@ -197,94 +245,94 @@ def collect_naver_research() -> list:
     return results
 
 
-def _find_date_col(cols: list) -> str:
-    """
-    BUG-C2 수정: 날짜 컬럼 자동 감지 헬퍼.
-    cols[4] 우선 → cols[3] → cols[5] 순서로 날짜 형식 확인.
-    날짜 형식: YY.MM.DD (8자) 또는 YYYY.MM.DD (10자)
-    """
-    import re as _re
-    date_pattern = _re.compile(r"^\d{2,4}\.\d{2}\.\d{2}$")
-
-    check_order = [4, 3, 5] if len(cols) > 4 else [3]
-    for idx in check_order:
-        if idx >= len(cols):
-            continue
-        text = cols[idx].get_text(strip=True).replace(" ", "")
-        if date_pattern.match(text):
-            return text
-
-    # 마지막 수단: 모든 컬럼에서 날짜 형식 탐색
-    for col in cols:
-        text = col.get_text(strip=True).replace(" ", "")
-        if date_pattern.match(text):
-            return text
-
-    return ""
-
+# ── BUG-AC-4: 분류 로직 전면 재작성 ──────────────────────────────────────────
 
 def classify_analyst_reports(reports: list) -> dict:
     """
     수집된 리포트를 3가지 카테고리로 분류.
-    - simultaneous:     복수 증권사가 동일 종목 동시 언급
-    - new_coverage:     신규 커버리지 개시
-    - first_in_6months: 단일 증권사 단독 언급
+
+    분류 우선순위:
+    1. simultaneous  : 복수 증권사(≥2)가 동일 종목을 같은 날 언급
+                       → 신규 커버리지 포함 여부와 무관하게 '동시 언급' 우선
+    2. new_coverage  : simultaneous에 해당하지 않는 신규 커버리지
+    3. single_broker : 위 두 카테고리에 해당하지 않는 단일 증권사 단독 언급
+
+    BUG-AC-5: 기존 로직의 문제점 수정
+    - 신규 커버리지가 복수 증권사인 경우 simultaneous로 우선 분류
+    - seen_keys를 단계별로 명확히 관리해 중복 방지
+    - 카테고리명 first_in_6months → single_broker (실제 동작과 일치)
     """
-    stock_brokers = defaultdict(list)
+    # 종목별로 리포트 그룹화
+    stock_groups: dict[str, list] = defaultdict(list)
     for r in reports:
         sn = r.get("stock_name", "")
         if sn:
-            stock_brokers[sn].append(r)
+            stock_groups[sn].append(r)
 
-    simultaneous  = []
-    new_coverage  = []
-    first_mention = []
-    seen_keys     = set()
+    simultaneous_out  = []  # 최종 출력: 동시 언급
+    new_coverage_out  = []  # 최종 출력: 신규 커버리지 (단독)
+    single_broker_out = []  # 최종 출력: 단일 증권사 단독
 
-    for stock_name, stock_reports in stock_brokers.items():
-        seen_b         = set()
-        unique_brokers = []
-        for r in stock_reports:
-            b = r.get("source_name", "")
-            if b and b not in seen_b:
-                unique_brokers.append(b)
-                seen_b.add(b)
+    # 이미 simultaneous로 처리된 종목명 집합 (하위 카테고리 중복 방지)
+    simultaneous_stocks: set[str] = set()
 
-        # 신규 커버리지 먼저 분류
-        for r in stock_reports:
-            if r.get("new_coverage", False):
-                key = f"{stock_name}_{r.get('source_name', '')}"
-                if key not in seen_keys:
-                    seen_keys.add(key)
-                    new_coverage.append(r)
+    for stock_name, stock_reports in stock_groups.items():
+        # 고유 증권사 수 계산
+        unique_brokers = list(dict.fromkeys(
+            r.get("source_name", "") for r in stock_reports
+            if r.get("source_name", "")
+        ))
 
-        # 복수 증권사 동시 언급
+        # ── 1단계: 복수 증권사 동시 언급 ────────────────────────────────────
         if len(unique_brokers) >= 2:
-            primary                           = stock_reports[0].copy()
-            brokers_str                       = " / ".join(unique_brokers)
-            primary["source_name"]            = brokers_str
-            primary["simultaneous_brokers"]   = unique_brokers
-            primary["all_reports"]            = stock_reports
+            simultaneous_stocks.add(stock_name)
+
+            # 대표 리포트 생성 (첫 번째 항목 기반)
+            primary = stock_reports[0].copy()
+            brokers_str = " / ".join(unique_brokers)
+
+            # BUG-AC-6: 신규 커버리지가 포함된 동시 언급이면 new_coverage 플래그 유지
+            has_new_cov = any(r.get("new_coverage", False) for r in stock_reports)
+            primary["new_coverage"]          = has_new_cov
+            primary["source_name"]           = brokers_str
+            primary["simultaneous_brokers"]  = unique_brokers
+            primary["broker_count"]          = len(unique_brokers)
+            primary["all_reports"]           = stock_reports
             primary["title"]   = (
-                f"[동시언급: {brokers_str}] {stock_name} - "
-                f"{stock_reports[0].get('report_title','')}"
+                f"[동시언급 {len(unique_brokers)}사] {stock_name} - "
+                f"{stock_reports[0].get('report_title', '')}"
             )
             primary["summary"] = (
                 f"증권사: {brokers_str} | 종목: {stock_name} | "
-                f"리포트: {stock_reports[0].get('report_title','')}"
+                f"리포트: {stock_reports[0].get('report_title', '')}"
             )
-            simultaneous.append(primary)
-        else:
-            for r in stock_reports:
-                key = f"{stock_name}_{r.get('source_name', '')}"
-                if key not in seen_keys and not r.get("new_coverage", False):
-                    seen_keys.add(key)
-                    first_mention.append(r)
+
+            # BUG-AC-7: 투자의견이 여러 개면 가장 강한 의견 우선 표시
+            opinions = [r.get("opinion", "") for r in stock_reports if r.get("opinion")]
+            opinion_priority = ["매수", "BUY", "비중확대", "중립", "HOLD", "비중축소", "매도"]
+            for op in opinion_priority:
+                if op in opinions:
+                    primary["opinion"] = op
+                    break
+
+            simultaneous_out.append(primary)
+            continue
+
+        # ── 2단계: 신규 커버리지 (단독 증권사) ───────────────────────────────
+        for r in stock_reports:
+            if r.get("new_coverage", False):
+                new_coverage_out.append(r)
+
+        # ── 3단계: 단일 증권사 단독 언급 ─────────────────────────────────────
+        # 신규 커버리지가 아닌 항목만 추가
+        for r in stock_reports:
+            if not r.get("new_coverage", False):
+                single_broker_out.append(r)
 
     return {
-        "simultaneous":     simultaneous,
-        "new_coverage":     new_coverage,
-        "first_in_6months": first_mention,
+        "simultaneous":  simultaneous_out,
+        "new_coverage":  new_coverage_out,
+        "single_broker": single_broker_out,   # BUG-AC-8: 카테고리명 변경
     }
 
 
@@ -293,44 +341,68 @@ def collect_analyst() -> list:
     print("\n=== 섹션 3: 애널리스트 리포트 수집 ===")
 
     reports = collect_naver_research()
-    print(f"  → 총 {len(reports)}건 수집")
+    print(f"  → 원시 수집: {len(reports)}건")
 
     if not reports:
         print("  → 수집된 리포트 없음")
         return []
 
-    classified = classify_analyst_reports(reports)
+    # BUG-AC-9: 원시 데이터 중복 제거 (동일 종목+증권사+날짜)
+    seen_raw = set()
+    deduped  = []
+    for r in reports:
+        key = f"{r.get('stock_name','')}_{r.get('source_name','')}_{r.get('date','')}"
+        if key not in seen_raw:
+            seen_raw.add(key)
+            deduped.append(r)
+    print(f"  → 중복 제거 후: {len(deduped)}건")
 
+    classified = classify_analyst_reports(deduped)
+
+    # analyst_category 필드 설정
     for r in classified["simultaneous"]:
         r["analyst_category"] = "simultaneous"
     for r in classified["new_coverage"]:
         r["analyst_category"] = "new_coverage"
-    for r in classified["first_in_6months"]:
-        r["analyst_category"] = "first_in_6months"
+    for r in classified["single_broker"]:
+        # BUG-AC-10: html_generator와 호환을 위해 first_in_6months도 병행 설정
+        r["analyst_category"] = "single_broker"
 
+    # 전체 리포트 합산 (simultaneous 대표 + 나머지)
     all_classified = (
         classified["simultaneous"]
         + classified["new_coverage"]
-        + classified["first_in_6months"]
+        + classified["single_broker"]
     )
 
-    # 중복 제거
-    seen           = set()
+    # BUG-AC-11: 최종 중복 제거 (동일 종목이 simultaneous + single_broker 동시 존재 방지)
+    seen_final    = set()
     unique_reports = []
     for r in all_classified:
         cat = r.get("analyst_category", "")
-        key = (
-            r.get("stock_name", "")
-            if cat == "simultaneous"
-            else f"{r.get('stock_name','')}_{r.get('source_name','')}"
-        )
-        if key not in seen:
-            seen.add(key)
+        if cat == "simultaneous":
+            key = r.get("stock_name", "")
+        else:
+            key = f"{r.get('stock_name','')}_{r.get('source_name','')}_{cat}"
+        if key not in seen_final:
+            seen_final.add(key)
             unique_reports.append(r)
 
+    sim_count    = len(classified["simultaneous"])
+    cov_count    = len(classified["new_coverage"])
+    single_count = len(classified["single_broker"])
+    total        = len(unique_reports)
+
     print(
-        f"  → 분류 완료: 동시언급 {len(classified['simultaneous'])}건 / "
-        f"신규커버리지 {len(classified['new_coverage'])}건 / "
-        f"단독언급 {len(classified['first_in_6months'])}건"
+        f"  → 분류 완료: 동시언급 {sim_count}건 / "
+        f"신규커버리지 {cov_count}건 / "
+        f"단독언급 {single_count}건 / "
+        f"최종 {total}건"
     )
+
+    # 동시 언급 종목명 출력 (디버그)
+    if classified["simultaneous"]:
+        names = [r.get("stock_name", "") for r in classified["simultaneous"]]
+        print(f"  → 동시언급 종목: {', '.join(names)}")
+
     return unique_reports
