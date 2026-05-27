@@ -357,7 +357,7 @@ def generate_html(data, channels_data=None, gh_repo="", gh_token="",
         for reason in reasons:
             rs   = reason.get("source_type", "")
             rn   = reason.get("source_name", "")
-            rd   = reason.get("reason", "") or reason.get("detail", "")
+            rd = reason.get("detail", "") or reason.get("reason", "")
             rurl = reason.get("source_url", "")
             if not rurl and "애널리스트" in rs:
                 rurl = (
