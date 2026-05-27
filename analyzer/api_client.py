@@ -6,22 +6,19 @@ import requests as req_lib
 ANTHROPIC_API_URL     = "https://api.anthropic.com/v1/messages"
 ANTHROPIC_API_VERSION = "2023-06-01"
 
-# 모델 우선순위: claude-sonnet-4-5 → claude-3-7-sonnet → 3-5-sonnet → haiku 폴백
 CLAUDE_MODELS = [
-    "claude-sonnet-4-5",            # 1순위: 최신 claude-sonnet-4-5 (사용자 지정)
-    "claude-3-7-sonnet-20250219",   # 2순위: claude-3-7
-    "claude-3-5-sonnet-20241022",   # 3순위: 안정적 고성능
-    "claude-3-5-haiku-20241022",    # 4순위: 경량 폴백
+    "claude-sonnet-4-5",
+    "claude-3-7-sonnet-20250219",
+    "claude-3-5-sonnet-20241022",
+    "claude-3-5-haiku-20241022",
 ]
 
 
-def call_claude_with_retry(api_key: str, prompt: str,
+# BUG-CR-1: 시그니처를 (prompt, api_key) 순서로 변경
+# ai_analyzer.py, validation.py 모두 이 순서로 호출하므로 여기서 통일
+def call_claude_with_retry(prompt: str, api_key: str = "",
                             max_tokens: int = 16000,
                             max_retries: int = 3) -> str:
-    """
-    Claude API 직접 호출 (requests 사용).
-    모델 순서대로 시도하고, 각 모델당 max_retries 회 재시도.
-    """
     if not api_key:
         api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if not api_key:
@@ -79,12 +76,10 @@ def call_claude_with_retry(api_key: str, prompt: str,
                 print(f"  [API] 연결 오류 ({attempt+1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     time.sleep(20)
-
             except req_lib.exceptions.Timeout:
                 print(f"  [API] 타임아웃 ({attempt+1}/{max_retries})")
                 if attempt < max_retries - 1:
                     time.sleep(15)
-
             except Exception as e:
                 print(f"  [API] 예외 ({attempt+1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
