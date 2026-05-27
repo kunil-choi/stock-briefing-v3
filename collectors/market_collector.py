@@ -1,310 +1,230 @@
 # collectors/market_collector.py
 """
-시장 데이터 수집기 - v3
-야간선물 / 미국증시 / 한국증시
+시장 지표 수집기
+
+수정 이력:
+- FIX-MKT-1: 반환 딕셔너리 키를 html_generator._INDICATOR_DEFS와 일치하도록 통일
+              각 지표 dict에 value/change_pct/direction 키 보장
+- FIX-MKT-2: FinanceDataReader 의존 제거, yfinance 우선 / 네이버 폴백
 """
-import time
-import requests
+
+import re
 from datetime import datetime, timedelta, timezone
-from bs4 import BeautifulSoup
 
 KST = timezone(timedelta(hours=9))
 
-_HEADERS = {
+# 선택적 임포트 (설치 여부에 따라)
+try:
+    import yfinance as yf
+    _YF_AVAILABLE = True
+except ImportError:
+    _YF_AVAILABLE = False
+
+try:
+    import requests
+    _REQUESTS_AVAILABLE = True
+except ImportError:
+    _REQUESTS_AVAILABLE = False
+
+
+# ── 내부 헬퍼 ────────────────────────────────────────────────────────────────
+
+def _make_indicator(value, change_pct, direction: str = "") -> dict:
+    """
+    html_generator._indicator_badge()가 읽을 수 있는 표준 구조 반환.
+    direction이 없으면 change_pct 부호에서 자동 결정.
+    """
+    try:
+        pct_num = float(change_pct) if change_pct is not None else 0.0
+    except (TypeError, ValueError):
+        pct_num = 0.0
+    if not direction:
+        direction = "up" if pct_num > 0 else "down" if pct_num < 0 else "flat"
+    return {
+        "value":      value,
+        "change_pct": pct_num,
+        "direction":  direction,
+    }
+
+
+def _pct(current, previous) -> float:
+    """전일 대비 변화율(%) 계산."""
+    try:
+        c = float(current)
+        p = float(previous)
+        if p == 0:
+            return 0.0
+        return round((c - p) / p * 100, 2)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return 0.0
+
+
+# ── yfinance 기반 조회 ────────────────────────────────────────────────────────
+
+def _fetch_yf(ticker: str):
+    """yfinance로 단일 티커 정보 조회. (close, change_pct) 반환."""
+    if not _YF_AVAILABLE:
+        return None, None
+    try:
+        tk   = yf.Ticker(ticker)
+        hist = tk.history(period="5d")
+        if hist.empty or len(hist) < 2:
+            return None, None
+        close_prev = float(hist["Close"].iloc[-2])
+        close_now  = float(hist["Close"].iloc[-1])
+        pct        = _pct(close_now, close_prev)
+        return close_now, pct
+    except Exception as e:
+        print(f"  [yfinance] {ticker} 조회 실패: {e}")
+        return None, None
+
+
+# ── 네이버 금융 폴백 ──────────────────────────────────────────────────────────
+
+_NAVER_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
     ),
-    "Referer":         "https://finance.naver.com/",
-    "Accept-Language": "ko-KR,ko;q=0.9",
+    "Referer": "https://finance.naver.com/",
 }
 
 
-# ── 유틸리티 ───────────────────────────────────────────────────────────────────
-
-def _safe_float(val) -> float | None:
-    """
-    문자열·숫자 혼용 값을 float으로 안전 변환.
-    콤마, %, +, 공백 제거 후 변환. 실패 시 None 반환.
-    """
-    if val is None:
-        return None
-    if isinstance(val, (int, float)):
-        return float(val)
+def _fetch_naver_index(symbol: str):
+    """네이버 금융에서 국내 지수 조회."""
+    if not _REQUESTS_AVAILABLE:
+        return None, None
+    url = f"https://finance.naver.com/sise/sise_index.naver?code={symbol}"
     try:
-        cleaned = (
-            str(val)
-            .replace(",", "")
-            .replace("%", "")
-            .replace("+", "")
-            .replace(" ", "")
-            .strip()
+        import requests
+        resp = requests.get(url, headers=_NAVER_HEADERS, timeout=10)
+        resp.raise_for_status()
+        text = resp.text
+
+        # 현재값
+        m_val = re.search(r'id="now_value"[^>]*>([\d,\.]+)', text)
+        m_pct = re.search(r'id="change_percent"[^>]*>([\d\.]+)', text)
+        m_dir = re.search(r'class="(up|down|dn|no)"', text)
+
+        if not m_val:
+            return None, None
+        value = float(m_val.group(1).replace(",", ""))
+        pct   = float(m_pct.group(1)) if m_pct else 0.0
+        raw_dir = (m_dir.group(1) if m_dir else "").lower()
+        direction = "up" if "up" in raw_dir else "down" if ("down" in raw_dir or "dn" in raw_dir) else "flat"
+        # 방향에 따라 부호 보정
+        if direction == "down":
+            pct = -abs(pct)
+        return value, pct
+    except Exception as e:
+        print(f"  [Naver] {symbol} 조회 실패: {e}")
+        return None, None
+
+
+def _fetch_naver_forex():
+    """네이버 금융에서 USD/KRW 환율 조회."""
+    if not _REQUESTS_AVAILABLE:
+        return None, None
+    url = "https://finance.naver.com/marketindex/"
+    try:
+        import requests
+        resp = requests.get(url, headers=_NAVER_HEADERS, timeout=10)
+        resp.raise_for_status()
+        text = resp.text
+        # USD/KRW 영역 파싱
+        m_val = re.search(
+            r'USD/KRW.*?value["\s]+>([\d,\.]+)', text, re.DOTALL
         )
-        if not cleaned or cleaned in ("-", "N/A", "n/a", "--"):
-            return None
-        return float(cleaned)
-    except (ValueError, TypeError):
-        return None
-
-
-def _fmt(change_pct) -> str:
-    """등락률 포맷 (+1.23% / -0.45%)"""
-    v = _safe_float(change_pct)
-    if v is None:
-        return "N/A"
-    sign = "+" if v >= 0 else ""
-    return f"{sign}{v:.2f}%"
-
-
-# ── 미국 증시 ─────────────────────────────────────────────────────────────────
-
-def _get_usd_krw_naver() -> dict:
-    """네이버 환율 스크래핑 폴백"""
-    try:
-        url  = "https://finance.naver.com/marketindex/exchangeDetail.naver?marketindexCd=FX_USDKRW"
-        resp = requests.get(url, headers=_HEADERS, timeout=10)
-        resp.encoding = "euc-kr"
-        soup = BeautifulSoup(resp.text, "html.parser")
-        price_el  = soup.select_one("p.no_today em.no_up, p.no_today em.no_down, p.no_today em")
-        change_el = soup.select_one("span.change")
-        price  = price_el.get_text(strip=True).replace(",", "")  if price_el  else ""
-        change = change_el.get_text(strip=True).replace(",", "") if change_el else ""
-        return {
-            "price":      _safe_float(price),
-            "change":     _safe_float(change),
-            "change_pct": None,
-        }
+        if not m_val:
+            # 대안 패턴
+            m_val = re.search(r'"exchangeRate"[^>]*>([\d,\.]+)', text)
+        if not m_val:
+            return None, None
+        value = float(m_val.group(1).replace(",", ""))
+        return value, 0.0
     except Exception as e:
-        print(f"  [환율 폴백 오류] {e}")
-        return {"price": None, "change": None, "change_pct": None}
+        print(f"  [Naver] USD/KRW 조회 실패: {e}")
+        return None, None
 
 
-def get_us_market_data() -> dict:
-    """yfinance로 미국 주요 지수 및 환율 수집"""
-    result = {
-        "sp500":   {"price": None, "change": None, "change_pct": None},
-        "nasdaq":  {"price": None, "change": None, "change_pct": None},
-        "dow":     {"price": None, "change": None, "change_pct": None},
-        "usd_krw": {"price": None, "change": None, "change_pct": None},
-    }
-    try:
-        import yfinance as yf
-        tickers = {
-            "sp500":   "^GSPC",
-            "nasdaq":  "^IXIC",
-            "dow":     "^DJI",
-            "usd_krw": "USDKRW=X",
-        }
-        for key, symbol in tickers.items():
-            try:
-                t    = yf.Ticker(symbol)
-                info = t.fast_info
-
-                # fast_info 속성명이 버전마다 다를 수 있으므로 여러 이름 시도
-                price = None
-                for attr in ("last_price", "lastPrice", "regularMarketPrice"):
-                    val = getattr(info, attr, None)
-                    if val is not None:
-                        price = _safe_float(val)
-                        break
-
-                prev = None
-                for attr in ("previous_close", "previousClose", "regularMarketPreviousClose"):
-                    val = getattr(info, attr, None)
-                    if val is not None:
-                        prev = _safe_float(val)
-                        break
-
-                # fast_info 실패 시 history 폴백
-                if price is None:
-                    hist = t.history(period="2d")
-                    if not hist.empty:
-                        price = _safe_float(hist["Close"].iloc[-1])
-                        if len(hist) >= 2:
-                            prev = _safe_float(hist["Close"].iloc[-2])
-
-                change  = round(price - prev, 2) if (price and prev) else None
-                chg_pct = round((change / prev) * 100, 2) if (change and prev) else None
-                result[key] = {
-                    "price":      round(price, 2) if price else None,
-                    "change":     change,
-                    "change_pct": chg_pct,
-                }
-                print(f"  [{key}] {price} ({_fmt(chg_pct)})")
-            except Exception as e:
-                print(f"  [{key}] yfinance 오류: {e}")
-    except ImportError:
-        print("  [미국증시] yfinance 미설치 → 환율만 네이버 폴백")
-        result["usd_krw"] = _get_usd_krw_naver()
-    return result
-
-
-# ── 야간선물 ──────────────────────────────────────────────────────────────────
-
-def _get_night_futures_fallback() -> dict:
-    """
-    네이버 금융 야간선물 HTML 폴백.
-    코스피200 야간선물 종목코드: 101S6000
-    """
-    try:
-        url  = "https://finance.naver.com/item/main.naver?code=101S6000"
-        resp = requests.get(url, headers=_HEADERS, timeout=10)
-        resp.encoding = "euc-kr"
-        soup = BeautifulSoup(resp.text, "html.parser")
-
-        price_el      = soup.select_one("p.no_today em")
-        change_el     = soup.select_one("p.no_exday em")
-        change_pct_el = soup.select_one("p.no_exday span.no_up, p.no_exday span.no_down")
-
-        price     = _safe_float(price_el.get_text(strip=True))      if price_el      else None
-        change    = _safe_float(change_el.get_text(strip=True))     if change_el     else None
-        chg_pct   = _safe_float(change_pct_el.get_text(strip=True)) if change_pct_el else None
-
-        if chg_pct is not None:
-            direction = "call" if chg_pct > 0 else ("put" if chg_pct < 0 else "neutral")
-        elif change is not None:
-            direction = "call" if change > 0  else ("put" if change  < 0 else "neutral")
-        else:
-            direction = "neutral"
-
-        return {
-            "price":      price,
-            "change":     change,
-            "change_pct": chg_pct,
-            "volume":     None,
-            "direction":  direction,
-        }
-    except Exception as e:
-        print(f"  [야간선물 폴백 오류] {e}")
-        return {
-            "price": None, "change": None, "change_pct": None,
-            "volume": None, "direction": "neutral",
-        }
-
-
-def get_night_futures_data() -> dict:
-    """
-    코스피200 야간선물 수집.
-    1순위: 네이버 모바일 API (KOSPI200FUT)
-    2순위: HTML 폴백 (code=101S6000)
-    """
-    # BUG-M3 수정: 정확한 코스피200 야간선물 API 엔드포인트 사용
-    endpoints = [
-        "https://m.stock.naver.com/api/index/KOSPI200FUT/basic",
-        "https://m.stock.naver.com/api/index/FUT/basic",
-    ]
-
-    for url in endpoints:
-        try:
-            resp = requests.get(url, headers=_HEADERS, timeout=10)
-            if resp.status_code != 200:
-                continue
-
-            d       = resp.json()
-            price   = _safe_float(d.get("closePrice")    or d.get("price"))
-            change  = _safe_float(d.get("compareToPreviousClosePrice") or d.get("change"))
-            chg_pct = _safe_float(d.get("fluctuationsRatio")           or d.get("change_pct"))
-            volume  = _safe_float(d.get("accumulatedTradingVolume")    or d.get("volume"))
-
-            if price is None:
-                continue
-
-            if chg_pct is not None:
-                direction = "call" if chg_pct > 0 else ("put" if chg_pct < 0 else "neutral")
-            elif change is not None:
-                direction = "call" if change > 0  else ("put" if change  < 0 else "neutral")
-            else:
-                direction = "neutral"
-
-            result = {
-                "price":      price,
-                "change":     change,
-                "change_pct": chg_pct,
-                "volume":     volume,
-                "direction":  direction,
-            }
-            print(f"  [야간선물] {price} ({_fmt(chg_pct)}) → {direction}")
-            return result
-
-        except Exception as e:
-            print(f"  [야간선물 API 오류] {url}: {e}")
-
-    print("  [야간선물] API 모두 실패 → HTML 폴백 시도")
-    return _get_night_futures_fallback()
-
-
-# ── 한국 증시 ─────────────────────────────────────────────────────────────────
-
-def _get_korea_index_fallback(code: str) -> dict:
-    """네이버 코스피/코스닥 HTML 폴백"""
-    try:
-        url  = f"https://finance.naver.com/sise/sise_index.naver?code={code}"
-        resp = requests.get(url, headers=_HEADERS, timeout=10)
-        resp.encoding = "euc-kr"
-        soup = BeautifulSoup(resp.text, "html.parser")
-        price_el  = soup.select_one("strong#now_value")
-        change_el = soup.select_one("strong#change_value")
-        price   = _safe_float(price_el.get_text(strip=True))  if price_el  else None
-        change  = _safe_float(change_el.get_text(strip=True)) if change_el else None
-        chg_pct = (
-            round((change / (price - change)) * 100, 2)
-            if (change is not None and price and price != change)
-            else None
-        )
-        return {"price": price, "change": change, "change_pct": chg_pct}
-    except Exception as e:
-        print(f"  [{code} 폴백 오류] {e}")
-        return {"price": None, "change": None, "change_pct": None}
-
-
-def get_korea_market_data() -> dict:
-    """네이버 모바일 API에서 코스피/코스닥 수집"""
-    result = {
-        "kospi":  {"price": None, "change": None, "change_pct": None},
-        "kosdaq": {"price": None, "change": None, "change_pct": None},
-    }
-    indices = [
-        ("kospi",  "KOSPI",  "KOSPI"),
-        ("kosdaq", "KOSDAQ", "KOSDAQ"),
-    ]
-    for key, api_code, fallback_code in indices:
-        try:
-            url  = f"https://m.stock.naver.com/api/index/{api_code}/basic"
-            resp = requests.get(url, headers=_HEADERS, timeout=10)
-            if resp.status_code != 200:
-                result[key] = _get_korea_index_fallback(fallback_code)
-                continue
-            d       = resp.json()
-            price   = _safe_float(d.get("closePrice")    or d.get("price"))
-            change  = _safe_float(d.get("compareToPreviousClosePrice") or d.get("change"))
-            chg_pct = _safe_float(d.get("fluctuationsRatio")           or d.get("change_pct"))
-            result[key] = {"price": price, "change": change, "change_pct": chg_pct}
-            print(f"  [{key.upper()}] {price} ({_fmt(chg_pct)})")
-            time.sleep(0.2)
-        except Exception as e:
-            print(f"  [{key} 오류] {e} → 폴백")
-            result[key] = _get_korea_index_fallback(fallback_code)
-    return result
-
-
-# ── 통합 수집 ─────────────────────────────────────────────────────────────────
+# ── 공개 API ──────────────────────────────────────────────────────────────────
 
 def collect_market_overview() -> dict:
-    """야간선물 + 미국증시 + 한국증시 통합 수집"""
-    print("  [시장] 야간선물 수집...")
-    night_futures = get_night_futures_data()
+    """
+    시장 지표를 수집하여 아래 구조의 딕셔너리를 반환한다.
 
-    print("  [시장] 미국 증시 수집...")
-    us_market = get_us_market_data()
-
-    print("  [시장] 한국 증시 수집...")
-    korea_market = get_korea_market_data()
-
-    overview = {
-        "night_futures": night_futures,
-        "us_market":     us_market,
-        "korea_market":  korea_market,
-        "timestamp":     datetime.now(KST).strftime("%Y-%m-%d %H:%M:%S"),
+    반환 예시
+    ---------
+    {
+        "kospi":        {"value": 8012.34, "change_pct": +1.23, "direction": "up"},
+        "kosdaq":       {"value":  900.12, "change_pct": -0.45, "direction": "down"},
+        "nasdaq":       {"value": 19800.0, "change_pct": +0.80, "direction": "up"},
+        "sp500":        {"value":  5500.0, "change_pct": +0.55, "direction": "up"},
+        "dow":          {"value": 42000.0, "change_pct": +0.30, "direction": "up"},
+        "night_future": {"value":  8020.0, "change_pct": +0.10, "direction": "up"},
+        "usd_krw":      {"value":  1380.0, "change_pct":  0.00, "direction": "flat"},
     }
-    print("  [시장] 수집 완료")
-    return overview
+
+    html_generator._INDICATOR_DEFS 의 키 목록과 반드시 일치해야 한다.
+    """
+    print("\n[시장수집] 지표 수집 시작...")
+    result = {}
+
+    # ── KOSPI ─────────────────────────────────────────────────────────────────
+    val, pct = _fetch_naver_index("KOSPI")
+    if val is None:
+        val, pct = _fetch_yf("^KS11")
+    if val is not None:
+        result["kospi"] = _make_indicator(val, pct)
+        print(f"  KOSPI: {val:,.2f} ({pct:+.2f}%)")
+
+    # ── KOSDAQ ────────────────────────────────────────────────────────────────
+    val, pct = _fetch_naver_index("KOSDAQ")
+    if val is None:
+        val, pct = _fetch_yf("^KQ11")
+    if val is not None:
+        result["kosdaq"] = _make_indicator(val, pct)
+        print(f"  KOSDAQ: {val:,.2f} ({pct:+.2f}%)")
+
+    # ── NASDAQ ────────────────────────────────────────────────────────────────
+    val, pct = _fetch_yf("^IXIC")
+    if val is not None:
+        result["nasdaq"] = _make_indicator(val, pct)
+        print(f"  NASDAQ: {val:,.2f} ({pct:+.2f}%)")
+
+    # ── S&P 500 ───────────────────────────────────────────────────────────────
+    val, pct = _fetch_yf("^GSPC")
+    if val is not None:
+        result["sp500"] = _make_indicator(val, pct)
+        print(f"  S&P500: {val:,.2f} ({pct:+.2f}%)")
+
+    # ── 다우존스 ──────────────────────────────────────────────────────────────
+    val, pct = _fetch_yf("^DJI")
+    if val is not None:
+        result["dow"] = _make_indicator(val, pct)
+        print(f"  DOW: {val:,.2f} ({pct:+.2f}%)")
+
+    # ── 야간선물 (코스피200 선물) ─────────────────────────────────────────────
+    val, pct = _fetch_yf("KS200=F")
+    if val is None:
+        # 대안 티커
+        val, pct = _fetch_yf("^KS200")
+    if val is not None:
+        result["night_future"] = _make_indicator(val, pct)
+        print(f"  야간선물: {val:,.2f} ({pct:+.2f}%)")
+
+    # ── USD/KRW ───────────────────────────────────────────────────────────────
+    val, pct = _fetch_naver_forex()
+    if val is None:
+        val, pct = _fetch_yf("KRW=X")
+    if val is not None:
+        result["usd_krw"] = _make_indicator(val, pct)
+        print(f"  USD/KRW: {val:,.2f} ({pct:+.2f}%)")
+
+    if not result:
+        print("  [경고] 모든 시장 지표 수집 실패")
+    else:
+        print(f"[시장수집] 완료 ({len(result)}개 지표)")
+
+    return result
