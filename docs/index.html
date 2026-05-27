@@ -1,242 +1,394 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AI 주식 브리핑 - 2026-05-27</title>
-<style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="AI 기반 한국 주식 모닝브리핑 - 2026-05-28">
+  <title>AI 주식 브리핑 · 2026-05-28</title>
+  <style>
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  background: #0a0a14;
+  color: #e0e0e0;
+  min-height: 100vh;
+  line-height: 1.6;
+}
+a { color: inherit; }
 
-* { margin:0; padding:0; box-sizing:border-box; }
-body { font-family:'Pretendard',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-       background:#0a0a14; color:#e0e0e0; line-height:1.6; }
-.container { max-width:860px; margin:0 auto; padding:20px; }
-.header { text-align:center; padding:30px 0; border-bottom:1px solid #1e1e2e; margin-bottom:30px; }
-.header h1 { font-size:1.8em; color:#fff; margin-bottom:8px; }
-.header .date { color:#888; font-size:.95em; }
-.header .desc { color:#aaa; font-size:.85em; margin-top:8px; }
-.section { margin-bottom:35px; }
-.section-title { font-size:1.3em; color:#fff; margin-bottom:15px;
-                 padding-left:12px; border-left:3px solid #667eea; }
-.ind-row { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px; }
-.ind-badge { display:flex; flex-direction:column; align-items:center;
-             padding:10px 16px; border-radius:12px; min-width:90px; border:1px solid transparent; }
-.ind-call    { background:#ff6b6b18; border-color:#ff6b6b50; }
-.ind-put     { background:#339af018; border-color:#339af050; }
-.ind-neutral { background:#ffd43b18; border-color:#ffd43b50; }
-.ind-label { font-size:.72em; color:#888; margin-bottom:4px; }
-.ind-value { font-size:1.05em; font-weight:700; color:#fff; }
-.ind-call .ind-value { color:#ff6b6b; }
-.ind-put  .ind-value { color:#339af0; }
-.ind-pct { font-size:.78em; margin-top:2px; }
-.ind-call .ind-pct    { color:#ff6b6b; }
-.ind-put  .ind-pct    { color:#339af0; }
-.ind-neutral .ind-pct { color:#ffd43b; }
-.summary-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-@media(max-width:600px){ .summary-grid{ grid-template-columns:1fr; } }
-.summary-block { background:#141420; border-radius:12px; padding:18px; border:1px solid #1e1e2e; }
-.summary-subtitle { color:#667eea; font-size:1em; margin-bottom:8px; }
-.summary-text { color:#ccc; font-size:.88em; line-height:1.7; }
-.sector-badge { display:inline-block; background:linear-gradient(135deg,#667eea20,#764ba220);
-                color:#a8b4ff; padding:6px 14px; border-radius:20px;
-                margin:4px; font-size:.85em; border:1px solid #667eea40; }
-.stock-card,.hidden-pick-card { background:#141420; border-radius:12px;
-    padding:20px; margin-bottom:16px; border:1px solid #1e1e2e; transition:border-color .3s; }
-.stock-card:hover,.hidden-pick-card:hover { border-color:#667eea60; }
-.hidden-pick-card { border-left:3px solid #ffd43b; }
-.stock-header { display:flex; align-items:center; gap:10px; margin-bottom:12px; flex-wrap:wrap; }
-.stock-rank { background:#667eea; color:#fff; padding:2px 10px; border-radius:12px;
-              font-size:.85em; font-weight:700; }
-.stock-name { font-size:1.15em; font-weight:700; color:#fff; }
-.stock-signal { padding:3px 10px; border-radius:10px; font-size:.8em; font-weight:600; }
-.signal-positive { background:#ff6b6b20; color:#ff6b6b; border:1px solid #ff6b6b40; }
-.signal-negative { background:#339af020; color:#339af0; border:1px solid #339af040; }
-.signal-neutral  { background:#ffd43b20; color:#ffd43b; border:1px solid #ffd43b40; }
-.overlap-badge { background:#51cf6620; color:#51cf66; padding:3px 10px;
-                 border-radius:10px; font-size:.8em; border:1px solid #51cf6640; }
-.source-tags { margin-bottom:12px; }
-.source-tag { display:inline-block; background:#1e1e2e; color:#888;
-              padding:3px 8px; border-radius:6px; font-size:.75em; margin:2px; }
-.price-box { margin-bottom:12px; padding:10px; background:#1a1a2e; border-radius:8px; }
-.current-price { font-size:1.3em; font-weight:700; color:#fff; margin-right:10px; }
-.price-up   { color:#ff6b6b; font-weight:600; }
-.price-down { color:#339af0; font-weight:600; }
-.price-note { color:#888; font-size:.85em; }
-.chart-icon { cursor:pointer; color:#667eea; font-size:.85em;
-              padding:3px 8px; border-radius:6px; background:#667eea15;
-              border:1px solid #667eea30; margin-left:4px;
-              white-space:nowrap; text-decoration:none; display:inline-block; }
-.chart-icon:hover { background:#667eea30; }
-.info-block { margin-bottom:12px; }
-.info-block h4 { color:#a8b4ff; font-size:.9em; margin-bottom:4px;
-                 display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
-.info-block p { color:#bbb; font-size:.88em; }
-.reasons-section { margin-top:12px; }
-.reasons-section h4 { color:#a8b4ff; font-size:.9em; margin-bottom:8px; }
-.reason-item { background:#1a1a2e; border-radius:8px; padding:10px; margin-bottom:6px; }
-.reason-header { display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap; }
-.reason-source { color:#667eea; font-size:.82em; font-weight:600; }
-.source-link { color:#51cf66; font-size:.78em; text-decoration:none; }
-.source-link:hover { text-decoration:underline; }
-.reason-detail { color:#aaa; font-size:.85em; }
-.strategy-block { background:linear-gradient(135deg,#141420,#1a1a2e);
-                  border:1px solid #667eea30; border-radius:12px; padding:20px; }
-.strategy-block p { color:#ccc; font-size:.92em; line-height:1.8; }
-.disclaimer { text-align:center; color:#666; font-size:.78em;
-              margin-top:30px; padding:15px; border-top:1px solid #1e1e2e; }
-.archive-section { margin-top:20px; }
-.archive-link { display:inline-block; color:#667eea; text-decoration:none;
-                padding:4px 10px; margin:3px; border:1px solid #667eea30;
-                border-radius:6px; font-size:.82em; }
-.archive-link:hover { background:#667eea20; }
-.chart-modal { display:none; position:fixed; top:0; left:0; width:100%; height:100%;
-               background:rgba(0,0,0,.85); z-index:1000;
-               justify-content:center; align-items:center; }
-.chart-modal img { max-width:95%; max-height:80%; border-radius:8px; }
-.chart-modal .close-btn { position:absolute; top:20px; right:30px;
-                           color:#fff; font-size:2em; cursor:pointer; }
+/* ── Layout ── */
+.container { max-width: 960px; margin: 0 auto; padding: 1rem 1.2rem 3rem; }
 
-/* ── 섹션2: 경제방송TV ── */
-.sec2-card { background:#141420; border-radius:10px; padding:14px;
-             margin-bottom:10px; border:1px solid #1e1e2e;
-             border-left:3px solid #ffa94d; }
-.sec2-card:hover { border-color:#ffa94d80; }
-.sec2-header { display:flex; align-items:center; gap:8px;
-               margin-bottom:6px; flex-wrap:wrap; }
-.sec2-channel { background:#ffa94d20; color:#ffa94d; padding:2px 8px;
-                border-radius:8px; font-size:.78em; font-weight:700; }
-.sec2-date { color:#666; font-size:.75em; }
-.sec2-title { color:#ddd; font-size:.9em; font-weight:600; margin-bottom:4px; }
-.sec2-summary { color:#999; font-size:.82em; line-height:1.6; }
+/* ── Header ── */
+.briefing-header {
+  text-align: center;
+  padding: 2rem 1rem 1.5rem;
+  border-bottom: 1px solid #1e1e2e;
+  margin-bottom: 1.5rem;
+}
+.briefing-header h1 {
+  font-size: 1.6rem; color: #e0e0e0; font-weight: 700; letter-spacing: -.5px;
+}
+.briefing-header .subtitle { font-size: .85rem; color: #666; margin-top: .4rem; }
 
-/* ── 섹션3: 애널리스트 리포트 ── */
-.sec3-group { margin-bottom:20px; }
-.sec3-subtitle { color:#a8b4ff; font-size:.95em; margin-bottom:10px;
-                 padding-left:10px; border-left:2px solid #667eea; }
-.report-card { background:#141420; border-radius:10px; padding:12px;
-               margin-bottom:8px; border:1px solid #1e1e2e;
-               border-left:3px solid #51cf66; }
-.report-card:hover { border-color:#51cf6680; }
-.report-header { display:flex; align-items:center; gap:8px;
-                 margin-bottom:4px; flex-wrap:wrap; }
-.report-stock { font-weight:700; color:#fff; font-size:.92em; }
-.report-broker { color:#667eea; font-size:.78em;
-                 background:#667eea15; padding:2px 8px; border-radius:6px; }
-.report-title { color:#bbb; font-size:.85em; margin-bottom:2px; }
-.report-date { color:#666; font-size:.75em; }
-.new-cov-badge { background:#ffd43b20; color:#ffd43b; padding:2px 8px;
-                 border-radius:6px; font-size:.75em; font-weight:700;
-                 border:1px solid #ffd43b40; margin-left:4px; }
+/* ── Section ── */
+.section { margin-bottom: 2rem; }
+.section-title {
+  font-size: 1.05rem; font-weight: 700; color: #c8c8d8;
+  border-left: 3px solid #74c0fc; padding-left: .7rem; margin-bottom: 1rem;
+}
 
+/* ── Market Indicators ── */
+.market-indicators {
+  display: flex; flex-wrap: wrap; gap: .6rem;
+  padding: 1rem; background: #111122;
+  border-radius: 10px; border: 1px solid #1e1e2e;
+}
+.indicator-badge {
+  display: flex; flex-direction: column; align-items: center;
+  background: #16162a; border: 1px solid #2a2a3e;
+  border-radius: 8px; padding: .45rem .8rem; min-width: 90px;
+}
+.ind-label { font-size: .7rem; color: #888; margin-bottom: .15rem; }
+.ind-value { font-size: .95rem; font-weight: 700; color: #e0e0e0; }
+.ind-pct   { font-size: .75rem; margin-top: .1rem; }
+
+/* ── Market Summary ── */
+.summary-block {
+  background: #111122; border: 1px solid #1e1e2e;
+  border-radius: 8px; padding: .8rem 1rem; margin-bottom: .7rem;
+}
+.summary-title { font-size: .85rem; font-weight: 700; color: #74c0fc; margin-bottom: .35rem; }
+.summary-text  { font-size: .88rem; color: #c0c0d0; line-height: 1.65; }
+
+/* ── Sector Badges ── */
+.sector-list { display: flex; flex-wrap: wrap; gap: .5rem; }
+.sector-badge {
+  background: #1a1a2e; border: 1px solid #2a2a4e;
+  border-radius: 20px; padding: .3rem .85rem;
+  font-size: .82rem; color: #c8c8ff; cursor: default; transition: background .15s;
+}
+.sector-badge:hover { background: #22224a; }
+
+/* ── Stock Card ── */
+.stock-card {
+  background: #111122; border: 1px solid #1e1e2e;
+  border-radius: 12px; padding: 1rem 1.2rem;
+  margin-bottom: 1rem; transition: border-color .2s;
+}
+.stock-card:hover { border-color: #3a3a5e; }
+.stock-card-header {
+  display: flex; align-items: center; gap: .7rem;
+  margin-bottom: .7rem; flex-wrap: wrap;
+}
+.stock-rank {
+  background: #1e1e3a; color: #74c0fc; font-size: .8rem; font-weight: 700;
+  padding: .2rem .5rem; border-radius: 6px; min-width: 2rem; text-align: center;
+}
+.stock-name-block { display: flex; align-items: center; gap: .5rem; flex: 1; }
+.stock-name {
+  font-size: 1.05rem; font-weight: 700; color: #e8e8f8; text-decoration: none;
+}
+.stock-name:hover { color: #74c0fc; }
+.signal-badge {
+  font-size: .72rem; border: 1px solid; border-radius: 12px;
+  padding: .15rem .55rem; white-space: nowrap;
+}
+.overlap-badge {
+  font-size: .8rem; color: #ffa94d; background: #2a1e0a;
+  border: 1px solid #4a3010; border-radius: 12px;
+  padding: .2rem .6rem; white-space: nowrap;
+}
+.stock-card-body { padding-top: .3rem; }
+.source-tags { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .6rem; }
+.source-tag  { font-size: .72rem; padding: .15rem .55rem; border-radius: 10px; }
+.price-row   {
+  display: flex; align-items: center; gap: .8rem;
+  margin-bottom: .6rem; flex-wrap: wrap;
+}
+.price-value { font-size: .95rem; font-weight: 700; color: #ffd43b; }
+.chart-btn {
+  font-size: .78rem; background: #1a1a2e; color: #74c0fc;
+  border: 1px solid #2a3a5e; border-radius: 8px; padding: .25rem .7rem;
+  cursor: pointer; text-decoration: none; transition: background .15s;
+  display: inline-block;
+}
+.chart-btn:hover { background: #22223a; }
+.reasons-list { list-style: none; padding: 0; margin-top: .4rem; }
+.reasons-list li {
+  font-size: .84rem; color: #a0a0b8;
+  padding: .2rem 0 .2rem .9rem; position: relative; line-height: 1.55;
+}
+.reasons-list li::before { content: "·"; position: absolute; left: .2rem; color: #555; }
+
+/* ── Hidden Pick Card ── */
+.hidden-pick-card {
+  background: #0f1a1a; border: 1px solid #1a2e2e;
+  border-radius: 12px; padding: 1rem 1.2rem;
+  margin-bottom: 1rem; transition: border-color .2s;
+}
+.hidden-pick-card:hover { border-color: #2a4a4a; }
+.hp-card-header {
+  display: flex; align-items: center; gap: .7rem;
+  margin-bottom: .7rem; flex-wrap: wrap;
+}
+.hp-badges { display: flex; gap: .4rem; align-items: center; }
+.hp-source-badge { font-size: .72rem; border-radius: 10px; padding: .15rem .55rem; white-space: nowrap; }
+.hp-score-badge {
+  font-size: .72rem; background: #1a2a1a; color: #51cf66;
+  border: 1px solid #2a4a2a; border-radius: 10px; padding: .15rem .55rem; white-space: nowrap;
+}
+.hp-stock-name {
+  font-size: 1.05rem; font-weight: 700; color: #e8e8f8; text-decoration: none;
+}
+.hp-stock-name:hover { color: #51cf66; }
+.hp-signal {
+  font-size: .78rem; color: #51cf66; background: #1a3a1a;
+  border: 1px solid #2a5a2a; border-radius: 10px; padding: .15rem .55rem;
+}
+.hp-card-body { padding-top: .3rem; }
+
+/* ── Analyst / TV Cards ── */
+.analyst-category-title {
+  font-size: .88rem; font-weight: 700; color: #ffa94d;
+  margin: 1rem 0 .5rem; padding-left: .4rem; border-left: 2px solid #ffa94d;
+}
+.analyst-card, .tv-card {
+  background: #111122; border: 1px solid #1e1e2e;
+  border-radius: 10px; padding: .7rem 1rem; margin-bottom: .6rem;
+}
+.analyst-card-header, .tv-card-header {
+  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .35rem;
+}
+.analyst-stock, .tv-channel { font-size: .82rem; font-weight: 700; color: #e0e0f0; }
+.new-coverage-badge {
+  font-size: .68rem; background: #1a3a1a; color: #51cf66;
+  border: 1px solid #2a5a2a; border-radius: 8px; padding: .1rem .45rem;
+}
+.analyst-broker, .tv-date { font-size: .75rem; color: #777; margin-left: auto; }
+.analyst-title, .tv-card-title { font-size: .85rem; color: #b0b0c8; line-height: 1.5; }
+.analyst-summary { font-size: .8rem; color: #888; margin-top: .3rem; line-height: 1.5; }
+
+/* ── AI Strategy ── */
+.ai-strategy-box {
+  background: #0d0d1a; border: 1px solid #2a2a4a; border-radius: 12px;
+  padding: 1.2rem 1.4rem; font-size: .88rem; color: #c0c0d8;
+  line-height: 1.75; white-space: pre-wrap; word-break: keep-all;
+}
+
+/* ── Archive ── */
+.archive-list { display: flex; flex-wrap: wrap; gap: .5rem; }
+.archive-link {
+  font-size: .78rem; background: #111122; color: #74c0fc;
+  border: 1px solid #1e2e3e; border-radius: 8px; padding: .25rem .65rem;
+  text-decoration: none; transition: background .15s;
+}
+.archive-link:hover { background: #1a1a3a; }
+
+/* ── Disclaimer ── */
+.disclaimer {
+  font-size: .75rem; color: #555; text-align: center;
+  margin-top: 2.5rem; line-height: 1.7;
+  border-top: 1px solid #1a1a2e; padding-top: 1rem;
+}
+
+/* ── Chart Modal ── */
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.85); z-index: 999;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.active { display: flex; }
+.modal-box {
+  background: #111122; border: 1px solid #2a2a4a;
+  border-radius: 14px; padding: 1.2rem;
+  max-width: 680px; width: 95%; position: relative;
+}
+.modal-title {
+  font-size: 1rem; font-weight: 700; color: #e0e0f0;
+  margin-bottom: .8rem; text-align: center;
+}
+.modal-img   { width: 100%; border-radius: 8px; }
+.modal-close {
+  position: absolute; top: .6rem; right: .8rem;
+  background: none; border: none; color: #888;
+  font-size: 1.3rem; cursor: pointer; line-height: 1;
+}
+.modal-close:hover { color: #e0e0e0; }
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .market-indicators { gap: .4rem; }
+  .indicator-badge   { min-width: 78px; padding: .35rem .55rem; }
+  .stock-card-header { gap: .4rem; }
+  .briefing-header h1 { font-size: 1.3rem; }
+  .hp-card-header    { gap: .4rem; }
+}
 </style>
 </head>
 <body>
 <div class="container">
-  <div class="header">
-    <h1>📊 AI 주식 브리핑</h1>
-    <div class="date">2026-05-27 07:29 기준</div>
-    <div class="desc">최근 뉴스·경제방송·유튜브·증권사 보고서에서 공통 언급된 종목 브리핑</div>
-  </div>
 
-  <div class="section">
-    <h2 class="section-title">📡 시장 지표</h2>
-    <div class="ind-row"><div class="ind-badge ind-call"><span class="ind-label">야간선물</span><span class="ind-value">1,267.40</span><span class="ind-pct">▲ 3.20%</span></div><div class="ind-badge ind-call"><span class="ind-label">S&P500</span><span class="ind-value">7,519.12</span><span class="ind-pct">▲ 0.61%</span></div><div class="ind-badge ind-call"><span class="ind-label">나스닥</span><span class="ind-value">26,656.18</span><span class="ind-pct">▲ 1.19%</span></div><div class="ind-badge ind-put"><span class="ind-label">다우존스</span><span class="ind-value">50,461.68</span><span class="ind-pct">▼ 0.23%</span></div><div class="ind-badge ind-put"><span class="ind-label">달러/원</span><span class="ind-value">1,507.69</span><span class="ind-pct">▼ 0.63%</span></div><div class="ind-badge ind-call"><span class="ind-label">코스피</span><span class="ind-value">8,047.51</span><span class="ind-pct">▲ 2.55%</span></div><div class="ind-badge ind-call"><span class="ind-label">코스닥</span><span class="ind-value">1,172.52</span><span class="ind-pct">▲ 0.98%</span></div></div>
-  </div>
+  <header class="briefing-header">
+    <h1>📈 AI 주식 모닝브리핑</h1>
+    <p class="subtitle">2026-05-28 · 00:19 KST · 다중 채널 교차분석</p>
+  </header>
 
-  <div class="section">
-    <h2 class="section-title">🌍 시장 요약</h2>
-    <div class="summary-grid">
-<div class="summary-block"><h3 class="summary-subtitle">🌙 1) 야간선물 시장 동향</h3><p class="summary-text">코스피200 야간선물은 1267.4로 3.20% 급등하며 강한 상승세를 보였습니다. 미국 증시에서 나스닥이 1% 이상 상승하고 달러/원 환율이 1507.69원으로 0.63% 하락하면서 원화 강세가 나타난 점이 긍정적으로 작용했습니다. 전일 코스피가 2.55% 급등한 강세를 이어받아 야간 시간대에도 매수 심리가 지속된 것으로 분석됩니다. 야간선물 상승폭을 고려할 때 오늘 국내 증시는 상승 출발이 유력해 보입니다.</p></div>
-<div class="summary-block"><h3 class="summary-subtitle">🇺🇸 2) 미국 증시 마감 요약</h3><p class="summary-text">미국 증시는 기술주 중심의 상승세를 보였습니다. S&P500은 7519.12로 0.61%, 나스닥은 26656.18로 1.19% 상승 마감했으나 다우지수는 50461.68로 0.23% 소폭 하락했습니다. 카시카리 연은 총재가 "인플레이션이 핵심 지표"라며 필요시 금리 인상도 논의할 수 있다는 매파적 발언을 내놓았음에도 기술주는 강세를 유지했습니다. 달러/원 환율 하락은 외국인 자금 유입 기대감을 높이는 요인으로 작용하고 있습니다.</p></div>
-<div class="summary-block"><h3 class="summary-subtitle">🇰🇷 3) 전일 국내 증시 흐름</h3><p class="summary-text">전일 국내 증시는 강한 반등세를 나타냈습니다. 코스피는 8047.51로 2.55% 급등했고 코스닥은 1172.52로 0.98% 상승 마감했습니다. 산업연구원이 "반도체 호황이 적어도 내년 초까지 이어질 것"이라는 전망을 내놓으면서 반도체 업종이 강세를 주도했습니다. 또한 올해 수출이 9244억 달러로 역대 최대를 기록할 것이라는 전망이 나오면서 수출 관련 종목들도 동반 상승했습니다. 외국인과 기관의 동반 매수세가 지수 상승을 뒷받침했습니다.</p></div>
-<div class="summary-block"><h3 class="summary-subtitle">📊 4) 오늘 국내 증시 예상 흐름</h3><p class="summary-text">오늘 국내 증시는 야간선물 강세에 힘입어 상승 출발할 것으로 예상됩니다. 다만 28일 신현송 한국은행 총재 체제의 첫 금융통화위원회를 앞두고 기준금리 동결이 예상되는 가운데 '매파적 메시지'가 나올 가능성에 주목해야 합니다. 이 대통령이 "명목성장률 10% 육박 관측"을 언급하며 적극재정 필요성을 강조한 점은 긍정적 요인입니다. 국민성장펀드 운용 성과에 대한 정부의 관심도 시장 심리에 우호적으로 작용할 전망입니다.</p></div>
-<div class="summary-block"><h3 class="summary-subtitle">🔥 5) 주요 섹터 포커스</h3><p class="summary-text">반도체 섹터는 호황이 내년 초까지 지속될 것이라는 전망 속에 강세가 예상됩니다. 삼성전자의 높은 성과급 지급으로 건보료가 2조원 더 걷힐 것으로 예상되는 등 실적 개선 기대감이 반영되고 있습니다. 금융주는 우리은행이 종근당에 5년간 1조원 한도 금융지원을 결정하는 등 생산적 금융 확대 움직임이 주목받고 있습니다. 바이오 및 헬스케어 섹터도 교보·토스의 멘탈케어보험 출시 등 신규 서비스 확대로 관심이 높아지고 있습니다.</p></div>
-</div>
-
-  </div>
-
-  <div class="section">
-    <h2 class="section-title">🔥 주목 섹터</h2>
-    <span class="sector-badge">반도체</span>
-<span class="sector-badge">AI부품</span>
-<span class="sector-badge">로봇자동화</span>
-
-  </div>
-
-  <div class="section">
-    <h2 class="section-title">📋 섹션 3 · 애널리스트 리포트</h2>
-    <p style="color:#888;font-size:.82em;margin-bottom:12px">최근 24시간 이내 증권사 리서치 리포트</p>
-    <div class="sec3-group">
-<h3 class="sec3-subtitle">① 증권사 동시 언급</h3>
-<div class="report-card"><div class="report-header"><span class="report-stock">삼성전기</span><span class="report-broker">SK증권 / 신한투자증권</span><a href="https://finance.naver.com/research/company_read.naver?nid=93249&page=1" target="_blank" class="source-link">🔗 리포트</a></div><div class="report-title">글로벌 1등 부품 기업 멀티플</div><div class="report-date">26.05.26</div></div>
-</div>
-<div class="sec3-group">
-<h3 class="sec3-subtitle">③ 6개월 내 첫 언급</h3>
-<div class="report-card"><div class="report-header"><span class="report-stock">대원제약</span><span class="report-broker">DS투자증권</span><a href="https://finance.naver.com/research/company_read.naver?nid=93273&page=1" target="_blank" class="source-link">🔗 리포트</a></div><div class="report-title">견조한 성장 흐름 유지</div><div class="report-date">26.05.26</div></div>
-<div class="report-card"><div class="report-header"><span class="report-stock">덴티움</span><span class="report-broker">DS투자증권</span><a href="https://finance.naver.com/research/company_read.naver?nid=93272&page=1" target="_blank" class="source-link">🔗 리포트</a></div><div class="report-title">효율화 성공</div><div class="report-date">26.05.26</div></div>
-<div class="report-card"><div class="report-header"><span class="report-stock">종근당</span><span class="report-broker">DS투자증권</span><a href="https://finance.naver.com/research/company_read.naver?nid=93271&page=1" target="_blank" class="source-link">🔗 리포트</a></div><div class="report-title">위고비로 안정화된 Top line</div><div class="report-date">26.05.26</div></div>
-<div class="report-card"><div class="report-header"><span class="report-stock">SK바이오팜</span><span class="report-broker">DS투자증권</span><a href="https://finance.naver.com/research/company_read.naver?nid=93270&page=1" target="_blank" class="source-link">🔗 리포트</a></div><div class="report-title">견조한 엑스코프리의 성장세 확인</div><div class="report-date">26.05.26</div></div>
-<div class="report-card"><div class="report-header"><span class="report-stock">OCI홀딩스</span><span class="report-broker">하나증권</span><a href="https://finance.naver.com/research/company_read.naver?nid=93269&page=1" target="_blank" class="source-link">🔗 리포트</a></div><div class="report-title">GE Vernova가 부럽지 않다</div><div class="report-date">26.05.26</div></div>
-<div class="report-card"><div class="report-header"><span class="report-stock">LG이노텍</span><span class="report-broker">하나증권</span><a href="https://finance.naver.com/research/company_read.naver?nid=93268&page=1" target="_blank" class="source-link">🔗 리포트</a></div><div class="report-title">전 사업부의 우상향 방향성</div><div class="report-date">26.05.26</div></div>
-<div class="report-card"><div class="report-header"><span class="report-stock">삼성중공업</span><span class="report-broker">한화투자증권</span><a href="https://finance.naver.com/research/company_read.naver?nid=93267&page=1" target="_blank" class="source-link">🔗 리포트</a></div><div class="report-title">이제부터가 진짜</div><div class="report-date">26.05.26</div></div>
-<div class="report-card"><div class="report-header"><span class="report-stock">유니테스트</span><span class="report-broker">한화투자증권</span><a href="https://finance.naver.com/research/company_read.naver?nid=93266&page=1" target="_blank" class="source-link">🔗 리포트</a></div><div class="report-title">HBM4 번인 테스터, 중화권 CAPA 증설, 태양광..</div><div class="report-date">26.05.26</div></div>
-<div class="report-card"><div class="report-header"><span class="report-stock">ISC</span><span class="report-broker">한화투자증권</span><a href="https://finance.naver.com/research/company_read.naver?nid=93265&page=1" target="_blank" class="source-link">🔗 리포트</a></div><div class="report-title">AI 내러티브, 실적 성장 모두 완벽</div><div class="report-date">26.05.26</div></div>
-<div class="report-card"><div class="report-header"><span class="report-stock">한국콜마</span><span class="report-broker">유안타증권</span><a href="https://finance.naver.com/research/company_read.naver?nid=93264&page=1" target="_blank" class="source-link">🔗 리포트</a></div><div class="report-title">Corporate Day 후기: 3Q도 간다</div><div class="report-date">26.05.26</div></div>
-</div>
-
-  </div>
-
-  <div class="section">
-    <h2 class="section-title">🎯 종합 분석 · 관심 종목</h2>
-    <p style="color:#888;font-size:.82em;margin-bottom:12px">섹션 1~3 교차 분석 (2개 이상 채널 공통 언급)</p>
-    <div class="stock-card"><div class="stock-header"><span class="stock-rank">#1</span><span class="stock-name">삼성전자</span><span class="stock-signal signal-positive">긍정</span><span class="overlap-badge">총 26회 언급 (뉴스 3회 / 경제방송 10회 / 유튜브 13회)</span></div><div class="source-tags"><span class="source-tag">뉴스</span><span class="source-tag">경제방송</span><span class="source-tag">유튜브</span></div><div class="info-block"><h4>📋 종목 요약</h4><p>글로벌 메모리 반도체 및 종합 전자기업. 코스피 8000 돌파를 견인하며 AI 반도체 호황의 중심에 위치. 1인당 성과급 지급으로 화제가 되었으며, 엑시노스 확대와 챗GPT 사내 전면 허용 등 AI 전환 가속화 중. 단일종목 2배 레버리지 ETF 출시로 수급 변화 예상.</p></div><div class="info-block"><h4>📈 주가 흐름 (299000원) <a href="https://finance.naver.com/item/main.naver?code=005930" target="_blank" class="chart-icon" title="네이버 금융">📈 차트</a></h4><p>코스피 8000~8100 돌파 과정에서 핵심 견인주 역할 수행. 반도체 장세 지속으로 상승세 유지 중. 2배 레버리지 ETF 출시로 추가 수급 유입 기대. AI 반도체 호황이 적어도 내년 초까지 지속될 것으로 전망되어 중장기 상승 모멘텀 확보.</p></div><div class="info-block"><h4>🚀 상승 촉매</h4><p>AI 반도체 슈퍼사이클 진입, 엑시노스 확대로 파운드리 경쟁력 강화, 챗GPT 사내 전면 허용으로 AI 활용 가속화, 단일종목 2배 레버리지 ETF 출시로 신규 수급 유입, 높은 성과급 지급으로 내수 소비 증가 기대.</p></div><div class="info-block"><h4>⚠️ 리스크</h4><p>성과급 지급 방식으로 내부 논란 발생 가능성. 파운드리 사업 경쟁력 확보 불확실성. 레버리지 ETF 출시로 변동성 확대 우려. 건보료 급증으로 실수령액 감소. 장 마감 전 외국인 현선물 대규모 매도로 단기 조정 가능성.</p></div><div class="reasons-section"><h4>📢 채널별 언급 내용</h4><div class="reason-item"><div class="reason-header"><span class="reason-source">[뉴스] 매일경제</span> <a href="https://www.mk.co.kr/news/economy/12058056" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">삼성전자 직원 성과급 지급으로 근로소득세 및 건강보험료 대폭 상향. 내년 건보료 2조원 추가 징수 전망.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[경제방송] 이데일리TV</span> <a href="https://www.youtube.com/watch?v=A_ASCDmwwDg" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">코스피 8000 돌파의 핵심 견인주로 역대급 불장 시작. 반도체 호황으로 상승세 지속 전망.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 815머니톡</span> <a href="https://www.youtube.com/watch?v=3OAML4L1ZpY" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">삼성전자 2배 ETF 출시로 한국증시 판도 변화 예상. 수급 대격돌로 변동성 확대 가능성.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 815머니톡</span> <a href="https://www.youtube.com/watch?v=X9argPFXaAE" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">엑시노스 확대는 파운드리 관련 전략. 파운드리 경쟁력 강화를 위한 카드 필요하다는 분석.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[경제방송] 이데일리TV</span> <a href="https://www.youtube.com/watch?v=xeHL7Fw0yHM" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">성과급 관련 노사합의 타결 이면의 리스크 존재.</p></div></div></div>
-<div class="stock-card"><div class="stock-header"><span class="stock-rank">#2</span><span class="stock-name">SK하이닉스</span><span class="stock-signal signal-positive">긍정</span><span class="overlap-badge">총 15회 언급 (경제방송 9회 / 유튜브 6회)</span></div><div class="source-tags"><span class="source-tag">경제방송</span><span class="source-tag">유튜브</span></div><div class="info-block"><h4>📋 종목 요약</h4><p>글로벌 메모리 반도체 선두기업. AI 반도체 호황의 최대 수혜주로 HBM 시장 독점적 지위 확보. 코스피 8000 돌파 과정에서 삼성전자와 함께 핵심 견인 역할 수행. 단일종목 2배 레버리지 ETF 출시로 추가 수급 유입 기대되며 반도체 슈퍼사이클의 중심.</p></div><div class="info-block"><h4>📈 주가 흐름 (2052000원) <a href="https://finance.naver.com/item/main.naver?code=000660" target="_blank" class="chart-icon" title="네이버 금융">📈 차트</a></h4><p>코스피 8100 돌파 과정에서 삼성전자와 함께 상승 주도. 반도체 장세 지속으로 강세 유지. 2배 레버리지 ETF 출시로 수급 개선 기대. AI 반도체 수요 폭발로 중장기 상승 모멘텀 강력. 목표가 상향 전망 지속.</p></div><div class="info-block"><h4>🚀 상승 촉매</h4><p>AI 반도체 슈퍼사이클 본격화, HBM 시장 독점적 지위로 수익성 개선, 단일종목 2배 레버리지 ETF 출시로 신규 수급 유입, 반도체 호황이 내년 초까지 지속 전망, 엔비디아 등 글로벌 AI 기업 수요 급증.</p></div><div class="info-block"><h4>⚠️ 리스크</h4><p>레버리지 ETF 출시로 변동성 확대 우려. 메모리 반도체 가격 사이클 변동성. 중국 반도체 자립화 정책으로 경쟁 심화. 단일 종목 집중 투자 리스크. 레버리지 ETF의 장기 보유 시 복리 효과로 추종 오차 발생 가능.</p></div><div class="reasons-section"><h4>📢 채널별 언급 내용</h4><div class="reason-item"><div class="reason-header"><span class="reason-source">[경제방송] 이데일리TV</span> <a href="https://www.youtube.com/watch?v=_1LPKtJm2hw" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">종목레이더에서 SK하이닉스 집중 분석. 반도체 호황 지속으로 투자 매력 부각.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[경제방송] 이데일리TV</span> <a href="https://www.youtube.com/watch?v=mg2A6-17Yxo" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">반도체 장세 지속 전망. 단일종목 레버리지 ETF 출시로 수급 변화 예상되나 긍정적 영향 기대.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 815머니톡</span> <a href="https://www.youtube.com/watch?v=3OAML4L1ZpY" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">SK하이닉스 2배 ETF 출시로 한국증시 수급 대격돌 예상. 숨은 황금주 발굴 기회 강조.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 경제 원탑</span> <a href="https://www.youtube.com/watch?v=K2NRf02r_IQ" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">지금이라도 SK하이닉스 매수 권고. 결국 더 높은 가격 도달 예상. 장기 투자 매력 강조.</p></div></div></div>
-<div class="stock-card"><div class="stock-header"><span class="stock-rank">#3</span><span class="stock-name">삼성전기</span><span class="stock-signal signal-positive">긍정</span><span class="overlap-badge">총 7회 언급 (경제방송 4회 / 유튜브 2회 / 애널리스트 1회)</span></div><div class="source-tags"><span class="source-tag">경제방송</span><span class="source-tag">유튜브</span><span class="source-tag">애널리스트</span></div><div class="info-block"><h4>📋 종목 요약</h4><p>글로벌 MLCC 및 전자부품 선두기업. AI 수요 폭발로 부품주 급등세 주도. LG이노텍과 함께 반도체 기판 및 AI 부품 시장의 핵심 수혜주로 부상. 글로벌 1등 부품 기업으로 멀티플 재평가 진행 중. 코스피 8100 돌파 과정에서 삼성전자·SK하이닉스 대비 높은 상승률 기록.</p></div><div class="info-block"><h4>📈 주가 흐름 (1572000원) <a href="https://finance.naver.com/item/main.naver?code=009150" target="_blank" class="chart-icon" title="네이버 금융">📈 차트</a></h4><p>AI 수요 폭발로 부품주 중 미친 상승세 시현. 코스피 8100 돌파 과정에서 높은 상승률 기록. LG이노텍 목표가 130만원 상향과 함께 동반 강세. 엔비디아 호실적이 답을 제시하며 추가 상승 모멘텀 확보.</p></div><div class="info-block"><h4>🚀 상승 촉매</h4><p>AI 반도체 수요 폭발로 기판 및 MLCC 수요 급증, 글로벌 1등 부품 기업 멀티플 재평가, 엔비디아 등 글로벌 AI 기업 공급망 핵심 위치, LG이노텍과 함께 반도체 부품 시장 과점 구조, 애널리스트 목표가 상향 지속.</p></div><div class="info-block"><h4>⚠️ 리스크</h4><p>반도체 경기 사이클 변동성에 노출. 중국 부품 업체와의 가격 경쟁 심화. 주요 고객사 수주 변동성. 환율 변동 리스크. 단기 급등 후 조정 가능성. 밸류에이션 부담.</p></div><div class="reasons-section"><h4>📢 채널별 언급 내용</h4><div class="reason-item"><div class="reason-header"><span class="reason-source">[경제방송] 이데일리TV</span> <a href="https://www.youtube.com/watch?v=ue340OCm3RY" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">AI 수요 폭발로 부품주 미친 상승. 삼성전기와 LG이노텍 급등세 주도하며 투자 매력 부각.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[경제방송] 이데일리TV</span> <a href="https://www.youtube.com/watch?v=QECsBN-EyQ0" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">LG이노텍 목표가 130만원 상향과 함께 삼성전기도 동반 강세. MLCC 및 기판 수요 급증이 배경.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 815머니톡</span> <a href="https://www.youtube.com/watch?v=D3Sua01d2t8" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">코스피 1만 시대 가능 이유로 삼성전기·LG이노텍 주가 폭등 제시. 엔비디아가 답 제공했다는 분석.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[애널리스트] SK증권 / 신한투자증권</span> <a href="https://finance.naver.com/research/company_read.naver?nid=93249&page=1" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">글로벌 1등 부품 기업 멀티플 재평가 전망. 애널리스트 리포트에서 투자 매력 강조.</p></div></div></div>
-<div class="stock-card"><div class="stock-header"><span class="stock-rank">#4</span><span class="stock-name">현대차</span><span class="stock-signal signal-positive">긍정</span><span class="overlap-badge">총 4회 언급 (경제방송 2회 / 유튜브 2회)</span></div><div class="source-tags"><span class="source-tag">경제방송</span><span class="source-tag">유튜브</span></div><div class="info-block"><h4>📋 종목 요약</h4><p>국내 대표 완성차 기업. 로봇 생산 확대로 미래 성장동력 확보. 노조가 순이익 30% 성과급 요구하며 성과급 도미노 현상 확산. AI 혁명 시대 국내 주식 핵심 보유 종목으로 언급. 로봇 자동화 본격화로 생산성 혁신 기대되며 중장기 성장 스토리 부각.</p></div><div class="info-block"><h4>📈 주가 흐름 (689000원) <a href="https://finance.naver.com/item/main.naver?code=005380" target="_blank" class="chart-icon" title="네이버 금융">📈 차트</a></h4><p>로봇 생산 확대 호재로 상승 모멘텀 확보. AI 혁명 시대 핵심 보유 종목으로 재조명. 성과급 도미노 현상으로 단기 불확실성 존재하나 중장기 성장 가치 우수. 로봇 사업 본격화로 추가 상승 여력.</p></div><div class="info-block"><h4>🚀 상승 촉매</h4><p>로봇 생산 확대로 생산성 혁신 및 미래 성장동력 확보, AI 시대 자동차 산업 혁신 선도, 전기차 및 수소차 경쟁력 강화, 글로벌 완성차 시장 점유율 확대, 로봇 자동화 본격 적용으로 수익성 개선 기대.</p></div><div class="info-block"><h4>⚠️ 리스크</h4><p>노조 성과급 30% 요구로 노사 갈등 우려. 로봇 도입 반대 움직임으로 생산성 개선 지연 가능성. 전기차 시장 경쟁 심화. 중국 전기차 업체와의 가격 경쟁. 글로벌 경기 둔화 시 수요 감소 리스크.</p></div><div class="reasons-section"><h4>📢 채널별 언급 내용</h4><div class="reason-item"><div class="reason-header"><span class="reason-source">[경제방송] 이데일리TV</span> <a href="https://www.youtube.com/watch?v=krkIXkZg3og" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">성과급 도미노가 현대차 덮쳤다. 노조 로봇 반대 및 순이익 30% 성과급 요구로 갈등 우려.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[경제방송] TomatoTV</span> <a href="https://www.youtube.com/watch?v=zXMduhNVAmE" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">AI 혁명시대 국내 주식 핵심 보유 종목으로 현대차 언급. 장기 투자 매력 강조.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 815머니톡</span> <a href="https://www.youtube.com/watch?v=BcVGJmZ_oWA" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">현대차 빅호재로 로봇 생산 확대 시작. 생산성 혁신으로 중장기 성장 가치 부각.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 웅달 책방</span> <a href="https://www.youtube.com/watch?v=D9B8nPW7WHI" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">현대차 로봇 정말 미쳤다는 평가. 현대차와 관련 주식 싹쓸이 매수 권고.</p></div></div></div>
-
-  </div>
-
-  <div class="section">
-    <h2 class="section-title">💎 히든픽</h2>
-    <div class="hidden-pick-card"><div class="stock-header"><span class="stock-rank">Hidden #1</span><span class="stock-name">삼성전기</span></div><div class="price-box"><span class="current-price">1572000원</span><span class="price-note">상승232000 (+17.31%)</span></div><div class="info-block"><h4>📋 기업 소개</h4><p>글로벌 MLCC 및 반도체 기판 선두기업으로 AI 반도체 부품 시장의 핵심 수혜주. 총 7회 언급으로 상대적으로 적은 노출에도 불구하고 애널리스트 리포트까지 3개 채널에서 언급되며 투자 가치 높게 평가. AI 수요 폭발로 부품주 중 가장 높은 상승률 기록하며 엔비디아 공급망 핵심 위치. 글로벌 1등 부품 기업 멀티플 재평가 진행 중으로 추가 상승 여력 충분.</p></div><div class="info-block"><h4>🚀 주목 이유 <a href="https://finance.naver.com/item/main.naver?code=009150" target="_blank" class="chart-icon">📈 차트</a></h4><p>AI 반도체 부품 수요 폭발로 MLCC 및 기판 매출 급증, 엔비디아 등 글로벌 AI 기업 공급망 핵심 포지션 확보, 글로벌 1등 부품 기업 멀티플 재평가로 밸류에이션 상향, LG이노텍과 함께 반도체 부품 시장 과점 구조 형성, 애널리스트 목표가 지속 상향 조정.</p></div><div class="info-block"><h4>⚠️ 리스크</h4><p>반도체 경기 사이클 변동성 노출. 중국 부품 업체와의 가격 경쟁 심화. 주요 고객사 수주 변동 리스크. 단기 급등 후 조정 가능성. 환율 변동 영향. 밸류에이션 부담 증가.</p></div><div class="reasons-section"><h4>📢 채널별 언급 내용</h4><div class="reason-item"><div class="reason-header"><span class="reason-source">[경제방송] 이데일리TV</span> <a href="https://www.youtube.com/watch?v=ue340OCm3RY" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">AI 수요 폭발로 부품주 미친 상승 주도. 삼성전기가 LG이노텍과 함께 급등세 선도.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 815머니톡</span> <a href="https://www.youtube.com/watch?v=D3Sua01d2t8" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">코스피 1만 시대 가능 근거로 삼성전기 주가 폭등 제시. 엔비디아가 답 제공.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[애널리스트] SK증권 / 신한투자증권</span> <a href="https://finance.naver.com/research/company_read.naver?nid=93249&page=1" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">글로벌 1등 부품 기업 멀티플 재평가 전망. 투자 매력 강조하는 리포트 발간.</p></div></div></div>
-<div class="hidden-pick-card"><div class="stock-header"><span class="stock-rank">Hidden #2</span><span class="stock-name">현대차</span></div><div class="price-box"><span class="current-price">689000원</span><span class="price-note">상승34000 (+5.19%)</span></div><div class="info-block"><h4>📋 기업 소개</h4><p>국내 대표 완성차 기업으로 로봇 자동화 본격화로 생산성 혁신 추진 중. 총 4회 언급으로 적은 노출에도 로봇 생산 확대라는 명확한 성장 촉매 보유. AI 혁명 시대 국내 주식 핵심 보유 종목으로 재조명되며 중장기 투자 가치 부각. 노조 갈등 우려에도 불구하고 로봇 사업 본격화로 미래 성장동력 확보. 전기차·수소차·로봇 등 미래 모빌리티 전 영역에서 경쟁력 강화 중.</p></div><div class="info-block"><h4>🚀 주목 이유 <a href="https://finance.naver.com/item/main.naver?code=005380" target="_blank" class="chart-icon">📈 차트</a></h4><p>로봇 생산 확대로 생산성 혁신 및 원가 절감 효과, AI 시대 자동차 산업 디지털 전환 선도, 전기차 및 수소차 라인업 확대로 친환경차 시장 점유율 상승, 글로벌 완성차 시장 프리미엄 브랜드 입지 강화, 로봇 자동화 적용으로 수익성 개선.</p></div><div class="info-block"><h4>⚠️ 리스크</h4><p>노조의 로봇 도입 반대 및 순이익 30% 성과급 요구로 노사 갈등 심화 우려. 로봇 자동화 지연 가능성. 중국 전기차 업체와의 가격 경쟁 격화. 글로벌 경기 둔화 시 완성차 수요 감소. 원자재 가격 상승 리스크.</p></div><div class="reasons-section"><h4>📢 채널별 언급 내용</h4><div class="reason-item"><div class="reason-header"><span class="reason-source">[경제방송] TomatoTV</span> <a href="https://www.youtube.com/watch?v=zXMduhNVAmE" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">AI 혁명시대 국내 주식 핵심 보유 종목으로 현대차 선정. 장기 투자 가치 강조.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 815머니톡</span> <a href="https://www.youtube.com/watch?v=BcVGJmZ_oWA" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">현대차 로봇 생산 확대 빅호재. 생산성 혁신으로 중장기 성장 스토리 부각.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 웅달 책방</span> <a href="https://www.youtube.com/watch?v=D9B8nPW7WHI" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">현대차 로봇 정말 미쳤다는 평가. 현대차와 관련주 싹쓸이 매수 강력 권고.</p></div></div></div>
-<div class="hidden-pick-card"><div class="stock-header"><span class="stock-rank">Hidden #3</span><span class="stock-name">LG이노텍</span></div><div class="price-box"><span class="current-price">1068000원</span><span class="price-note">상승204000 (+23.61%)</span></div><div class="info-block"><h4>📋 기업 소개</h4><p>반도체 기판 및 카메라 모듈 선두기업. 삼성전기와 함께 AI 부품 시장 과점 구조 형성. 애널리스트 목표가 130만원 상향되며 황제주의 새로운 동력 확보. AI 수요 폭발로 기판 및 MLCC 수요 급증의 최대 수혜. 엔비디아 등 글로벌 AI 기업 공급망 핵심 위치로 중장기 성장 가시성 우수. 코스피 1만 시대 가능 근거로 주가 폭등 사례 제시.</p></div><div class="info-block"><h4>🚀 주목 이유 <a href="https://finance.naver.com/item/main.naver?code=011070" target="_blank" class="chart-icon">📈 차트</a></h4><p>AI 반도체 기판 수요 폭발로 매출 급증, 애널리스트 목표가 130만원 상향으로 추가 상승 여력, 엔비디아 공급망 핵심 포지션으로 안정적 수주 확보, 삼성전기와 부품 시장 과점 구조로 가격 결정력 강화, 카메라 모듈 등 다각화 사업 성장.</p></div><div class="info-block"><h4>⚠️ 리스크</h4><p>반도체 경기 사이클 변동성 노출. 주요 고객사 수주 변동 리스크. 중국 부품 업체와의 가격 경쟁. 단기 급등 후 차익 실현 매물 출회 가능성. 환율 변동 영향. 높은 밸류에이션 부담.</p></div><div class="reasons-section"><h4>📢 채널별 언급 내용</h4><div class="reason-item"><div class="reason-header"><span class="reason-source">[경제방송] 이데일리TV</span> <a href="https://www.youtube.com/watch?v=QECsBN-EyQ0" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">LG이노텍 목표가 130만원 상향. 황제주의 새 동력으로 MLCC 및 기판 수요 급증 제시.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[경제방송] 이데일리TV</span> <a href="https://www.youtube.com/watch?v=ue340OCm3RY" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">AI 수요 폭발로 부품주 미친 상승. LG이노텍이 삼성전기와 함께 급등 주도.</p></div><div class="reason-item"><div class="reason-header"><span class="reason-source">[유튜브] 삼프로TV</span> <a href="https://www.youtube.com/watch?v=MZxGSzvCmI0" target="_blank" class="source-link">🔗 바로보기</a></div><p class="reason-detail">8천피 달성 이후 삼성전자·SK하이닉스보다 LG이노텍과 삼성전기 투자 매력 강조.</p></div></div></div>
-
-  </div>
-
-  <div class="section">
-    <h2 class="section-title">💰 AI 투자 전략</h2>
-    <div class="strategy-block">
-      <p>코스피 8000 돌파 이후 AI 반도체 슈퍼사이클 본격화 국면에서 3단계 분산 투자 전략 권고. 1단계는 삼성전자·SK하이닉스 등 대형 반도체주 50% 핵심 포지션 구축으로 시장 상승 수혜 확보. 2배 레버리지 ETF는 단기 트레이딩 목적으로만 제한적 활용하되 변동성 리스크 유의. 2단계는 삼성전기·LG이노텍 등 AI 부품주 30% 배분으로 반도체 공급망 전체 수혜 포착. 애널리스트 목표가 상향 및 엔비디아 공급망 핵심 포지션 고려 시 추가 상승 여력 충분. 3단계는 현대차 등 로봇 자동화 수혜주 20% 배분으로 AI 혁명의 제조업 확산 대비. 6월 금통위 매파적 동결 전망 및 외국인 선물 매도 감안 시 단기 조정 구간 활용한 분할 매수 전략 유효. 반도체 호황이 내년 초까지 지속 전망되므로 중장기 관점 보유 원칙 견지하되, 급등 종목은 일부 차익 실현으로 리스크 관리 병행 필수.</p>
+  <section class="section"><div class="section-title">📊 시장 지표</div><div class="market-indicators"><p style="color:#666;font-size:.85em;">시장 데이터 없음</p></div></section>
+<section class="section"><div class="section-title">📰 시장 요약</div><div class="summary-block"><div class="summary-title">📌 시장 개요</div><p class="summary-text">코스피가 사상 최고치 랠리를 이어가며 8,000선을 돌파하는 역사적인 장세가 연출되고 있습니다. 삼성전자와 SK하이닉스로 대표되는 반도체 대형주에 수급이 집중되며 시장 상승을 주도하고 있으며, 특히 SK하이닉스는 시가총액 1조 달러 클럽에 진입하는 쾌거를 달성했습니다.</p></div><div class="summary-block"><div class="summary-title">📊 주요 이슈</div><p class="summary-text">미래에셋증권이 삼성전자와 SK하이닉스 단일종목 2배 레버리지 ETN을 업계 최초로 상장하면서 개인투자자들의 폭발적인 관심을 받고 있습니다. '삼전닉스 ETF'라 불리는 이 상품들이 시장의 블랙홀이 되어 유동성을 흡수하고 있어, 코스닥 및 중소형주에는 상대적 약세 우려가 제기되고 있습니다.</p></div><div class="summary-block"><div class="summary-title">🔍 투자 포인트</div><p class="summary-text">반도체 업황에 대한 낙관론이 확산되며 전문가들은 '반도체 사이클 공식의 종언'을 언급하고 있습니다. AI 수요 폭발로 인한 구조적 성장이 기존의 순환적 사이클을 대체하고 있다는 분석이 힘을 얻고 있으며, 미래에셋증권은 삼성전자 목표가 55만원, SK하이닉스 380만원으로 상향 조정했습니다.</p></div><div class="summary-block"><div class="summary-title">⚠️ 리스크 요인</div><p class="summary-text">엔비디아 젠슨 황 CEO가 다음 주 삼성, SK, 현대차, LG 경영진과 회동을 예고하면서 AI 동맹 강화에 대한 기대감도 고조되고 있습니다. 현대차는 로봇 사업 본격화와 함께 '현대차·기아 채권혼합 ETF' 출시 소식까지 전해지며 주목받고 있습니다.</p></div><div class="summary-block"><div class="summary-title">💡 전망</div><p class="summary-text">다만 반도체 쏠림 장세가 심화되면서 시장 전반의 건전성에 대한 우려도 존재합니다. 코스닥 및 바이오, 2차전지 등 기존 주도주들의 소외 현상이 뚜렷해지고 있어 포트폴리오 분산 전략이 필요한 시점입니다.</p></div></section>
+<section class="section"><div class="section-title">🔥 주목 섹터</div><div class="sector-list"><div class="sector-badge">반도체</div><div class="sector-badge">AI/인공지능</div><div class="sector-badge">로봇</div></div></section>
+<section class="section"><div class="section-title">👀 관심 종목</div>
+<div class="stock-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#1</div>
+    <div class="stock-name-block">
+      <a href="https://finance.naver.com/item/main.naver?code=005930" target="_blank" rel="noopener"
+         class="stock-name">삼성전자</a>
+      <span class="signal-badge signal-positive"
+            style="border-color:#ffa94d;color:#ffa94d;">positive</span>
     </div>
+    <div class="overlap-badge" title="채널 중복 언급 수">🔥 4개 채널</div>
   </div>
-
-  <div class="section archive-section">
-    <h2 class="section-title">📅 지난 브리핑</h2>
-    <a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-26.html" class="archive-link">2026-05-26</a>
-<a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-25.html" class="archive-link">2026-05-25</a>
-<a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-24.html" class="archive-link">2026-05-24</a>
-<a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-23.html" class="archive-link">2026-05-23</a>
-<a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-22.html" class="archive-link">2026-05-22</a>
-
+  <div class="stock-card-body">
+    <div class="source-tags"><span class="source-tag" style="background:#2d3a4a;color:#74c0fc;">뉴스 11</span><span class="source-tag" style="background:#3a2d1a;color:#ffa94d;">경제방송 26</span><span class="source-tag" style="background:#2d1a3a;color:#cc5de8;">유튜브 25</span><span class="source-tag" style="background:#1a3a2d;color:#51cf66;">애널리스트 1</span></div>
+    <div class="price-row"><span class="price-value">{'price': 'N/A', 'change': '', 'change_pct': '', 'code': '005930', 'naver_url': 'https://finance.naver.com/item/main.naver?code=005930'}</span><a href="https://finance.naver.com/item/main.naver?code=005930" target="_blank" rel="noopener" class="chart-btn">🔗 Naver 차트</a></div>
+    <ul class="reasons-list"><li>목표가 55만원 제시, '밸류에이션 집중 추격 구간' 진입 평가</li><li>코스피 8천선 돌파, SK하이닉스와 함께 상승 동력 역할</li><li>반도체 투톱 급등, 이유 있는 쏠림에 비중 확대 권고</li></ul>
   </div>
+</div>
+
+<div class="stock-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#2</div>
+    <div class="stock-name-block">
+      <a href="https://finance.naver.com/item/main.naver?code=000660" target="_blank" rel="noopener"
+         class="stock-name">SK하이닉스</a>
+      <span class="signal-badge signal-positive"
+            style="border-color:#ffa94d;color:#ffa94d;">positive</span>
+    </div>
+    <div class="overlap-badge" title="채널 중복 언급 수">🔥 4개 채널</div>
+  </div>
+  <div class="stock-card-body">
+    <div class="source-tags"><span class="source-tag" style="background:#2d3a4a;color:#74c0fc;">뉴스 8</span><span class="source-tag" style="background:#3a2d1a;color:#ffa94d;">경제방송 19</span><span class="source-tag" style="background:#2d1a3a;color:#cc5de8;">유튜브 14</span><span class="source-tag" style="background:#1a3a2d;color:#51cf66;">애널리스트 1</span></div>
+    <div class="price-row"><span class="price-value">{'price': 'N/A', 'change': '', 'change_pct': '', 'code': '000660', 'naver_url': 'https://finance.naver.com/item/main.naver?code=000660'}</span><a href="https://finance.naver.com/item/main.naver?code=000660" target="_blank" rel="noopener" class="chart-btn">🔗 Naver 차트</a></div>
+    <ul class="reasons-list"><li>목표가 380만원, '밸류에이션 대기권 돌파' 동시 평가</li><li>시가총액 1조 달러 돌파, 국내 두 번째 기록</li><li>매수 사이드카 발동, 반도체 불장 지속 전망</li></ul>
+  </div>
+</div>
+
+<div class="stock-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#3</div>
+    <div class="stock-name-block">
+      <a href="https://finance.naver.com/item/main.naver?code=005380" target="_blank" rel="noopener"
+         class="stock-name">현대차</a>
+      <span class="signal-badge signal-positive"
+            style="border-color:#ffa94d;color:#ffa94d;">positive</span>
+    </div>
+    <div class="overlap-badge" title="채널 중복 언급 수">🔥 4개 채널</div>
+  </div>
+  <div class="stock-card-body">
+    <div class="source-tags"><span class="source-tag" style="background:#2d3a4a;color:#74c0fc;">뉴스 1</span><span class="source-tag" style="background:#3a2d1a;color:#ffa94d;">경제방송 4</span><span class="source-tag" style="background:#2d1a3a;color:#cc5de8;">유튜브 2</span><span class="source-tag" style="background:#1a3a2d;color:#51cf66;">애널리스트 2</span></div>
+    <div class="price-row"><span class="price-value">{'price': 'N/A', 'change': '', 'change_pct': '', 'code': '005380', 'naver_url': 'https://finance.naver.com/item/main.naver?code=005380'}</span><a href="https://finance.naver.com/item/main.naver?code=005380" target="_blank" rel="noopener" class="chart-btn">🔗 Naver 차트</a></div>
+    <ul class="reasons-list"><li>엔비디아 젠슨 황, 삼성·SK·현대차·LG 경영진 회동으로 AI 동맹 강화</li><li>아틀라스 로봇 데뷔 임박, 월드컵 로봇 선수 등장 가능성</li><li>현대차와 로봇주 10배 상승 전망 제시</li></ul>
+  </div>
+</div>
+
+<div class="stock-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#4</div>
+    <div class="stock-name-block">
+      <a href="https://finance.naver.com/item/main.naver?code=006800" target="_blank" rel="noopener"
+         class="stock-name">미래에셋증권</a>
+      <span class="signal-badge signal-positive"
+            style="border-color:#ffa94d;color:#ffa94d;">positive</span>
+    </div>
+    <div class="overlap-badge" title="채널 중복 언급 수">🔥 2개 채널</div>
+  </div>
+  <div class="stock-card-body">
+    <div class="source-tags"><span class="source-tag" style="background:#2d3a4a;color:#74c0fc;">뉴스 3</span><span class="source-tag" style="background:#1a3a2d;color:#51cf66;">애널리스트 4</span></div>
+    <div class="price-row"><span class="price-value">{'price': 'N/A', 'change': '', 'change_pct': '', 'code': '006800', 'naver_url': 'https://finance.naver.com/item/main.naver?code=006800'}</span><a href="https://finance.naver.com/item/main.naver?code=006800" target="_blank" rel="noopener" class="chart-btn">🔗 Naver 차트</a></div>
+    <ul class="reasons-list"><li>업계 최초 삼성전자·SK하이닉스 단일종목 레버리지 ETN 상장</li><li>삼성전자 55만원, SK하이닉스 380만원 목표가 상향 발표</li><li>루닛, 뉴로핏 등 바이오·AI 종목 커버리지 확대</li></ul>
+  </div>
+</div>
+
+<div class="stock-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#5</div>
+    <div class="stock-name-block">
+      <a href="https://finance.naver.com/item/main.naver?code=009150" target="_blank" rel="noopener"
+         class="stock-name">삼성전기</a>
+      <span class="signal-badge signal-positive"
+            style="border-color:#ffa94d;color:#ffa94d;">positive</span>
+    </div>
+    <div class="overlap-badge" title="채널 중복 언급 수">🔥 2개 채널</div>
+  </div>
+  <div class="stock-card-body">
+    <div class="source-tags"><span class="source-tag" style="background:#3a2d1a;color:#ffa94d;">경제방송 2</span><span class="source-tag" style="background:#2d1a3a;color:#cc5de8;">유튜브 1</span></div>
+    <div class="price-row"><span class="price-value">{'price': 'N/A', 'change': '', 'change_pct': '', 'code': '009150', 'naver_url': 'https://finance.naver.com/item/main.naver?code=009150'}</span><a href="https://finance.naver.com/item/main.naver?code=009150" target="_blank" rel="noopener" class="chart-btn">🔗 Naver 차트</a></div>
+    <ul class="reasons-list"><li>22만원 파격 목표가 제시, MLCC 수요 급증 수혜</li><li>반도체 호황 다음은 MLCC/기판의 시대, 삼성전기 주목</li></ul>
+  </div>
+</div>
+</section>
+<section class="section"><div class="section-title">⭐ 오늘의 픽</div>
+<div class="hidden-pick-card">
+  <div class="hp-card-header">
+    <div class="hp-badges"><span class="hp-source-badge" style="background:#74c0fc22;color:#74c0fc;border:1px solid #74c0fc55;">📡 경제방송</span><span class="hp-score-badge">Pick #1 · 4.9pt</span></div>
+    <a href="https://finance.naver.com/item/main.naver?code=196170" target="_blank" rel="noopener"
+       class="hp-stock-name">알테오젠</a>
+    <span class="hp-signal">positive</span>
+  </div>
+  <div class="hp-card-body">
+    <div class="price-row"><span class="price-value">{'price': 'N/A', 'change': '', 'change_pct': '', 'code': '196170', 'naver_url': 'https://finance.naver.com/item/main.naver?code=196170'}</span><a href="https://finance.naver.com/item/main.naver?code=196170" target="_blank" rel="noopener" class="chart-btn">🔗 Naver 차트</a></div>
+    <ul class="reasons-list"><li>키트루다SC 상업화+추가 기술이전+실적 폭증으로 바이오 대장주 독주 시작 전망</li><li>종목레이더에서 SK스퀘어, 현대모비스와 함께 관심 종목으로 선정</li></ul>
+  </div>
+</div>
+</section>
+<section class="section"><div class="section-title">📋 애널리스트 리포트 분석</div><div class="analyst-category-title">🔥 복수 증권사 동시 언급</div><div class="analyst-card"><div class="analyst-card-header"><span class="analyst-stock">SK하이닉스</span><span class="analyst-broker">미래에셋증권 / 현대차증권</span></div><div class="analyst-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93282&page=1" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">밸류에이션 대기권 돌파</a></div><p class="analyst-summary">증권사: 미래에셋증권 / 현대차증권 | 종목: SK하이닉스 | 리포트: 밸류에이션 대기권 돌파</p></div><div class="analyst-category-title">📌 단독 언급</div><div class="analyst-card"><div class="analyst-card-header"><span class="analyst-stock">뉴로핏</span><span class="analyst-broker">미래에셋증권</span></div><div class="analyst-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93297&page=1" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">글로벌 시장 진입에 따른 성장통</a></div><p class="analyst-summary">증권사: 미래에셋증권 | 종목: 뉴로핏 | 리포트: 글로벌 시장 진입에 따른 성장통</p></div><div class="analyst-card"><div class="analyst-card-header"><span class="analyst-stock">하이록코리아</span><span class="analyst-broker">대신증권</span></div><div class="analyst-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93296&page=1" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">에너지 공급망 재편 수혜주</a></div><p class="analyst-summary">증권사: 대신증권 | 종목: 하이록코리아 | 리포트: 에너지 공급망 재편 수혜주</p></div><div class="analyst-card"><div class="analyst-card-header"><span class="analyst-stock">메리츠금융지주</span><span class="analyst-broker">대신증권</span></div><div class="analyst-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93295&page=1" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">멀티플이 펀더멘탈을 하회하기 시작</a></div><p class="analyst-summary">증권사: 대신증권 | 종목: 메리츠금융지주 | 리포트: 멀티플이 펀더멘탈을 하회하기 시작</p></div><div class="analyst-card"><div class="analyst-card-header"><span class="analyst-stock">쏘카</span><span class="analyst-broker">DS투자증권</span></div><div class="analyst-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93294&page=1" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">모빌리티 혁신은 계속된다</a></div><p class="analyst-summary">증권사: DS투자증권 | 종목: 쏘카 | 리포트: 모빌리티 혁신은 계속된다</p></div><div class="analyst-card"><div class="analyst-card-header"><span class="analyst-stock">모나용평</span><span class="analyst-broker">DS투자증권</span></div><div class="analyst-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93293&page=1" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">이어질 분양과 이에 따른 운영 매출 확대에 ..</a></div><p class="analyst-summary">증권사: DS투자증권 | 종목: 모나용평 | 리포트: 이어질 분양과 이에 따른 운영 매출 확대에 ..</p></div><div class="analyst-card"><div class="analyst-card-header"><span class="analyst-stock">수산인더스트리</span><span class="analyst-broker">DS투자증권</span></div><div class="analyst-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93292&page=1" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">원전 생태계 확대로 기대되는 수혜</a></div><p class="analyst-summary">증권사: DS투자증권 | 종목: 수산인더스트리 | 리포트: 원전 생태계 확대로 기대되는 수혜</p></div><div class="analyst-card"><div class="analyst-card-header"><span class="analyst-stock">롯데이노베이트</span><span class="analyst-broker">DS투자증권</span></div><div class="analyst-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93291&page=1" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">본업은 성장하지만 주가의 촉매가 부족</a></div><p class="analyst-summary">증권사: DS투자증권 | 종목: 롯데이노베이트 | 리포트: 본업은 성장하지만 주가의 촉매가 부족</p></div><div class="analyst-card"><div class="analyst-card-header"><span class="analyst-stock">SBS</span><span class="analyst-broker">DS투자증권</span></div><div class="analyst-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93290&page=1" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">콘텐츠로 광고 부진 방어</a></div><p class="analyst-summary">증권사: DS투자증권 | 종목: SBS | 리포트: 콘텐츠로 광고 부진 방어</p></div><div class="analyst-card"><div class="analyst-card-header"><span class="analyst-stock">HJ중공업</span><span class="analyst-broker">DS투자증권</span></div><div class="analyst-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93289&page=1" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">개화하는 상선과 다가오는 미국향 모멘텀</a></div><p class="analyst-summary">증권사: DS투자증권 | 종목: HJ중공업 | 리포트: 개화하는 상선과 다가오는 미국향 모멘텀</p></div><div class="analyst-card"><div class="analyst-card-header"><span class="analyst-stock">아이씨티케이</span><span class="analyst-broker">하나증권</span></div><div class="analyst-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93288&page=1" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">트럼프가 양자산업에 사활을 걸고 있습니다</a></div><p class="analyst-summary">증권사: 하나증권 | 종목: 아이씨티케이 | 리포트: 트럼프가 양자산업에 사활을 걸고 있습니다</p></div></section>
+<section class="section"><div class="section-title">📺 경제방송TV 추천</div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=ZDYD1UVoXXI" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">[마켓나우3부] 종목레이더 - SK스퀘어·알테오젠·현대모비스</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=pSU7_H9xfHc" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">[마켓나우3부] 돈 되는 섹터&테마 -냉각공조장비·2차전지 탑픽은? (유니셈·LG전자·GST·삼성중공업·에코프로·삼성SDI·롯데에너지머티리얼즈)</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=3w7opYS008I" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">반도체 ETF 출시 시장에 어떤 영향? #삼성전자 #SK하이닉스 #ETF #레버리지 #반도체 #AI / FinalShot (20260527)</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=BKOd3arBt38" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">레버리지 ETF 시장의 블랙홀 되나 삼성전자 #SK하이닉스 #레버리지 #ETF #반도체 #AI / FinalShot (20260527)</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=-kjOYExKFSE" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">[이데일리TV NEWS] D램 매출 사상 최대! 반도체 슈퍼사이클 시작 #D램 #매출 | 애프터마켓 (20260527)</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=n-h7hacFcWU" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">[이데일리TV NEWS] 영업비밀 유출 의혹! 삼성바이오 내부 전쟁 시작 #삼성바이오 #노조 #압수수색 | 애프터마켓 (20260527)</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=pcrelFipJc0" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">[이데일리TV NEWS] “이게 돈 된다” 몰린 투자자... 삼전닉스 ETF 대폭발 #삼성전자 #SK하이닉스 #레버리지 | 애프터마켓 (20260527)</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=17ExKTpO9ik" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">[파이널포인트] 오늘장 마감, 꼭 알아야 할 3가지! 반도체 / 제약·바이오 / 삼성에스디에스 | Final Shot (20260527)</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=yAPyQBJ35h8" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">[종목 파인더] 역시 반도체! 삼전·닉스 신고가 행진 #반도체 #제약바이오 #피지컬AI #로봇 | Final Shot (20260527)</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=u9Ar6mhqL54" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">젠슨황의 폭탄선언...대만에 천문학적 투자한다(260527)</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=IPTkGaKV6as" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">[김호수의 앵커브리핑] 마이크론 목표주가 2배 UP! 그럼 ‘삼전-닉스’는요?</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=k_YBpQoLctw" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">A투자 늦지 않은 이유! 부품값은 먼저 5배 폭등했습니다. 투자 순서는? / 송재경 디멘젼투자자문 투자부문 대표 #삼성전자 #SK하이닉스 #ETF #레버리지ETF #삼전닉스ETF</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=1i2B2DVLuVI" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">삼성전자·SK하이닉스 레버리지 ETF 투자 하신다고요? 이것 꼭 확인하고 투자하세요! / 송재경 디멘젼투자자문 투자부문 대표</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=JefSKsODvSM" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">김영훈 “반도체는 공공재” 삼성 성과급 논쟁 새 국면 #삼성전자 #성과급 #삼성노조 (20260527)</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=SIBdGKsX2Uo" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">[마켓뉴스NOW] 임상 성공 터졌다! 주가 상한가 직행 #디앤디파마텍 #임상 #제약바이오 | Market Now 3 (20260527)</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=ujbM17c0qR0" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">[마켓뉴스NOW] 삼성 파업 드디어 끝났다! 73% 찬성, 전격 타결 #삼성전자 #파업 #찬성 | Market Now 3 (20260527)</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=o3erfOCAa_I" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">월드컵에 로봇 선수 등장? 현대차 아틀라스 데뷔 임박 #아틀라스 #현대차  #AI로봇 (20260527)</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=lx9m__zx_OA" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">외국인 돌아왔다! 놓치면 후회할 섹터 알려드립니다 / 송재경 디멘젼투자자문 투자부문 대표 #삼성전자 #SK하이닉스 #ETF #레버리지ETF #삼전닉스ETF</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=Qrr0NOJia18" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">SK하이닉스 200만원이 끝이 아닙니다! 다음 목표가 공개, 투자 전략은? feat. 레버리지 ETF 핵심 전략 / 조호진 타키온뉴스 대표 #SK하이닉스 #삼성전자 #ETF</a></div></div><div class="tv-card"><div class="tv-card-header"><span class="tv-channel">이데일리TV</span><span class="tv-date"></span></div><div class="tv-card-title"><a href="https://www.youtube.com/watch?v=3mJmdpMBIE0" target="_blank" rel="noopener" style="color:#74c0fc;text-decoration:none;">[마켓뉴스NOW] ETF 하나에 시장 흔들... 사이드카 발동까지 #레버리지 #삼성전자 #SK하이닉스 | Market Now 2 (20260527)</a></div></div></section>
+<section class="section"><div class="section-title">🤖 AI 투자 전략</div><div class="ai-strategy-box">반도체 대형주 쏠림이 극심한 가운데 삼성전자·SK하이닉스 비중을 핵심으로 유지하되, 레버리지 ETN은 변동성 관리에 유의해야 합니다. 젠슨 황 CEO 방한 일정이 다음 주로 예정되어 있어 AI 관련 모멘텀은 지속될 전망이며, 현대차·삼성전기 등 2차 수혜주로의 확산 가능성도 열어두어야 합니다. 바이오(알테오젠)와 2차전지(에코프로) 섹터는 현재 소외되고 있으나 반도체 과열 조정 시 순환매 대상이 될 수 있어 관심 종목으로 모니터링이 필요합니다. 코스닥 및 중소형주는 당분간 관망하며, 시장 전체의 과열 신호에 대비한 현금 비중 10~15% 유지를 권장합니다.</div></section>
+<section class="section"><div class="section-title">🗂 지난 브리핑</div><div class="archive-list"><a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-28.html" target="_blank" rel="noopener" class="archive-link">2026-05-28</a><a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-26.html" target="_blank" rel="noopener" class="archive-link">2026-05-26</a><a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-25.html" target="_blank" rel="noopener" class="archive-link">2026-05-25</a><a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-24.html" target="_blank" rel="noopener" class="archive-link">2026-05-24</a><a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-23.html" target="_blank" rel="noopener" class="archive-link">2026-05-23</a><a href="https://kunil-choi.github.io/stock-briefing-v3/archive/2026-05-22.html" target="_blank" rel="noopener" class="archive-link">2026-05-22</a></div></section>
+
 
   <div class="disclaimer">
-    ⚠️ 본 브리핑은 AI가 자동 생성한 참고 자료이며, 투자 권유가 아닙니다.<br>
-    투자 판단의 책임은 투자자 본인에게 있습니다.
+    본 브리핑은 AI가 공개 데이터를 수집·분석하여 자동 생성한 정보입니다.<br>
+    투자 판단의 최종 책임은 투자자 본인에게 있으며, 투자 권유가 아닙니다.<br>
+    © 2026 AI Stock Briefing · 자동 생성
   </div>
+
 </div>
 
-<div class="chart-modal" id="chartModal" onclick="closeChart()">
-  <span class="close-btn" onclick="closeChart()">&times;</span>
-  <img id="chartImg" src="" alt="차트">
+<!-- 차트 모달 -->
+<div class="modal-overlay" id="chartModal" onclick="closeChart(event)">
+  <div class="modal-box">
+    <button class="modal-close"
+      onclick="document.getElementById('chartModal').classList.remove('active')">✕</button>
+    <div class="modal-title" id="chartModalTitle"></div>
+    <img class="modal-img" id="chartModalImg" src="" alt="차트">
+  </div>
 </div>
 
 <script>
-var chartDataMap = {};
+const chartDataMap = {};
 
-function openChartWindow(n,k){var s=chartDataMap[k];if(s){document.getElementById("chartImg").src=s;document.getElementById("chartModal").style.display="flex";}}
-function closeChart(){document.getElementById("chartModal").style.display="none";}
-document.addEventListener("keydown",function(e){if(e.key==="Escape")closeChart();});
+function showChart(key, name) {
+  var src = chartDataMap[key];
+  if (!src) { alert('차트 데이터가 없습니다.'); return; }
+  document.getElementById('chartModalTitle').textContent = name + ' 차트';
+  document.getElementById('chartModalImg').src = src;
+  document.getElementById('chartModal').classList.add('active');
+}
+
+function closeChart(e) {
+  if (e.target.id === 'chartModal') {
+    document.getElementById('chartModal').classList.remove('active');
+  }
+}
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    document.getElementById('chartModal').classList.remove('active');
+  }
+});
 </script>
 </body>
 </html>
