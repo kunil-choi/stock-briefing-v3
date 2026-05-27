@@ -3,45 +3,42 @@
 AI 주식 브리핑 HTML 생성 엔진
 
 수정 이력:
-- BUG-9     : _indicator_badge에서 0.0을 유효한 숫자로 처리
-- BUG-NEW-6 : overlap_count를 channel_counts에서 재산출
-- BUG-H5    : hidden_picks signal 필터 확장 (긍정/매수/강력/상승/positive/buy)
-- BUG-W-3   : reason 렌더링 시 detail → reason → text 우선순위 적용
-- BUG-M6    : archive 경로를 __file__ 기준 절대경로로 계산
-- HP-BADGE  : hidden_pick 소스 타입별 배지 표시
-- CR-NEW-1  : chart_key 종목명 특수문자 → JS 문법 오류 방지
-- SIM-P5-1  : onclick name 작은따옴표 이스케이프 처리
-- BUG-AC-12 : analyst_category single_broker / first_in_6months 양쪽 허용
-
-섹션 순서:
-  시장 지표 → 시장 요약 → 주목 섹터 → 관심 종목 → 오늘의 픽
-  → 애널리스트 리포트 분석 → 경제방송TV 추천 → AI 투자 전략 → 아카이브
+- BUG-9    : _indicator_badge에서 0.0을 유효값으로 처리
+- BUG-NEW-6: overlap_count를 channel_counts에서 재산출
+- BUG-H5   : signal 필터 확대 (W-NEW-1 포함)
+- BUG-W-3  : reason 필드 렌더링 우선순위 (detail > reason > text)
+- BUG-AC-12: analyst_category 허용 목록 확대
+- BUG-M6   : archive 절대경로 안전 처리
+- CR-NEW-1 : chart_key 특수문자 안전 변환
+- SIM-P5-1 : onclick 작은따옴표 이스케이프
+- FIX-CSS-1: stock-card 종목명 누락 CSS 수정
+- FIX-TV-1 : 경제방송TV 섹션 source_type 매칭 보완
+- FIX-IND-1: 시장 지표 키 유연 탐색
 """
 
 import os
 import re
 from datetime import datetime, timedelta, timezone
 
-# ── 상수 ──────────────────────────────────────────────────────────────────────
-KST = timezone(timedelta(hours=9))
-
+KST        = timezone(timedelta(hours=9))
 PARA_TITLES = ["📌 시장 개요", "📊 주요 이슈", "🔍 투자 포인트", "⚠️ 리스크 요인", "💡 전망"]
 
 _HP_SOURCE_META = {
-    "애널리스트": {"color": "#51cf66", "icon": "📊", "label": "애널리스트"},
-    "경제방송TV": {"color": "#ffa94d", "icon": "📺", "label": "경제방송TV"},
-    "경제방송":   {"color": "#74c0fc", "icon": "📡", "label": "경제방송"},
+    "애널리스트":  {"color": "#51cf66", "icon": "📊", "label": "애널리스트"},
+    "경제방송TV":  {"color": "#ffa94d", "icon": "📺", "label": "경제방송TV"},
+    "경제방송":    {"color": "#74c0fc", "icon": "📡", "label": "경제방송"},
 }
 _HP_SOURCE_DEFAULT = {"color": "#adb5bd", "icon": "📌", "label": "단독 언급"}
 
-_INDICATOR_ORDER = [
-    ("전일 코스피", "kospi"),
-    ("전일 코스닥", "kosdaq"),
-    ("나스닥",      "nasdaq"),
-    ("S&P500",      "sp500"),
-    ("다우존스",    "dow"),
-    ("야간선물",    "night_future"),
-    ("달러/원",     "usd_krw"),
+# FIX-IND-1: 지표 키와 표시명 매핑 (복수 후보 키 지원)
+_INDICATOR_DEFS = [
+    ("전일 코스피",  ["kospi",        "KOSPI"]),
+    ("전일 코스닥",  ["kosdaq",       "KOSDAQ"]),
+    ("나스닥",       ["nasdaq",       "NASDAQ"]),
+    ("S&P500",       ["sp500",        "SP500", "s&p500"]),
+    ("다우존스",     ["dow",          "DOW",   "dow_jones"]),
+    ("야간선물",     ["night_future", "night", "futures"]),
+    ("달러/원",      ["usd_krw",      "USD_KRW", "usd"]),
 ]
 
 _TAG_META = {
@@ -53,178 +50,126 @@ _TAG_META = {
 }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 내부 헬퍼 함수들
-# ─────────────────────────────────────────────────────────────────────────────
+# ── 헬퍼 함수 ────────────────────────────────────────────────────────────────
+
+def _safe_chart_key(prefix: str, name: str) -> str:
+    safe = re.sub(r"[^a-zA-Z0-9가-힣]", "_", name)
+    return f"{prefix}_{safe}"
+
+
+def _safe_js_str(s: str) -> str:
+    return s.replace("\\", "\\\\").replace("'", "\\'")
+
 
 def _indicator_badge(label: str, value, pct, direction: str = "") -> str:
-    """
-    시장 지표 배지 HTML 한 개 생성.
-    BUG-9: pct == 0.0 도 유효한 숫자로 처리.
-    """
     if value is None:
         return ""
-
-    if pct is None:
+    try:
+        pct_num = float(pct) if pct is not None else 0.0
+    except (TypeError, ValueError):
         pct_num = 0.0
-    else:
-        try:
-            pct_num = float(pct)
-        except (TypeError, ValueError):
-            pct_num = 0.0
-
     if not direction:
-        if pct_num > 0:
-            direction = "up"
-        elif pct_num < 0:
-            direction = "down"
-        else:
-            direction = "flat"
-
+        direction = "up" if pct_num > 0 else "down" if pct_num < 0 else "flat"
     color_map = {"up": "#ff6b6b", "down": "#74c0fc", "flat": "#adb5bd"}
-    arrow_map  = {"up": "▲",      "down": "▼",       "flat": "━"}
-    color = color_map.get(direction, "#adb5bd")
-    arrow = arrow_map.get(direction, "━")
-
-    val_str = (
-        f"{value:,.2f}" if isinstance(value, float)
-        else f"{value:,}" if isinstance(value, int)
-        else str(value)
-    )
+    arrow_map = {"up": "▲",      "down": "▼",       "flat": "━"}
+    try:
+        val_str = f"{float(value):,.2f}" if "." in str(value) else f"{int(str(value).replace(',','').replace(' ','')):,}"
+    except Exception:
+        val_str = str(value)
     pct_str = f"{pct_num:+.2f}%"
-
     return (
         f'<div class="indicator-badge">'
         f'<span class="ind-label">{label}</span>'
         f'<span class="ind-value">{val_str}</span>'
-        f'<span class="ind-pct" style="color:{color};">{arrow} {pct_str}</span>'
-        f'</div>'
+        f'<span class="ind-pct" style="color:{color_map[direction]};">'
+        f'{arrow_map[direction]} {pct_str}</span></div>'
     )
 
 
 def _build_market_indicators(market_overview: dict) -> str:
-    """시장 인디케이터 배지 행 HTML 생성."""
     if not market_overview:
-        return (
-            '<div class="market-indicators">'
-            '<p style="color:#666;font-size:.85em;">시장 데이터 없음</p>'
-            '</div>'
-        )
-
-    badges_html = ""
-    for label, key in _INDICATOR_ORDER:
-        item = market_overview.get(key)
+        return '<div class="market-indicators"><p style="color:#666;font-size:.85em;">시장 데이터 없음</p></div>'
+    badges = ""
+    for label, key_candidates in _INDICATOR_DEFS:
+        item = None
+        for key in key_candidates:
+            item = market_overview.get(key)
+            if item and isinstance(item, dict):
+                break
         if not item or not isinstance(item, dict):
             continue
-        value     = item.get("value") or item.get("close") or item.get("price")
-        pct       = item.get("change_pct") or item.get("pct") or item.get("percent")
+        # 값 키 유연 탐색
+        value = (item.get("value") or item.get("close") or
+                 item.get("price") or item.get("index"))
+        pct   = (item.get("change_pct") or item.get("pct") or
+                 item.get("percent")    or item.get("change_percent"))
         direction = item.get("direction", "")
         badge = _indicator_badge(label, value, pct, direction)
         if badge:
-            badges_html += badge
-
-    if not badges_html:
-        return (
-            '<div class="market-indicators">'
-            '<p style="color:#666;font-size:.85em;">시장 데이터 없음</p>'
-            '</div>'
-        )
-    return f'<div class="market-indicators">{badges_html}</div>'
+            badges += badge
+    if not badges:
+        return '<div class="market-indicators"><p style="color:#666;font-size:.85em;">시장 데이터 없음</p></div>'
+    return f'<div class="market-indicators">{badges}</div>'
 
 
 def _render_market_summary(market_summary: str) -> str:
-    """시장 요약 텍스트를 단락별 카드 HTML로 변환."""
     if not market_summary or not market_summary.strip():
         return '<p style="color:#666;">시장 요약 데이터 없음</p>'
-
-    raw_paras = re.split(r'\n\s*\n|\n(?=\d+\.)', market_summary.strip())
-    paras = [p.strip() for p in raw_paras if p.strip()]
-
-    if not paras:
-        return f'<p style="color:#ccc;">{market_summary.strip()}</p>'
-
-    html = ""
+    paras = [p.strip() for p in re.split(r'\n\s*\n|\n(?=\d+\.)', market_summary.strip()) if p.strip()]
+    html  = ""
     for i, para in enumerate(paras):
         clean = re.sub(r'^\d+\.\s*', '', para).strip()
-        if not clean:
-            continue
-        title = PARA_TITLES[i] if i < len(PARA_TITLES) else f"📎 포인트 {i + 1}"
+        title = PARA_TITLES[i] if i < len(PARA_TITLES) else f"📎 포인트 {i+1}"
         html += (
             f'<div class="summary-block">'
             f'<div class="summary-title">{title}</div>'
-            f'<p class="summary-text">{clean}</p>'
-            f'</div>'
+            f'<p class="summary-text">{clean}</p></div>'
         )
     return html or f'<p style="color:#ccc;">{market_summary.strip()}</p>'
 
 
-def _build_section2_html(all_data: list) -> str:
-    """경제방송TV 전문가 카드 렌더링. 중복 제목 제거, 최대 20개."""
-    if not all_data:
-        return '<p style="color:#666;">경제방송 데이터 없음</p>'
-
-    items = [d for d in all_data
-             if d.get("source_type") in ("경제방송TV", "경제방송")]
+def _build_tv_html(all_data: list) -> str:
+    # FIX-TV-1: source_type 소문자 비교 및 다중 키워드 매칭
+    tv_types  = {"경제방송tv", "경제방송", "broadcast", "tv"}
+    items     = [d for d in all_data
+                 if str(d.get("source_type", "")).lower().replace(" ", "") in tv_types]
     if not items:
         return '<p style="color:#666;">경제방송 데이터 없음</p>'
-
-    seen_titles = set()
-    cards_html  = ""
-
+    seen = set()
+    html = ""
     for item in items[:20]:
-        title = (item.get("title") or "").strip()
-        if not title or title in seen_titles:
+        title = item.get("title", "").strip()
+        if not title or title in seen:
             continue
-        seen_titles.add(title)
-
-        channel = item.get("source_name", "")
-        date    = item.get("date", "")
-        link    = item.get("link") or item.get("url", "")
-        stock   = item.get("stock_name", "")
-
-        title_html = (
-            f'<a href="{link}" target="_blank" rel="noopener" '
-            f'style="color:#74c0fc;text-decoration:none;">{title}</a>'
-            if link else f'<span>{title}</span>'
-        )
-        stock_badge = (
-            f'<span class="source-tag" style="background:#2d4a6b;">{stock}</span>'
-            if stock else ""
-        )
-
-        cards_html += (
+        seen.add(title)
+        channel  = item.get("source_name", "")
+        date_str = item.get("date", "")
+        link     = item.get("link") or item.get("url", "")
+        stock    = item.get("stock_name", "")
+        title_html  = (f'<a href="{link}" target="_blank" rel="noopener" '
+                       f'style="color:#74c0fc;text-decoration:none;">{title}</a>'
+                       if link else f'<span>{title}</span>')
+        stock_badge = (f'<span class="source-tag" style="background:#2d4a6b;">{stock}</span>'
+                       if stock else "")
+        html += (
             f'<div class="tv-card">'
-            f'<div class="tv-card-header">'
-            f'{stock_badge}'
+            f'<div class="tv-card-header">{stock_badge}'
             f'<span class="tv-channel">{channel}</span>'
-            f'<span class="tv-date">{date}</span>'
-            f'</div>'
-            f'<div class="tv-card-title">{title_html}</div>'
-            f'</div>'
+            f'<span class="tv-date">{date_str}</span></div>'
+            f'<div class="tv-card-title">{title_html}</div></div>'
         )
-
-    return cards_html or '<p style="color:#666;">경제방송 데이터 없음</p>'
+    return html or '<p style="color:#666;">경제방송 데이터 없음</p>'
 
 
 def _build_analyst_html(all_data: list) -> str:
-    """
-    애널리스트 리포트 세 범주 분류 렌더링.
-    BUG-AC-12: single_broker / first_in_6months 두 값 모두 허용.
-    """
-    if not all_data:
-        return '<p style="color:#666;">애널리스트 리포트 데이터 없음</p>'
-
     analyst_items = [d for d in all_data if d.get("source_type") == "애널리스트"]
     if not analyst_items:
         return '<p style="color:#666;">애널리스트 리포트 데이터 없음</p>'
 
-    simultaneous = [r for r in analyst_items
-                    if r.get("analyst_category") == "simultaneous"]
-    new_cov      = [r for r in analyst_items
-                    if r.get("analyst_category") == "new_coverage"]
+    simultaneous = [r for r in analyst_items if r.get("analyst_category") == "simultaneous"]
+    new_cov      = [r for r in analyst_items if r.get("analyst_category") == "new_coverage"]
     single       = [r for r in analyst_items
-                    if r.get("analyst_category") in
-                    ("single_broker", "first_in_6months")]
+                    if r.get("analyst_category") in ("single_broker", "first_in_6months")]
 
     def _report_card(r: dict) -> str:
         stock   = r.get("stock_name", "")
@@ -233,36 +178,22 @@ def _build_analyst_html(all_data: list) -> str:
         summary = r.get("summary", "")
         link    = r.get("link", "")
         is_new  = r.get("new_coverage", False)
-
         if not link and stock:
-            encoded = stock.replace(" ", "+")
-            link = (
-                "https://finance.naver.com/research/company_list.naver"
-                f"?searchType=keyword&keyword={encoded}"
-            )
-
-        new_badge = (
-            '<span class="new-coverage-badge">신규 커버리지</span>'
-            if is_new else ""
-        )
-        title_html = (
-            f'<a href="{link}" target="_blank" rel="noopener" '
-            f'style="color:#74c0fc;text-decoration:none;">{title}</a>'
-            if link else f'<span>{title}</span>'
-        )
-        summary_html = (
-            f'<p class="analyst-summary">{summary}</p>' if summary else ""
-        )
+            enc  = stock.replace(" ", "+")
+            link = (f"https://finance.naver.com/research/company_list.naver"
+                    f"?searchType=keyword&keyword={enc}")
+        new_badge   = '<span class="new-coverage-badge">신규 커버리지</span>' if is_new else ""
+        title_html  = (f'<a href="{link}" target="_blank" rel="noopener" '
+                       f'style="color:#74c0fc;text-decoration:none;">{title}</a>'
+                       if link else f'<span>{title}</span>')
+        summary_html = f'<p class="analyst-summary">{summary}</p>' if summary else ""
         return (
             f'<div class="analyst-card">'
             f'<div class="analyst-card-header">'
-            f'<span class="analyst-stock">{stock}</span>'
-            f'{new_badge}'
-            f'<span class="analyst-broker">{broker}</span>'
-            f'</div>'
+            f'<span class="analyst-stock">{stock}</span>{new_badge}'
+            f'<span class="analyst-broker">{broker}</span></div>'
             f'<div class="analyst-title">{title_html}</div>'
-            f'{summary_html}'
-            f'</div>'
+            f'{summary_html}</div>'
         )
 
     html = ""
@@ -278,111 +209,67 @@ def _build_analyst_html(all_data: list) -> str:
         html += '<div class="analyst-category-title">📌 단독 언급</div>'
         for r in single[:10]:
             html += _report_card(r)
-
     return html or '<p style="color:#666;">분류된 리포트 없음</p>'
 
 
 def _hidden_pick_source_badge(channel_type: str) -> str:
-    """hidden_pick 소스 타입에 따른 배지 HTML 반환."""
     meta = _HP_SOURCE_META.get(channel_type, _HP_SOURCE_DEFAULT)
     return (
         f'<span class="hp-source-badge" '
         f'style="background:{meta["color"]}22;color:{meta["color"]};'
         f'border:1px solid {meta["color"]}55;">'
-        f'{meta["icon"]} {meta["label"]}'
-        f'</span>'
+        f'{meta["icon"]} {meta["label"]}</span>'
     )
 
 
-def _safe_chart_key(prefix: str, name: str) -> str:
-    """
-    CR-NEW-1: 종목명 특수문자를 '_'로 치환해 JS 키로 안전한 문자열 반환.
-    예) 'SK하이닉스' → 'chart_SK하이닉스'
-        'A"B'        → 'chart_A_B'
-    """
-    safe = re.sub(r'[^a-zA-Z0-9가-힣]', '_', name)
-    return f"{prefix}_{safe}"
-
-
-def _safe_js_str(s: str) -> str:
-    """
-    SIM-P5-1: JS 문자열 내 작은따옴표 이스케이프.
-    onclick="showChart('key','name')" 에서 name에 ' 포함 시 구문 오류 방지.
-    """
-    return s.replace("'", "\\'")
-
-
 def _render_reasons(reasons: list) -> str:
-    """
-    사유 목록을 <ul> HTML로 변환.
-    BUG-W-3: detail → reason → text 우선순위 적용.
-    """
     if not reasons:
         return ""
-
-    items_html = ""
-    for reason in reasons:
-        if isinstance(reason, str):
-            rd, rl = reason.strip(), ""
-        elif isinstance(reason, dict):
-            rd = (
-                reason.get("detail")
-                or reason.get("reason")
-                or reason.get("text", "")
-            )
-            rd = (rd or "").strip()
-            rl = reason.get("link") or reason.get("url", "")
+    items = ""
+    for r in reasons:
+        if isinstance(r, str):
+            rd, rl = r.strip(), ""
+        elif isinstance(r, dict):
+            rd = (r.get("detail") or r.get("reason") or r.get("text") or r.get("summary", "")).strip()
+            rl = r.get("source_url") or r.get("link") or r.get("url", "")
         else:
             continue
-
         if not rd:
             continue
-
         if rl:
-            items_html += (
-                f'<li><a href="{rl}" target="_blank" rel="noopener" '
-                f'style="color:#adb5bd;text-decoration:underline dotted;">'
-                f'{rd}</a></li>'
-            )
+            items += (f'<li><a href="{rl}" target="_blank" rel="noopener" '
+                      f'style="color:#adb5bd;text-decoration:underline dotted;">{rd}</a></li>')
         else:
-            items_html += f'<li>{rd}</li>'
+            items += f'<li>{rd}</li>'
+    return f'<ul class="reasons-list">{items}</ul>' if items else ""
 
-    return f'<ul class="reasons-list">{items_html}</ul>' if items_html else ""
+
+def _is_positive_signal(sig) -> bool:
+    if not sig:
+        return False
+    sig_l = str(sig).lower()
+    return any(k in sig_l for k in ("긍정", "매수", "강력", "상승", "positive", "buy"))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 메인 HTML 생성 함수
-# ─────────────────────────────────────────────────────────────────────────────
+# ── 메인 함수 ─────────────────────────────────────────────────────────────────
 
 def generate_html(
-    data: dict,
-    channels_data: dict = None,
-    gh_repo: str = "",
-    gh_token: str = "",
-    market_overview: dict = None,
-    all_data: list = None,
+    data,
+    channels_data=None,
+    gh_repo="",
+    gh_token="",
+    market_overview=None,
+    all_data=None,
 ) -> str:
-    """
-    브리핑 데이터를 받아 완성된 HTML 문서 문자열을 반환합니다.
-
-    Args:
-        data           : AI 분석 결과 dict
-        channels_data  : channels.json 내용 (확장용)
-        gh_repo        : "owner/repo" 형식 GitHub 저장소명
-        gh_token       : GitHub token (확장용)
-        market_overview: 시장 지표 dict
-        all_data       : 원본 수집 데이터 list
-    """
-    # ── 기본값 처리 ───────────────────────────────────────────────────────────
-    data            = data            or {}
+    data           = data or {}
     market_overview = market_overview or {}
-    all_data        = all_data        or []
+    all_data       = all_data or []
 
-    stocks        = data.get("stocks",       [])
-    hidden_picks  = data.get("hidden_picks", [])
-    market_sum    = data.get("market_summary", "")
-    hot_sectors   = data.get("hot_sectors",  [])
-    ai_strategy   = data.get("ai_strategy",  "")
+    stocks       = data.get("stocks",       [])
+    hidden_picks = data.get("hidden_picks", [])
+    market_sum   = data.get("market_summary", "")
+    hot_sectors  = data.get("hot_sectors",  [])
+    ai_strategy  = data.get("ai_strategy",  "")
     briefing_date = data.get("briefing_date", "")
 
     now_kst = datetime.now(KST)
@@ -390,117 +277,91 @@ def generate_html(
         briefing_date = now_kst.strftime("%Y년 %m월 %d일")
     briefing_time = now_kst.strftime("%H:%M")
 
-    # ── BUG-NEW-6: overlap_count 재산출 ──────────────────────────────────────
+    # BUG-NEW-6: overlap_count 재산출
     for stock in stocks:
         cc = stock.get("channel_counts", {})
         if cc:
-            stock["overlap_count"] = sum(1 for v in cc.values() if v > 0)
+            stock["overlap_count"] = sum(1 for v in cc.values() if v and int(v) > 0)
 
-    # ── overlap_count >= 2 필터 ───────────────────────────────────────────────
-    filtered_stocks = [s for s in stocks if s.get("overlap_count", 0) >= 2]
+    filtered_stocks  = [s for s in stocks       if s.get("overlap_count", 0) >= 2]
+    filtered_hidden  = [h for h in hidden_picks if _is_positive_signal(h.get("signal"))]
 
-    # ── BUG-H5 + W-NEW-1: signal 필터 ────────────────────────────────────────
-    def _is_positive_signal(sig) -> bool:
-        if not sig:
-            return False
-        sig_lower = str(sig).lower()
-        return any(kw in sig_lower
-                   for kw in ("긍정", "매수", "강력", "상승", "positive", "buy"))
-
-    filtered_hidden = [
-        h for h in hidden_picks if _is_positive_signal(h.get("signal"))
-    ]
-
-    # ── 시장 인디케이터 / 요약 / 섹터 HTML ───────────────────────────────────
+    # ── 지표 섹션 ─────────────────────────────────────────────────────────────
     market_indicators_html = _build_market_indicators(market_overview)
-    market_summary_html    = _render_market_summary(market_sum)
 
+    # ── 시장 요약 섹션 ────────────────────────────────────────────────────────
+    market_summary_html = _render_market_summary(market_sum)
+
+    # ── 섹터 배지 ─────────────────────────────────────────────────────────────
     sector_badges_html = ""
     for sector in hot_sectors:
         if isinstance(sector, dict):
-            s_name   = sector.get("name", "")
-            s_reason = sector.get("reason", "")
-            sector_badges_html += (
-                f'<div class="sector-badge" title="{s_reason}">{s_name}</div>'
-            )
+            sector_badges_html += (f'<div class="sector-badge" title="{sector.get("reason","")}">'
+                                   f'{sector.get("name","")}</div>')
         elif sector:
             sector_badges_html += f'<div class="sector-badge">{sector}</div>'
 
-    # ── chart data 수집 ───────────────────────────────────────────────────────
-    chart_data_entries: list[str] = []
-
     # ── 관심 종목 카드 ────────────────────────────────────────────────────────
-    stocks_html = ""
-    for rank, stock in enumerate(filtered_stocks, start=1):
-        name         = stock.get("name", "")
-        signal       = stock.get("signal", "")
-        overlap      = stock.get("overlap_count", 0)
-        channel_cnts = stock.get("channel_counts", {})
-        price        = stock.get("verified_price")
-        naver_code   = stock.get("naver_code") or stock.get("code", "")
-        naver_url    = stock.get("naver_url", "")
-        chart_b64    = stock.get("chart_base64", "")
-        reasons      = stock.get("reasons", [])
+    chart_data_entries = []
+    stocks_html        = ""
 
-        # Naver URL 보완
+    for rank, stock in enumerate(filtered_stocks, 1):
+        name        = stock.get("name", "")
+        signal      = stock.get("signal", "")
+        overlap     = stock.get("overlap_count", 0)
+        channel_cnts = stock.get("channel_counts", {})
+        price       = stock.get("verified_price")
+        naver_code  = stock.get("naver_code") or stock.get("code", "")
+        naver_url   = stock.get("naver_url", "")
+        chart_b64   = stock.get("chart_base64", "")
+        reasons     = stock.get("reasons", [])
+
+        # naver_url 보정
         if not naver_url:
             if naver_code:
-                naver_url = (
-                    f"https://finance.naver.com/item/main.naver?code={naver_code}"
-                )
+                naver_url = f"https://finance.naver.com/item/main.naver?code={naver_code}"
             elif name:
-                naver_url = (
-                    "https://finance.naver.com/search/searchResult.naver"
-                    f"?query={name.replace(' ', '+')}"
-                )
+                naver_url = (f"https://finance.naver.com/search/searchResult.naver"
+                             f"?query={name.replace(' ', '+')}")
 
-        # signal 색상
+        # 신호 색상
         sig_l = (signal or "").lower()
         if "강력" in sig_l or "매수" in sig_l:
             sig_class, sig_color = "signal-strong-buy", "#ff6b6b"
         elif "긍정" in sig_l or "positive" in sig_l:
-            sig_class, sig_color = "signal-positive",   "#ffa94d"
+            sig_class, sig_color = "signal-positive", "#ffa94d"
         elif "중립" in sig_l or "neutral" in sig_l:
-            sig_class, sig_color = "signal-neutral",    "#adb5bd"
+            sig_class, sig_color = "signal-neutral", "#adb5bd"
         else:
-            sig_class, sig_color = "signal-default",    "#74c0fc"
+            sig_class, sig_color = "signal-default", "#74c0fc"
 
         # 소스 태그
         source_tags_html = ""
         for src_type, cnt in channel_cnts.items():
             if cnt and int(cnt) > 0:
-                meta = _TAG_META.get(
-                    src_type, {"bg": "#2d2d44", "color": "#adb5bd"}
-                )
+                meta = _TAG_META.get(src_type, {"bg": "#2d2d44", "color": "#adb5bd"})
                 source_tags_html += (
                     f'<span class="source-tag" '
                     f'style="background:{meta["bg"]};color:{meta["color"]};">'
                     f'{src_type} {cnt}</span>'
                 )
 
-        # 가격
-        if price and price != "N/A":
-            price_html = (
-                f'<span class="price-value">{price:,}원</span>'
-                if isinstance(price, int)
-                else f'<span class="price-value">{price}</span>'
-            )
+        # 가격 표시 (FIX-PRICE: int이면 숫자, None이면 안내문, 그 외 str 그대로)
+        if isinstance(price, int):
+            price_html = f'<span class="price-value">{price:,}원</span>'
+        elif price and str(price).strip() not in ("None", "N/A", ""):
+            price_html = f'<span class="price-value">{price}</span>'
         else:
-            price_html = (
-                '<span class="price-value" style="color:#666;">가격 조회 중</span>'
-            )
+            price_html = '<span class="price-value" style="color:#666;">가격 조회 중</span>'
 
-        # 차트 버튼 — CR-NEW-1 + SIM-P5-1
+        # 차트 버튼
         if chart_b64:
-            chart_key   = _safe_chart_key("chart", name)
+            chart_key    = _safe_chart_key("chart", name)
             safe_name_js = _safe_js_str(name)
-            chart_data_entries.append(
-                f'"{chart_key}": "data:image/png;base64,{chart_b64}"'
-            )
+            chart_data_entries.append(f'"{chart_key}": "data:image/png;base64,{chart_b64}"')
             chart_btn_html = (
-                f'<button class="chart-btn" '
-                f"onclick=\"showChart('{chart_key}','{safe_name_js}')\">"
-                f'📈 차트 보기</button>'
+                f"<button class=\"chart-btn\" "
+                f"onclick=\"showChart('{chart_key}','{safe_name_js}')\">📈 차트 보기</button>"
             )
         elif naver_url:
             chart_btn_html = (
@@ -512,35 +373,31 @@ def generate_html(
 
         reasons_block = _render_reasons(reasons)
 
+        # FIX-CSS-1: stock-name-block을 명확한 블록으로 구성
         stocks_html += f"""
 <div class="stock-card">
   <div class="stock-card-header">
     <div class="stock-rank">#{rank}</div>
     <div class="stock-name-block">
-      <a href="{naver_url}" target="_blank" rel="noopener"
-         class="stock-name">{name}</a>
-      <span class="signal-badge {sig_class}"
-            style="border-color:{sig_color};color:{sig_color};">{signal}</span>
+      <a href="{naver_url}" target="_blank" rel="noopener" class="stock-name">{name}</a>
+      <span class="signal-badge {sig_class}" style="border-color:{sig_color};color:{sig_color};">{signal}</span>
     </div>
-    <div class="overlap-badge" title="채널 중복 언급 수">🔥 {overlap}개 채널</div>
+    <div class="overlap-badge" title="채널 중복 언급 수">🔥 {overlap}개</div>
   </div>
   <div class="stock-card-body">
     <div class="source-tags">{source_tags_html}</div>
     <div class="price-row">{price_html}{chart_btn_html}</div>
     {reasons_block}
   </div>
-</div>
-"""
+</div>"""
 
     if not stocks_html:
-        stocks_html = (
-            '<p style="color:#666;text-align:center;padding:2rem;">'
-            '오늘은 복수 채널 교차 언급 종목이 없습니다.</p>'
-        )
+        stocks_html = ('<p style="color:#666;text-align:center;padding:2rem;">'
+                       '오늘은 복수 채널 교차 언급 종목이 없습니다.</p>')
 
     # ── 오늘의 픽 카드 ────────────────────────────────────────────────────────
     hidden_html = ""
-    for idx, hp in enumerate(filtered_hidden, start=1):
+    for idx, hp in enumerate(filtered_hidden, 1):
         name         = hp.get("name", "")
         signal       = hp.get("signal", "")
         channel_type = hp.get("channel_type", "")
@@ -553,46 +410,29 @@ def generate_html(
 
         if not naver_url:
             if naver_code:
-                naver_url = (
-                    f"https://finance.naver.com/item/main.naver?code={naver_code}"
-                )
+                naver_url = f"https://finance.naver.com/item/main.naver?code={naver_code}"
             elif name:
-                naver_url = (
-                    "https://finance.naver.com/search/searchResult.naver"
-                    f"?query={name.replace(' ', '+')}"
-                )
+                naver_url = (f"https://finance.naver.com/search/searchResult.naver"
+                             f"?query={name.replace(' ', '+')}")
 
         source_badge_html = _hidden_pick_source_badge(channel_type)
-        score_str = (
-            f"{weighted_sc:.1f}"
-            if isinstance(weighted_sc, (int, float)) else str(weighted_sc)
-        )
-        score_badge_html = (
-            f'<span class="hp-score-badge">Pick #{idx} · {score_str}pt</span>'
-        )
+        score_str         = f"{weighted_sc:.1f}" if isinstance(weighted_sc, (int, float)) else str(weighted_sc)
+        score_badge_html  = f'<span class="hp-score-badge">Pick #{idx} · {score_str}pt</span>'
 
-        if price and price != "N/A":
-            price_html = (
-                f'<span class="price-value">{price:,}원</span>'
-                if isinstance(price, int)
-                else f'<span class="price-value">{price}</span>'
-            )
+        if isinstance(price, int):
+            price_html = f'<span class="price-value">{price:,}원</span>'
+        elif price and str(price).strip() not in ("None", "N/A", ""):
+            price_html = f'<span class="price-value">{price}</span>'
         else:
-            price_html = (
-                '<span class="price-value" style="color:#666;">가격 조회 중</span>'
-            )
+            price_html = '<span class="price-value" style="color:#666;">가격 조회 중</span>'
 
-        # 차트 버튼 — CR-NEW-1 + SIM-P5-1
         if chart_b64:
             chart_key    = _safe_chart_key("hpchart", name)
             safe_name_js = _safe_js_str(name)
-            chart_data_entries.append(
-                f'"{chart_key}": "data:image/png;base64,{chart_b64}"'
-            )
+            chart_data_entries.append(f'"{chart_key}": "data:image/png;base64,{chart_b64}"')
             chart_btn_html = (
-                f'<button class="chart-btn" '
-                f"onclick=\"showChart('{chart_key}','{safe_name_js}')\">"
-                f'📈 차트 보기</button>'
+                f"<button class=\"chart-btn\" "
+                f"onclick=\"showChart('{chart_key}','{safe_name_js}')\">📈 차트 보기</button>"
             )
         elif naver_url:
             chart_btn_html = (
@@ -608,56 +448,46 @@ def generate_html(
 <div class="hidden-pick-card">
   <div class="hp-card-header">
     <div class="hp-badges">{source_badge_html}{score_badge_html}</div>
-    <a href="{naver_url}" target="_blank" rel="noopener"
-       class="hp-stock-name">{name}</a>
+    <a href="{naver_url}" target="_blank" rel="noopener" class="hp-stock-name">{name}</a>
     <span class="hp-signal">{signal}</span>
   </div>
   <div class="hp-card-body">
     <div class="price-row">{price_html}{chart_btn_html}</div>
     {reasons_block}
   </div>
-</div>
-"""
+</div>"""
 
     if not hidden_html:
-        hidden_html = (
-            '<p style="color:#666;text-align:center;padding:1.5rem;">'
-            '오늘의 픽 없음</p>'
-        )
+        hidden_html = ('<p style="color:#666;text-align:center;padding:1.5rem;">'
+                       '오늘의 픽 없음</p>')
 
-    # ── chart data JS ─────────────────────────────────────────────────────────
-    chart_data_js = (
-        "const chartDataMap = {\n  "
-        + ",\n  ".join(chart_data_entries)
-        + "\n};"
-        if chart_data_entries
-        else "const chartDataMap = {};"
-    )
+    # ── 차트 데이터 JS ────────────────────────────────────────────────────────
+    if chart_data_entries:
+        chart_data_js = "const chartDataMap = {\n  " + ",\n  ".join(chart_data_entries) + "\n};"
+    else:
+        chart_data_js = "const chartDataMap = {};"
 
-    # ── 섹션 2·3 HTML ─────────────────────────────────────────────────────────
-    section2_html = _build_section2_html(all_data)
-    section3_html = _build_analyst_html(all_data)
+    # ── 애널리스트 / TV 섹션 ──────────────────────────────────────────────────
+    analyst_html = _build_analyst_html(all_data)
+    tv_html      = _build_tv_html(all_data)
 
-    # ── BUG-M6: archive 링크 ──────────────────────────────────────────────────
+    # ── 아카이브 섹션 ─────────────────────────────────────────────────────────
     archive_html = ""
     try:
         base_dir    = os.path.dirname(os.path.abspath(__file__))
-        archive_dir = os.path.normpath(
-            os.path.join(base_dir, "..", "docs", "archive")
-        )
+        archive_dir = os.path.normpath(os.path.join(base_dir, "..", "docs", "archive"))
         if os.path.isdir(archive_dir) and gh_repo and "/" in gh_repo:
-            owner = gh_repo.split("/")[0]
-            repo  = gh_repo.split("/")[1]
-            html_files = sorted(
+            owner, repo = gh_repo.split("/", 1)
+            files = sorted(
                 [f for f in os.listdir(archive_dir) if f.endswith(".html")],
                 reverse=True,
             )[:14]
-            if html_files:
+            if files:
                 links = "".join(
-                    f'<a href="https://{owner}.github.io/{repo}/archive/{fname}" '
+                    f'<a href="https://{owner}.github.io/{repo}/archive/{f}" '
                     f'target="_blank" rel="noopener" class="archive-link">'
-                    f'{fname.replace(".html","")}</a>'
-                    for fname in html_files
+                    f'{f.replace(".html","")}</a>'
+                    for f in files
                 )
                 archive_html = f'<div class="archive-list">{links}</div>'
     except Exception as e:
@@ -665,294 +495,413 @@ def generate_html(
 
     # ── CSS ───────────────────────────────────────────────────────────────────
     css = """
-/* ── Reset & Base ── */
+/* ── 기본 리셋 & 변수 ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  font-family: 'Noto Sans KR', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
-  background: #0a0a14;
-  color: #e0e0e0;
-  min-height: 100vh;
-  line-height: 1.6;
+:root {
+  --bg:        #0d1117;
+  --surface:   #161b22;
+  --surface2:  #21262d;
+  --border:    #30363d;
+  --text:      #e6edf3;
+  --text-muted:#8b949e;
+  --accent:    #58a6ff;
+  --up:        #ff6b6b;
+  --down:      #74c0fc;
+  --flat:      #adb5bd;
 }
-a { color: inherit; }
+html { font-size: 16px; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  line-height: 1.6;
+  padding: 0 0 4rem;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
 
-/* ── Layout ── */
-.container { max-width: 960px; margin: 0 auto; padding: 1rem 1.2rem 3rem; }
+/* ── 레이아웃 ── */
+.container { max-width: 900px; margin: 0 auto; padding: 0 1rem; }
 
-/* ── Header ── */
+/* ── 헤더 ── */
 .briefing-header {
   text-align: center;
-  padding: 2rem 1rem 1.5rem;
-  border-bottom: 1px solid #1e1e2e;
-  margin-bottom: 1.5rem;
+  padding: 2.5rem 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2rem;
 }
-.briefing-header h1 {
-  font-size: 1.6rem; color: #e0e0e0; font-weight: 700; letter-spacing: -.5px;
-}
-.briefing-header .subtitle { font-size: .85rem; color: #666; margin-top: .4rem; }
+.briefing-header h1 { font-size: 1.8rem; font-weight: 700; }
+.subtitle { color: var(--text-muted); font-size: .9rem; margin-top: .4rem; }
 
-/* ── Section ── */
-.section { margin-bottom: 2rem; }
+/* ── 섹션 ── */
+.section { margin-bottom: 2.5rem; }
 .section-title {
-  font-size: 1.05rem; font-weight: 700; color: #c8c8d8;
-  border-left: 3px solid #74c0fc; padding-left: .7rem; margin-bottom: 1rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--text);
+  border-left: 4px solid var(--accent);
+  padding-left: .75rem;
+  margin-bottom: 1rem;
 }
 
-/* ── Market Indicators ── */
+/* ── 시장 지표 ── */
 .market-indicators {
-  display: flex; flex-wrap: wrap; gap: .6rem;
-  padding: 1rem; background: #111122;
-  border-radius: 10px; border: 1px solid #1e1e2e;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .6rem;
 }
 .indicator-badge {
-  display: flex; flex-direction: column; align-items: center;
-  background: #16162a; border: 1px solid #2a2a3e;
-  border-radius: 8px; padding: .45rem .8rem; min-width: 90px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: .5rem .9rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 100px;
 }
-.ind-label { font-size: .7rem; color: #888; margin-bottom: .15rem; }
-.ind-value { font-size: .95rem; font-weight: 700; color: #e0e0e0; }
-.ind-pct   { font-size: .75rem; margin-top: .1rem; }
+.ind-label { font-size: .75rem; color: var(--text-muted); margin-bottom: .15rem; }
+.ind-value { font-size: .95rem; font-weight: 600; }
+.ind-pct   { font-size: .8rem;  margin-top: .1rem; }
 
-/* ── Market Summary ── */
+/* ── 시장 요약 ── */
 .summary-block {
-  background: #111122; border: 1px solid #1e1e2e;
-  border-radius: 8px; padding: .8rem 1rem; margin-bottom: .7rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.2rem;
+  margin-bottom: .75rem;
 }
-.summary-title { font-size: .85rem; font-weight: 700; color: #74c0fc; margin-bottom: .35rem; }
-.summary-text  { font-size: .88rem; color: #c0c0d0; line-height: 1.65; }
+.summary-title { font-weight: 700; margin-bottom: .4rem; color: var(--accent); }
+.summary-text  { color: var(--text-muted); font-size: .95rem; }
 
-/* ── Sector Badges ── */
-.sector-list { display: flex; flex-wrap: wrap; gap: .5rem; }
+/* ── 섹터 배지 ── */
+.sector-list  { display: flex; flex-wrap: wrap; gap: .5rem; }
 .sector-badge {
-  background: #1a1a2e; border: 1px solid #2a2a4e;
-  border-radius: 20px; padding: .3rem .85rem;
-  font-size: .82rem; color: #c8c8ff; cursor: default; transition: background .15s;
+  background: #1c2d3a;
+  color: #74c0fc;
+  border: 1px solid #1e4a6e;
+  border-radius: 20px;
+  padding: .3rem .85rem;
+  font-size: .85rem;
+  font-weight: 600;
 }
-.sector-badge:hover { background: #22224a; }
 
-/* ── Stock Card ── */
+/* ── 관심 종목 카드 ── */
 .stock-card {
-  background: #111122; border: 1px solid #1e1e2e;
-  border-radius: 12px; padding: 1rem 1.2rem;
-  margin-bottom: 1rem; transition: border-color .2s;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.2rem;
+  margin-bottom: 1rem;
+  transition: border-color .2s;
 }
-.stock-card:hover { border-color: #3a3a5e; }
+.stock-card:hover { border-color: var(--accent); }
+
+/* FIX-CSS-1: 헤더를 flex로 정렬, 종목명이 중앙을 차지하도록 */
 .stock-card-header {
-  display: flex; align-items: center; gap: .7rem;
-  margin-bottom: .7rem; flex-wrap: wrap;
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: .75rem;
+  flex-wrap: wrap;
 }
 .stock-rank {
-  background: #1e1e3a; color: #74c0fc; font-size: .8rem; font-weight: 700;
-  padding: .2rem .5rem; border-radius: 6px; min-width: 2rem; text-align: center;
+  font-size: .85rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 2rem;
+  flex-shrink: 0;
 }
-.stock-name-block { display: flex; align-items: center; gap: .5rem; flex: 1; }
+.stock-name-block {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
 .stock-name {
-  font-size: 1.05rem; font-weight: 700; color: #e8e8f8; text-decoration: none;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.stock-name:hover { color: #74c0fc; }
+.stock-name:hover { color: var(--accent); }
 .signal-badge {
-  font-size: .72rem; border: 1px solid; border-radius: 12px;
-  padding: .15rem .55rem; white-space: nowrap;
+  font-size: .75rem;
+  border: 1px solid;
+  border-radius: 12px;
+  padding: .15rem .55rem;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .overlap-badge {
-  font-size: .8rem; color: #ffa94d; background: #2a1e0a;
-  border: 1px solid #4a3010; border-radius: 12px;
-  padding: .2rem .6rem; white-space: nowrap;
+  font-size: .78rem;
+  color: #ffa94d;
+  background: #3a2d1a;
+  border-radius: 12px;
+  padding: .15rem .55rem;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
-.stock-card-body { padding-top: .3rem; }
-.source-tags { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .6rem; }
-.source-tag  { font-size: .72rem; padding: .15rem .55rem; border-radius: 10px; }
-.price-row   {
-  display: flex; align-items: center; gap: .8rem;
-  margin-bottom: .6rem; flex-wrap: wrap;
+
+/* ── 소스 태그 ── */
+.source-tags { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .65rem; }
+.source-tag {
+  font-size: .75rem;
+  border-radius: 10px;
+  padding: .15rem .5rem;
 }
-.price-value { font-size: .95rem; font-weight: 700; color: #ffd43b; }
+
+/* ── 가격 행 ── */
+.price-row {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin-bottom: .6rem;
+  flex-wrap: wrap;
+}
+.price-value { font-size: 1rem; font-weight: 700; color: #ffd43b; }
 .chart-btn {
-  font-size: .78rem; background: #1a1a2e; color: #74c0fc;
-  border: 1px solid #2a3a5e; border-radius: 8px; padding: .25rem .7rem;
-  cursor: pointer; text-decoration: none; transition: background .15s;
   display: inline-block;
+  font-size: .8rem;
+  padding: .25rem .7rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: none;
 }
-.chart-btn:hover { background: #22223a; }
-.reasons-list { list-style: none; padding: 0; margin-top: .4rem; }
+.chart-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── 이유 목록 ── */
+.reasons-list {
+  list-style: disc;
+  padding-left: 1.2rem;
+  margin-top: .4rem;
+}
 .reasons-list li {
-  font-size: .84rem; color: #a0a0b8;
-  padding: .2rem 0 .2rem .9rem; position: relative; line-height: 1.55;
+  font-size: .88rem;
+  color: var(--text-muted);
+  margin-bottom: .3rem;
+  line-height: 1.5;
 }
-.reasons-list li::before { content: "·"; position: absolute; left: .2rem; color: #555; }
 
-/* ── Hidden Pick Card ── */
+/* ── 오늘의 픽 카드 ── */
 .hidden-pick-card {
-  background: #0f1a1a; border: 1px solid #1a2e2e;
-  border-radius: 12px; padding: 1rem 1.2rem;
-  margin-bottom: 1rem; transition: border-color .2s;
+  background: linear-gradient(135deg, #1a2d1a 0%, #162316 100%);
+  border: 1px solid #2d5a2d;
+  border-radius: 10px;
+  padding: 1rem 1.2rem;
+  margin-bottom: 1rem;
 }
-.hidden-pick-card:hover { border-color: #2a4a4a; }
 .hp-card-header {
-  display: flex; align-items: center; gap: .7rem;
-  margin-bottom: .7rem; flex-wrap: wrap;
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  margin-bottom: .65rem;
+  flex-wrap: wrap;
 }
-.hp-badges { display: flex; gap: .4rem; align-items: center; }
-.hp-source-badge { font-size: .72rem; border-radius: 10px; padding: .15rem .55rem; white-space: nowrap; }
+.hp-badges { display: flex; gap: .4rem; flex-wrap: wrap; }
+.hp-source-badge, .hp-score-badge {
+  font-size: .75rem;
+  border-radius: 10px;
+  padding: .15rem .55rem;
+}
 .hp-score-badge {
-  font-size: .72rem; background: #1a2a1a; color: #51cf66;
-  border: 1px solid #2a4a2a; border-radius: 10px; padding: .15rem .55rem; white-space: nowrap;
+  background: #1a2d3a;
+  color: #74c0fc;
+  border: 1px solid #1e4a6e;
 }
-.hp-stock-name {
-  font-size: 1.05rem; font-weight: 700; color: #e8e8f8; text-decoration: none;
-}
-.hp-stock-name:hover { color: #51cf66; }
-.hp-signal {
-  font-size: .78rem; color: #51cf66; background: #1a3a1a;
-  border: 1px solid #2a5a2a; border-radius: 10px; padding: .15rem .55rem;
-}
-.hp-card-body { padding-top: .3rem; }
+.hp-stock-name { font-size: 1.05rem; font-weight: 700; flex: 1 1 auto; }
+.hp-signal     { font-size: .8rem; color: #51cf66; }
+.hp-card-body  {}
 
-/* ── Analyst / TV Cards ── */
+/* ── 애널리스트 ── */
 .analyst-category-title {
-  font-size: .88rem; font-weight: 700; color: #ffa94d;
-  margin: 1rem 0 .5rem; padding-left: .4rem; border-left: 2px solid #ffa94d;
+  font-weight: 700;
+  font-size: .95rem;
+  margin: 1rem 0 .5rem;
+  color: var(--accent);
 }
-.analyst-card, .tv-card {
-  background: #111122; border: 1px solid #1e1e2e;
-  border-radius: 10px; padding: .7rem 1rem; margin-bottom: .6rem;
+.analyst-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: .85rem 1rem;
+  margin-bottom: .6rem;
 }
-.analyst-card-header, .tv-card-header {
-  display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; margin-bottom: .35rem;
+.analyst-card-header {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-bottom: .4rem;
+  flex-wrap: wrap;
 }
-.analyst-stock, .tv-channel { font-size: .82rem; font-weight: 700; color: #e0e0f0; }
+.analyst-stock  { font-weight: 700; }
+.analyst-broker { font-size: .8rem; color: var(--text-muted); }
+.analyst-title  { font-size: .9rem; }
+.analyst-summary { font-size: .85rem; color: var(--text-muted); margin-top: .35rem; }
 .new-coverage-badge {
-  font-size: .68rem; background: #1a3a1a; color: #51cf66;
-  border: 1px solid #2a5a2a; border-radius: 8px; padding: .1rem .45rem;
-}
-.analyst-broker, .tv-date { font-size: .75rem; color: #777; margin-left: auto; }
-.analyst-title, .tv-card-title { font-size: .85rem; color: #b0b0c8; line-height: 1.5; }
-.analyst-summary { font-size: .8rem; color: #888; margin-top: .3rem; line-height: 1.5; }
-
-/* ── AI Strategy ── */
-.ai-strategy-box {
-  background: #0d0d1a; border: 1px solid #2a2a4a; border-radius: 12px;
-  padding: 1.2rem 1.4rem; font-size: .88rem; color: #c0c0d8;
-  line-height: 1.75; white-space: pre-wrap; word-break: keep-all;
+  font-size: .7rem;
+  background: #1a3a2d;
+  color: #51cf66;
+  border: 1px solid #2d5a3a;
+  border-radius: 8px;
+  padding: .1rem .45rem;
 }
 
-/* ── Archive ── */
+/* ── TV 카드 ── */
+.tv-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: .75rem 1rem;
+  margin-bottom: .6rem;
+}
+.tv-card-header {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+  margin-bottom: .3rem;
+}
+.tv-channel { font-size: .8rem; color: #ffa94d; font-weight: 600; }
+.tv-date    { font-size: .75rem; color: var(--text-muted); margin-left: auto; }
+.tv-card-title { font-size: .9rem; }
+
+/* ── 아카이브 ── */
 .archive-list { display: flex; flex-wrap: wrap; gap: .5rem; }
 .archive-link {
-  font-size: .78rem; background: #111122; color: #74c0fc;
-  border: 1px solid #1e2e3e; border-radius: 8px; padding: .25rem .65rem;
-  text-decoration: none; transition: background .15s;
+  font-size: .82rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: .25rem .65rem;
+  color: var(--text-muted);
 }
-.archive-link:hover { background: #1a1a3a; }
+.archive-link:hover { border-color: var(--accent); color: var(--accent); }
 
-/* ── Disclaimer ── */
+/* ── 면책 ── */
 .disclaimer {
-  font-size: .75rem; color: #555; text-align: center;
-  margin-top: 2.5rem; line-height: 1.7;
-  border-top: 1px solid #1a1a2e; padding-top: 1rem;
+  text-align: center;
+  font-size: .78rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  padding-top: 1.5rem;
+  margin-top: 3rem;
+  line-height: 1.8;
 }
 
-/* ── Chart Modal ── */
+/* ── 모달 ── */
 .modal-overlay {
-  display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,.85); z-index: 999;
-  align-items: center; justify-content: center;
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.75);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
 }
 .modal-overlay.active { display: flex; }
 .modal-box {
-  background: #111122; border: 1px solid #2a2a4a;
-  border-radius: 14px; padding: 1.2rem;
-  max-width: 680px; width: 95%; position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 92vw;
+  max-height: 90vh;
+  overflow: auto;
+  position: relative;
 }
-.modal-title {
-  font-size: 1rem; font-weight: 700; color: #e0e0f0;
-  margin-bottom: .8rem; text-align: center;
-}
-.modal-img   { width: 100%; border-radius: 8px; }
 .modal-close {
-  position: absolute; top: .6rem; right: .8rem;
-  background: none; border: none; color: #888;
-  font-size: 1.3rem; cursor: pointer; line-height: 1;
+  position: absolute;
+  top: .75rem; right: .75rem;
+  background: none; border: none;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  cursor: pointer;
 }
-.modal-close:hover { color: #e0e0e0; }
+.modal-title { font-weight: 700; margin-bottom: 1rem; }
+.modal-img   { max-width: 100%; border-radius: 8px; display: block; }
 
-/* ── Responsive ── */
+/* ── AI 전략 ── */
+.ai-strategy-box {
+  background: var(--surface);
+  border: 1px solid #2d4a2d;
+  border-radius: 10px;
+  padding: 1.2rem 1.4rem;
+  font-size: .95rem;
+  line-height: 1.8;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+/* ── 반응형 ── */
 @media (max-width: 600px) {
+  .briefing-header h1 { font-size: 1.4rem; }
+  .stock-name { font-size: .95rem; }
   .market-indicators { gap: .4rem; }
-  .indicator-badge   { min-width: 78px; padding: .35rem .55rem; }
-  .stock-card-header { gap: .4rem; }
-  .briefing-header h1 { font-size: 1.3rem; }
-  .hp-card-header    { gap: .4rem; }
+  .indicator-badge { min-width: 80px; padding: .4rem .6rem; }
 }
 """
 
-    # ── 섹션 가시성 판단 ──────────────────────────────────────────────────────
-    has_summary  = bool(market_sum and market_sum.strip())
-    has_sectors  = bool(hot_sectors)
-    has_hidden   = bool(filtered_hidden)
-    has_sec2     = any(
-        d.get("source_type") in ("경제방송TV", "경제방송") for d in all_data
-    )
-    has_sec3     = any(
-        d.get("source_type") == "애널리스트" for d in all_data
-    )
-    has_strategy = bool(ai_strategy and ai_strategy.strip())
-    has_archive  = bool(archive_html)
-
+    # ── 섹션 빌더 ─────────────────────────────────────────────────────────────
     def _section(title: str, content: str, show: bool = True) -> str:
         if not show:
             return ""
         return (
             f'<section class="section">'
             f'<div class="section-title">{title}</div>'
-            f'{content}'
-            f'</section>\n'
+            f'{content}</section>\n'
         )
 
-    # ── 본문 조립 ─────────────────────────────────────────────────────────────
     html_body = (
-        _section("📊 시장 지표",            market_indicators_html)
-        + _section("📰 시장 요약",           market_summary_html,    show=has_summary)
+        _section("📊 시장 지표",        market_indicators_html)
+        + _section("📰 시장 요약",      market_summary_html,
+                   show=bool(market_sum.strip()))
         + _section("🔥 주목 섹터",
                    f'<div class="sector-list">{sector_badges_html}</div>',
-                   show=has_sectors)
-        + _section("👀 관심 종목",           stocks_html)
-        + _section("⭐ 오늘의 픽",           hidden_html,            show=has_hidden)
-        + _section("📋 애널리스트 리포트 분석", section3_html,         show=has_sec3)
-        + _section("📺 경제방송TV 추천",     section2_html,          show=has_sec2)
+                   show=bool(hot_sectors))
+        + _section("👀 관심 종목",      stocks_html)
+        + _section("⭐ 오늘의 픽",      hidden_html,
+                   show=bool(filtered_hidden))
+        + _section("📋 애널리스트 리포트 분석", analyst_html,
+                   show="데이터 없음" not in analyst_html)
+        + _section("📺 경제방송TV 추천", tv_html,
+                   show="데이터 없음" not in tv_html)
         + _section("🤖 AI 투자 전략",
-                   f'<div class="ai-strategy-box">'
-                   f'{ai_strategy or "분석 데이터 없음"}</div>',
-                   show=has_strategy)
-        + _section("🗂 지난 브리핑",         archive_html,           show=has_archive)
+                   f'<div class="ai-strategy-box">{ai_strategy or "분석 데이터 없음"}</div>',
+                   show=bool((ai_strategy or "").strip()))
+        + _section("🗂 지난 브리핑",    archive_html,
+                   show=bool(archive_html))
     )
 
-    # ── 최종 HTML ─────────────────────────────────────────────────────────────
+    # ── 최종 HTML 조립 ────────────────────────────────────────────────────────
     return f"""<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <meta name="description" content="AI 기반 한국 주식 모닝브리핑 - {briefing_date}">
   <title>AI 주식 브리핑 · {briefing_date}</title>
   <style>{css}</style>
 </head>
 <body>
 <div class="container">
-
   <header class="briefing-header">
     <h1>📈 AI 주식 모닝브리핑</h1>
     <p class="subtitle">{briefing_date} · {briefing_time} KST · 다중 채널 교차분석</p>
   </header>
-
   {html_body}
-
   <div class="disclaimer">
     본 브리핑은 AI가 공개 데이터를 수집·분석하여 자동 생성한 정보입니다.<br>
     투자 판단의 최종 책임은 투자자 본인에게 있으며, 투자 권유가 아닙니다.<br>
     © {now_kst.year} AI Stock Briefing · 자동 생성
   </div>
-
 </div>
 
 <!-- 차트 모달 -->
@@ -967,7 +916,6 @@ a { color: inherit; }
 
 <script>
 {chart_data_js}
-
 function showChart(key, name) {{
   var src = chartDataMap[key];
   if (!src) {{ alert('차트 데이터가 없습니다.'); return; }}
@@ -975,13 +923,11 @@ function showChart(key, name) {{
   document.getElementById('chartModalImg').src = src;
   document.getElementById('chartModal').classList.add('active');
 }}
-
 function closeChart(e) {{
   if (e.target.id === 'chartModal') {{
     document.getElementById('chartModal').classList.remove('active');
   }}
 }}
-
 document.addEventListener('keydown', function(e) {{
   if (e.key === 'Escape') {{
     document.getElementById('chartModal').classList.remove('active');
