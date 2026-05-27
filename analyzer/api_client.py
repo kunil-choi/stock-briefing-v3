@@ -1,91 +1,111 @@
 # analyzer/api_client.py
-import os
+"""
+Claude API 호출 클라이언트 - 재시도 로직 포함
+BUG-CR-1: call_claude_with_retry 시그니처를 (prompt, api_key, ...) 순서로 수정
+          기존 (api_key, prompt, ...) 순서에서 변경 → ai_analyzer.py, validation.py 호출부와 일치
+"""
+
 import time
-import requests as req_lib
+import anthropic
 
-ANTHROPIC_API_URL     = "https://api.anthropic.com/v1/messages"
-ANTHROPIC_API_VERSION = "2023-06-01"
-
-CLAUDE_MODELS = [
-    "claude-sonnet-4-5",
-    "claude-3-7-sonnet-20250219",
-    "claude-3-5-sonnet-20241022",
-    "claude-3-5-haiku-20241022",
-]
+# 기본 모델명 상수 (최신 claude-opus-4-5 사용)
+DEFAULT_MODEL = "claude-opus-4-5"
+DEFAULT_MAX_TOKENS = 8000
+DEFAULT_RETRIES = 3
+DEFAULT_DELAY = 5  # 초
 
 
-# BUG-CR-1: 시그니처를 (prompt, api_key) 순서로 변경
-# ai_analyzer.py, validation.py 모두 이 순서로 호출하므로 여기서 통일
-def call_claude_with_retry(prompt: str, api_key: str = "",
-                            max_tokens: int = 16000,
-                            max_retries: int = 3) -> str:
+def call_claude_with_retry(
+    prompt: str,                      # BUG-CR-1: 첫 번째 인자 (기존엔 api_key가 첫 번째였음)
+    api_key: str = "",                # BUG-CR-1: 두 번째 인자
+    max_tokens: int = DEFAULT_MAX_TOKENS,
+    model: str = DEFAULT_MODEL,
+    retries: int = DEFAULT_RETRIES,
+    delay: int = DEFAULT_DELAY,
+    system_prompt: str = "",
+) -> str:
+    """
+    Claude API를 호출하고 응답 텍스트를 반환합니다.
+    실패 시 최대 retries 횟수만큼 재시도합니다.
+
+    Args:
+        prompt      : 사용자 메시지 (필수)
+        api_key     : Anthropic API 키
+        max_tokens  : 최대 출력 토큰 수 (기본 8000)
+        model       : 사용할 Claude 모델명
+        retries     : 최대 재시도 횟수 (기본 3)
+        delay       : 재시도 간격 초 (기본 5)
+        system_prompt: 시스템 프롬프트 (선택)
+
+    Returns:
+        Claude 응답 텍스트 문자열
+    """
     if not api_key:
-        api_key = os.getenv("ANTHROPIC_API_KEY", "")
-    if not api_key:
-        print("  [API] ANTHROPIC_API_KEY 없음")
-        return ""
+        raise ValueError("[API-CLIENT] api_key가 비어 있습니다. ANTHROPIC_API_KEY를 확인하세요.")
 
-    headers = {
-        "x-api-key":         api_key,
-        "anthropic-version": ANTHROPIC_API_VERSION,
-        "content-type":      "application/json",
-    }
+    client = anthropic.Anthropic(api_key=api_key)
 
-    for model in CLAUDE_MODELS:
-        for attempt in range(max_retries):
-            payload = {
-                "model":      model,
+    # 메시지 구성
+    messages = [{"role": "user", "content": prompt}]
+
+    last_exception = None
+
+    for attempt in range(1, retries + 1):
+        try:
+            print(f"  [Claude API] 호출 시도 {attempt}/{retries} (model={model}, max_tokens={max_tokens})")
+
+            kwargs = {
+                "model": model,
                 "max_tokens": max_tokens,
-                "messages":   [{"role": "user", "content": prompt}],
+                "messages": messages,
             }
-            try:
-                print(f"  [API] 모델={model}, 시도={attempt+1}/{max_retries}")
-                resp = req_lib.post(
-                    ANTHROPIC_API_URL,
-                    headers=headers,
-                    json=payload,
-                    timeout=180,
-                )
+            if system_prompt:
+                kwargs["system"] = system_prompt
 
-                if resp.status_code == 200:
-                    data   = resp.json()
-                    result = data["content"][0]["text"].strip()
-                    print(f"  [API] 성공 (모델={model}, {len(result)}자)")
-                    return result
+            response = client.messages.create(**kwargs)
+            text = response.content[0].text
+            print(f"  [Claude API] 호출 성공 (응답 길이: {len(text)}자)")
+            return text
 
-                elif resp.status_code == 429:
-                    wait = 60 * (attempt + 1)
-                    print(f"  [API] 429 Rate limit → {wait}초 대기...")
-                    time.sleep(wait)
+        except anthropic.RateLimitError as e:
+            last_exception = e
+            wait = delay * attempt
+            print(f"  [Claude API] RateLimitError (시도 {attempt}/{retries}) → {wait}초 대기 후 재시도")
+            if attempt < retries:
+                time.sleep(wait)
 
-                elif resp.status_code in (529, 503, 500):
-                    wait = 30 * (attempt + 1)
-                    print(f"  [API] {resp.status_code} 서버 과부하 → {wait}초 대기...")
-                    time.sleep(wait)
+        except anthropic.APIStatusError as e:
+            last_exception = e
+            print(f"  [Claude API] APIStatusError {e.status_code}: {e.message} (시도 {attempt}/{retries})")
+            if e.status_code in (500, 502, 503, 529):  # 서버 오류는 재시도
+                if attempt < retries:
+                    time.sleep(delay)
+            else:
+                # 클라이언트 오류(400, 401, 403 등)는 즉시 중단
+                raise
 
-                elif resp.status_code == 401:
-                    print("  [API] 401 인증 실패. API 키를 확인하세요.")
-                    return ""
+        except anthropic.APIConnectionError as e:
+            last_exception = e
+            print(f"  [Claude API] 연결 오류 (시도 {attempt}/{retries}): {e}")
+            if attempt < retries:
+                time.sleep(delay)
 
-                else:
-                    print(f"  [API] HTTP {resp.status_code}: {resp.text[:200]}")
-                    if attempt < max_retries - 1:
-                        time.sleep(15)
+        except Exception as e:
+            last_exception = e
+            print(f"  [Claude API] 알 수 없는 오류 (시도 {attempt}/{retries}): {type(e).__name__}: {e}")
+            if attempt < retries:
+                time.sleep(delay)
 
-            except req_lib.exceptions.ConnectionError as e:
-                print(f"  [API] 연결 오류 ({attempt+1}/{max_retries}): {e}")
-                if attempt < max_retries - 1:
-                    time.sleep(20)
-            except req_lib.exceptions.Timeout:
-                print(f"  [API] 타임아웃 ({attempt+1}/{max_retries})")
-                if attempt < max_retries - 1:
-                    time.sleep(15)
-            except Exception as e:
-                print(f"  [API] 예외 ({attempt+1}/{max_retries}): {e}")
-                if attempt < max_retries - 1:
-                    time.sleep(10)
+    # 모든 재시도 실패
+    print(f"  [Claude API] {retries}회 모두 실패. 마지막 오류: {last_exception}")
+    raise last_exception or RuntimeError("Claude API 호출 실패 (원인 불명)")
 
-        print(f"  [API] 모델 {model} 전체 실패 → 다음 모델 시도")
 
-    print("  [API] 모든 모델/재시도 실패")
-    return ""
+def estimate_tokens(text: str) -> int:
+    """
+    텍스트의 대략적인 토큰 수를 추정합니다.
+    한국어는 글자당 약 1.5토큰, 영어는 단어당 약 1.3토큰으로 계산.
+    """
+    korean_chars = sum(1 for c in text if '\uac00' <= c <= '\ud7a3')
+    other_chars = len(text) - korean_chars
+    return int(korean_chars * 1.5 + other_chars / 4)
