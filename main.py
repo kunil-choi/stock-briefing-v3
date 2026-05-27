@@ -34,11 +34,12 @@ def _collect_safe(label: str, func, *args, **kwargs) -> list:
     BUG-M-2: 수집기 개별 에러 격리 헬퍼.
     예외 발생 시 빈 리스트 반환 + 스택트레이스 출력으로
     한 수집기 실패가 전체 파이프라인을 중단하지 않도록 보장.
+    dict 반환 함수에는 사용 불가 — collect_market_overview는 별도 처리.
     """
     try:
         result = func(*args, **kwargs)
         if not isinstance(result, list):
-            print(f"  [{label}] 반환값이 list가 아님 → 빈 리스트 처리")
+            print(f"  [{label}] 반환값이 list가 아님 ({type(result).__name__}) → 빈 리스트 처리")
             return []
         return result
     except Exception as e:
@@ -52,13 +53,13 @@ def _warn_empty_sources(all_data: list):
     BUG-M-3: source_type 별 건수 출력 + 0건 소스 경고.
     수집 결과를 명확히 인식하고 다음 실행에서 원인을 파악하기 위함.
     """
-    counter = Counter(d.get("source_type", "기타") for d in all_data)
+    counter  = Counter(d.get("source_type", "기타") for d in all_data)
     expected = ["뉴스", "경제방송", "경제방송TV", "유튜브", "애널리스트"]
 
     print("\n[수집 결과 요약]")
     for stype in expected:
-        cnt = counter.get(stype, 0)
-        flag = "⚠️ 0건" if cnt == 0 else f"{cnt}건"
+        cnt  = counter.get(stype, 0)
+        flag = "⚠️  0건" if cnt == 0 else f"{cnt}건"
         print(f"  {stype}: {flag}")
 
     for stype, cnt in counter.items():
@@ -67,14 +68,15 @@ def _warn_empty_sources(all_data: list):
 
     zero_types = [s for s in expected if counter.get(s, 0) == 0]
     if zero_types:
-        print(f"\n  ⚠️ 경고: 다음 소스 수집 0건 → [{', '.join(zero_types)}]")
+        print(f"\n  ⚠️  경고: 다음 소스 수집 0건 → [{', '.join(zero_types)}]")
         print("     GitHub Actions 로그에서 해당 수집기 오류를 확인하세요.")
 
 
-def _check_api_keys():
+def _check_api_keys() -> bool:
     """
     BUG-M-4: API 키 사전 검증 — 키 누락 시 조기 경고.
     실행은 계속하되 어떤 기능이 제한되는지 명확히 로깅.
+    반환값: ANTHROPIC_API_KEY 존재 여부 (AI 분석 가능 여부)
     """
     issues = []
     if not ANTHROPIC_API_KEY:
@@ -84,24 +86,33 @@ def _check_api_keys():
     if not GH_TOKEN:
         issues.append("GH_TOKEN 누락 → GitHub 커밋 불가 (로컬 실행은 무관)")
 
+    print("\n[API 키 점검]")
     if issues:
-        print("\n[API 키 점검]")
         for issue in issues:
-            print(f"  ⚠️ {issue}")
+            print(f"  ⚠️  {issue}")
     else:
-        print("[API 키 점검] 전체 정상")
+        print("  전체 정상")
 
-    return bool(ANTHROPIC_API_KEY)  # AI 분석 가능 여부 반환
+    return bool(ANTHROPIC_API_KEY)
 
 
 def main():
     start_time = _now_kst()
     print(f"=== AI 증시 모닝브리핑 시작: {start_time.strftime('%Y-%m-%d %H:%M:%S KST')} ===")
 
+    # BUG-M-1-EXT: 워크플로우 수동 실행 시 스킵 옵션 반영
+    # .github/workflows 에서 SKIP_YOUTUBE / SKIP_ANALYST 환경변수로 주입
+    SKIP_YOUTUBE = os.environ.get("SKIP_YOUTUBE", "false").lower() == "true"
+    SKIP_ANALYST = os.environ.get("SKIP_ANALYST", "false").lower() == "true"
+    if SKIP_YOUTUBE:
+        print("  ℹ️  SKIP_YOUTUBE=true → 유튜브 수집 전체 스킵")
+    if SKIP_ANALYST:
+        print("  ℹ️  SKIP_ANALYST=true → 애널리스트 수집 스킵")
+
     # BUG-M-4: API 키 사전 검증
     can_analyze = _check_api_keys()
 
-    # 채널 목록 로드
+    # ── 채널 목록 로드 ────────────────────────────────────────────────────────
     print("\n[채널 로드]")
     channels = load_channels()
     for cat, lst in channels.items():
@@ -109,23 +120,22 @@ def main():
             confirmed = [c for c in lst if isinstance(c, dict) and c.get("id")]
             print(f"  {cat}: 전체 {len(lst)}개 / 유효 ID {len(confirmed)}개")
 
-# main.py 의 시장 데이터 수집 부분만 교체
-
-# 시장 데이터 수집
+    # ── 시장 데이터 수집 ──────────────────────────────────────────────────────
     print("\n[시장 데이터 수집]")
     # BUG-CR-4: collect_market_overview는 dict 반환 → _collect_safe 사용 불가
     market_overview = {}
     try:
-      market_overview = collect_market_overview()
-      if not isinstance(market_overview, dict):
-          print("  ⚠️ 시장 데이터가 dict 형식이 아님 → 빈 dict 사용")
-          market_overview = {}
-      else:
-          print(f"  → 시장 데이터 수집 완료 ({len(market_overview)}개 항목)")
+        result = collect_market_overview()
+        if isinstance(result, dict):
+            market_overview = result
+            print(f"  → 시장 데이터 수집 완료 ({len(market_overview)}개 항목)")
+        else:
+            print(f"  ⚠️  시장 데이터가 dict 형식이 아님 ({type(result).__name__}) → 빈 dict 사용")
     except Exception as e:
-      print(f"  ⚠️ 시장 데이터 수집 실패: {e}")
-      market_overview = {}
+        print(f"  ⚠️  시장 데이터 수집 실패: {e}")
+        traceback.print_exc()
 
+    all_data: list = []
 
     # ── 1. 뉴스 RSS ───────────────────────────────────────────────────────────
     print(f"\n[1/4] 뉴스 RSS 수집 중...")
@@ -136,37 +146,51 @@ def main():
     # ── 2. 유튜브 섹션1 ───────────────────────────────────────────────────────
     print(f"\n[2/4] 유튜브 수집 중 (섹션1: 방송사/유튜버/증권사 {BROADCAST_HOURS}시간)...")
     youtube_client = None
-    if YOUTUBE_API_KEY:
+
+    if SKIP_YOUTUBE:
+        print("  ℹ️  스킵")
+    elif not YOUTUBE_API_KEY:
+        print("  ⚠️  YOUTUBE_API_KEY 없음 → 스킵")
+    else:
         try:
             youtube_client = get_youtube_client(YOUTUBE_API_KEY)
         except Exception as e:
-            print(f"  ⚠️ YouTube 클라이언트 생성 실패: {e}")
+            print(f"  ⚠️  YouTube 클라이언트 생성 실패: {e}")
+            traceback.print_exc()
 
-    if youtube_client:
-        section1_data = _collect_safe(
-            "유튜브섹션1", collect_section1_youtube, youtube_client, channels
-        )
-        all_data.extend(section1_data)
-        print(f"  → {len(section1_data)}건")
-    else:
-        print("  ⚠️ YouTube API 비활성화 → 섹션1 스킵")
+        if youtube_client:
+            section1_data = _collect_safe(
+                "유튜브섹션1", collect_section1_youtube, youtube_client, channels
+            )
+            all_data.extend(section1_data)
+            print(f"  → {len(section1_data)}건")
+        else:
+            print("  ⚠️  YouTube 클라이언트 없음 → 섹션1 스킵")
 
     # ── 3. 유튜브 섹션2 (경제방송TV) ──────────────────────────────────────────
     print(f"\n[3/4] 경제방송TV 수집 중 (섹션2: {SECURITIES_TV_HOURS}시간)...")
-    if youtube_client:
+
+    if SKIP_YOUTUBE:
+        print("  ℹ️  스킵")
+    elif youtube_client:
         section2_data = _collect_safe(
             "유튜브섹션2", collect_section2_securities_tv, youtube_client
         )
         all_data.extend(section2_data)
         print(f"  → {len(section2_data)}건")
     else:
-        print("  ⚠️ YouTube API 비활성화 → 섹션2 스킵")
+        print("  ⚠️  YouTube 클라이언트 없음 → 섹션2 스킵")
 
     # ── 4. 애널리스트 리포트 ──────────────────────────────────────────────────
     print("\n[4/4] 애널리스트 리포트 수집 중...")
-    analyst_data = _collect_safe("애널리스트", collect_analyst)
-    all_data.extend(analyst_data)
-    print(f"  → {len(analyst_data)}건")
+
+    if SKIP_ANALYST:
+        print("  ℹ️  스킵")
+        analyst_data = []
+    else:
+        analyst_data = _collect_safe("애널리스트", collect_analyst)
+        all_data.extend(analyst_data)
+        print(f"  → {len(analyst_data)}건")
 
     # ── 수집 결과 요약 ────────────────────────────────────────────────────────
     print(f"\n{'='*50}")
@@ -175,17 +199,19 @@ def main():
 
     # BUG-M-5: 수집 데이터가 전혀 없어도 최소 브리핑은 생성 (파이프라인 중단 방지)
     if len(all_data) == 0:
-        print("\n  ⚠️ 수집 데이터 0건 → 최소 브리핑만 생성합니다.")
+        print("\n  ⚠️  수집 데이터 0건 → 최소 브리핑만 생성합니다.")
 
     # ── 원본 데이터 백업 ──────────────────────────────────────────────────────
     os.makedirs("data", exist_ok=True)
     # BUG-M-1: KST 기준 날짜 사용
     today_str    = _now_kst().strftime("%Y%m%d")
     save_payload = {
-        "collected_at":   _now_kst().strftime("%Y-%m-%d %H:%M:%S KST"),
+        "collected_at":    _now_kst().strftime("%Y-%m-%d %H:%M:%S KST"),
         "market_overview": market_overview,
         "items":           all_data,
-        "source_counts":   dict(Counter(d.get("source_type", "기타") for d in all_data)),
+        "source_counts":   dict(Counter(
+            d.get("source_type", "기타") for d in all_data
+        )),
     }
     raw_path = f"data/raw_{today_str}.json"
     try:
@@ -194,6 +220,7 @@ def main():
         print(f"\n[저장] {raw_path} 완료")
     except Exception as e:
         print(f"\n[저장] {raw_path} 실패: {e}")
+        traceback.print_exc()
 
     # ── 디렉토리 준비 ─────────────────────────────────────────────────────────
     os.makedirs("docs",         exist_ok=True)
@@ -212,6 +239,7 @@ def main():
                 print(f"[아카이브] 저장 완료: {archive_path}")
             except Exception as e:
                 print(f"[아카이브] 저장 실패: {e}")
+                traceback.print_exc()
         else:
             print(f"[아카이브] 이미 존재: {archive_path} → 스킵")
     else:
@@ -232,10 +260,10 @@ def main():
                 market_overview=market_overview,
             )
         except Exception as e:
-            print(f"  ⚠️ AI 분석 실패: {e}")
+            print(f"  ⚠️  AI 분석 실패: {e}")
             traceback.print_exc()
     else:
-        print("  ⚠️ ANTHROPIC_API_KEY 없음 → AI 분석 스킵")
+        print("  ⚠️  ANTHROPIC_API_KEY 없음 → AI 분석 스킵")
 
     # BUG-M-6: AI 분석 실패 시 에러 페이지 생성 (빈 파일 방지)
     if not html:
@@ -244,17 +272,18 @@ def main():
             '<!DOCTYPE html><html lang="ko"><head>'
             '<meta charset="UTF-8">'
             '<title>AI 주식 브리핑 - 생성 실패</title>'
-            '<style>body{font-family:sans-serif;background:#0a0a14;color:#e0e0e0;'
-            'display:flex;justify-content:center;align-items:center;height:100vh;'
-            'flex-direction:column;gap:16px;}'
-            'h2{color:#ff6b6b;}p{color:#888;font-size:.9em;}</style>'
-            '</head><body>'
+            '<style>'
+            'body{font-family:sans-serif;background:#0a0a14;color:#e0e0e0;'
+            'display:flex;justify-content:center;align-items:center;'
+            'height:100vh;flex-direction:column;gap:16px;}'
+            'h2{color:#ff6b6b;}p{color:#888;font-size:.9em;}'
+            '</style></head><body>'
             f'<h2>⚠️ 브리핑 생성 실패</h2>'
             f'<p>{now_str} KST 기준 데이터 수집 또는 AI 분석 중 오류가 발생했습니다.</p>'
             '<p>GitHub Actions 로그를 확인하세요.</p>'
             '</body></html>'
         )
-        print("  ⚠️ 에러 페이지로 대체합니다.")
+        print("  ⚠️  에러 페이지로 대체합니다.")
 
     # ── HTML 저장 ─────────────────────────────────────────────────────────────
     try:
