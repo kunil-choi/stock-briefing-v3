@@ -34,9 +34,9 @@ TYPE_ALIASES = {
     "애널리스트": ["애널리스트", "리포트", "report", "증권사"],
 }
 
-# BUG-V-1: 팩트체크 후 Claude가 덮어쓰면 안 되는 보호 필드 목록 (중앙화)
+# BUG-V-1: 팩트체크 후 Claude가 덮어쓰면 안 되는 보호 필드 목록
 _PROTECTED_FIELDS = [
-    "verified_price", "market", "naver_code", "code",
+    "verified_price", "market", "naver_code", "code", "naver_url",
     "chart_base64", "rank", "total_count", "overlap_count",
     "weighted_score", "channel_counts", "channel_type",
 ]
@@ -51,7 +51,6 @@ def _save_to_cache(stock_name: str, code: str):
         if os.path.exists(_CACHE_PATH):
             with open(_CACHE_PATH, "r", encoding="utf-8") as f:
                 cache = json.load(f)
-        # BUG-V-2: stock_map 키 통일 (ai_analyzer와 동일 구조)
         cache.setdefault("stock_map", {})[stock_name] = code
         os.makedirs("data", exist_ok=True)
         with open(_CACHE_PATH, "w", encoding="utf-8") as f:
@@ -97,7 +96,7 @@ def _normalize_reason(reason: Any) -> dict:
                 reason.get("source_name") or reason.get("channel") or
                 reason.get("firm") or ""
             ).strip(),
-            # BUG-V-3: "reason" 필드도 detail로 매핑 (ai_analyzer 프롬프트 필드명 일치)
+            # BUG-V-3: "reason" 필드도 detail로 매핑
             "detail": str(
                 reason.get("detail") or reason.get("reason") or
                 reason.get("summary") or ""
@@ -219,36 +218,40 @@ def _fetch_chart(name: str, code: str) -> str | None:
     return None
 
 
-# ── BUG-V-5: 주가 조회 fallback 헬퍼 ─────────────────────────────────────────
+# ── FIX-PRICE-1: verified_price를 int/None으로 평탄화하는 헬퍼 ───────────────
 
-def _fetch_price_with_fallback(name: str, code: str) -> dict | None:
+def _fetch_price_with_fallback(name: str, code: str) -> tuple[int | None, str]:
     """
-    주가 조회 실패 시 최소한 네이버 금융 URL을 포함한 fallback dict 반환.
-    - 성공: fetch_naver_stock_price() 결과 (price, change, change_pct, code 포함)
-    - 실패: {"price": "N/A", "code": code, "naver_url": ...} 형태의 fallback
+    주가 조회 후 html_generator가 기대하는 형태로 반환한다.
+
+    Returns
+    -------
+    (verified_price, naver_url)
+        verified_price : int (현재가) 또는 None (조회 실패)
+        naver_url      : str (네이버 금융 종목 URL)
     """
+    naver_url = f"https://finance.naver.com/item/main.naver?code={code}"
     try:
         result = fetch_naver_stock_price(name, code_override=code)
         if result:
-            return result
+            price_raw = result.get("price")
+            # 문자열 "75,400" → 정수 75400
+            if isinstance(price_raw, str):
+                price_int = int(re.sub(r"[^\d]", "", price_raw)) if re.search(r"\d", price_raw) else None
+            elif isinstance(price_raw, (int, float)):
+                price_int = int(price_raw)
+            else:
+                price_int = None
+            return price_int, naver_url
     except Exception as e:
         print(f"  [PRICE] {name} 조회 예외: {e}")
 
-    # BUG-V-6: fallback — 주가 없어도 코드는 보존
-    print(f"  [PRICE] {name} ({code}) 주가 조회 실패 → fallback")
-    return {
-        "price":      "N/A",
-        "change":     "",
-        "change_pct": "",
-        "code":       code,
-        "naver_url":  f"https://finance.naver.com/item/main.naver?code={code}",
-    }
+    print(f"  [PRICE] {name} ({code}) 주가 조회 실패 → None 반환")
+    return None, naver_url
 
 
 # ── 메인 검증 함수 ────────────────────────────────────────────────────────────
 
-# BUG-V-7: 인자 순서 수정 — ai_analyzer.py의 호출 방식과 일치
-# ai_analyzer 호출: validate_stocks(result, all_data, api_key)
 def validate_stocks(data: dict, all_data=None, api_key: str = "",
                     stock_map: dict = None) -> dict:
     print("\n" + "=" * 60)
@@ -320,12 +323,13 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
                 stock["market"]         = "해외"
                 stock["verified_price"] = None
                 stock["chart_base64"]   = None
+                stock["naver_url"]      = ""
                 print(f"  [해외] {name} 스킵")
                 continue
 
             stock["market"] = "국내"
 
-            # 코드 확보 (우선순위: 기존 필드 → 네이버 검색 → 자동완성)
+            # 코드 확보
             code = str(
                 stock.get("code", "") or
                 stock.get("naver_code", "") or
@@ -341,23 +345,28 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
                 stock["naver_code"] = code
                 stock["code"]       = code
 
-                # BUG-V-8: fallback 적용 — 주가 조회 실패 시에도 코드 보존
-                price_info = _fetch_price_with_fallback(name, code)
-                stock["verified_price"] = price_info
-                if price_info and price_info.get("price") != "N/A":
-                    print(
-                        f"  [PRICE] {name}: {price_info['price']}원 "
-                        f"{price_info.get('change','')}"
-                    )
+                # FIX-PRICE-1: int 또는 None, naver_url 동시 설정
+                price_int, naver_url = _fetch_price_with_fallback(name, code)
+                stock["verified_price"] = price_int
+                stock["naver_url"]      = naver_url
 
-                # 차트 생성 (실패해도 종목 유지)
+                if price_int is not None:
+                    print(f"  [PRICE] {name}: {price_int:,}원")
+                else:
+                    print(f"  [PRICE] {name}: 조회 실패 (링크: {naver_url})")
+
+                # 차트 생성
                 stock["chart_base64"] = _fetch_chart(name, code)
+
             else:
-                # BUG-V-9: 코드 조회 실패 시에도 종목 삭제하지 않음
                 print(f"  [WARN] {name}: 코드 조회 실패 → 종목 유지, 주가/차트 없음")
                 stock["verified_price"] = None
                 stock["chart_base64"]   = None
-                # 네이버 검색 URL은 html_generator에서 name 기반으로 자동 생성됨
+                # 이름 기반 검색 URL은 html_generator에서 자동 생성
+                stock["naver_url"]      = (
+                    f"https://finance.naver.com/search/searchResult.naver"
+                    f"?query={name.replace(' ', '+')}"
+                )
 
     print("[검증-B] 완료")
 
@@ -379,8 +388,7 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
             name = stock.get("name", "")
             code = str(
                 stock.get("code", "") or
-                stock.get("naver_code", "") or
-                (stock.get("verified_price") or {}).get("code", "")
+                stock.get("naver_code", "")
             ).strip()
 
             if code:
@@ -396,12 +404,9 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
                 except Exception as e:
                     print(f"  [기업정보] {name} 조회 실패: {e}")
 
-            verified_price = stock.get("verified_price")
-            if isinstance(verified_price, dict) and verified_price.get("price") != "N/A":
-                price_info_lines.append(
-                    f"- {name}: {verified_price['price']}원 "
-                    f"({verified_price.get('change','')}, {verified_price.get('change_pct','')})"
-                )
+            price_val = stock.get("verified_price")
+            if isinstance(price_val, int):
+                price_info_lines.append(f"- {name}: {price_val:,}원")
             elif stock.get("market") == "해외":
                 price_info_lines.append(f"- {name}: 해외 종목")
 
@@ -421,11 +426,10 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
             "아래 AI 브리핑 데이터를 읽고 내용상 사실 오류가 있는지 검토하세요.\n\n"
             "## 검토 항목:\n"
             "1. 기업 설명 오류 (잘못된 업종, 사업 내용)\n"
-            "2. 주가/가격 오류\n"
-            "3. 사실관계 오류 (수치, 날짜, 인물, 이벤트)\n"
-            "4. 업종 설명이 아래 네이버 기업정보와 일치하는지 확인\n\n"
+            "2. 사실관계 오류 (수치, 날짜, 인물, 이벤트)\n"
+            "3. 업종 설명이 아래 네이버 기업정보와 일치하는지 확인\n\n"
             f"## 네이버 금융 기업정보:\n{company_block}\n\n"
-            f"## 실시간 주가 데이터:\n{price_block}\n\n"
+            f"## 실시간 주가 데이터 (참고용):\n{price_block}\n\n"
             "## 검토 대상 브리핑 데이터:\n"
             + CB + "json\n"
             + target_json + "\n"
@@ -440,7 +444,6 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
         )
 
         print("  [API] 팩트체크 Claude 호출...")
-        # BUG-V-10: 인자 순서 수정 — call_claude_with_retry(prompt, api_key)
         fc_result = call_claude_with_retry(fc_prompt, api_key, max_tokens=12000)
 
         if not fc_result:
@@ -452,7 +455,7 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
             print("[검증-C] JSON 파싱 실패 → 원본 유지")
             return data
 
-        # BUG-V-11: 보호 필드 복원을 _PROTECTED_FIELDS 목록 기반으로 일괄 처리
+        # BUG-V-11: 보호 필드 복원
         for key in ["stocks", "hidden_picks"]:
             orig_list = data.get(key, [])
             corr_list = corrected.get(key, [])
@@ -467,11 +470,11 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
                 if not orig_stock:
                     continue
 
-                # 보호 필드 일괄 복원
                 for field in _PROTECTED_FIELDS:
-                    corr_stock[field] = orig_stock.get(field)
+                    if field in orig_stock:
+                        corr_stock[field] = orig_stock[field]
 
-                # source_url 원본값 복원
+                # source_url 복원
                 corr_reasons = corr_stock.get("reasons", [])
                 orig_reasons = orig_stock.get("reasons", [])
                 if isinstance(corr_reasons, list):
@@ -486,10 +489,12 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
             if corr_list:
                 data[key] = corr_list
 
-        # market_summary 보호 — investment_strategy만 교정 허용
-        if (isinstance(corrected.get("investment_strategy"), str)
-                and corrected["investment_strategy"].strip()):
-            data["investment_strategy"] = corrected["investment_strategy"]
+        # FIX-KEY-1: ai_strategy 키로 저장 (html_generator와 일치)
+        for try_key in ("ai_strategy", "investment_strategy"):
+            val = corrected.get(try_key, "")
+            if isinstance(val, str) and val.strip():
+                data["ai_strategy"] = val.strip()
+                break
 
         print("[검증-C] 완료")
 
@@ -518,7 +523,6 @@ def _try_parse_json_local(text: str):
             return None
         candidate = text[start:end + 1]
 
-    # 단계적 클리닝 시도
     def _clean_0(s): return s
     def _clean_1(s): return s.replace('\n', ' ').replace('\r', '')
     def _clean_2(s): return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', s)
