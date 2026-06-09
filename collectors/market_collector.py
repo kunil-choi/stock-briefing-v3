@@ -6,6 +6,8 @@
 - FIX-MKT-1: 반환 딕셔너리 키를 html_generator._INDICATOR_DEFS와 일치하도록 통일
               각 지표 dict에 value/change_pct/direction 키 보장
 - FIX-MKT-2: FinanceDataReader 의존 제거, yfinance 우선 / 네이버 폴백
+- FIX-MKT-3: collect_market_overview() 함수 내 들여쓰기 버그 수정
+              야간선물/USD/KRW/return 블록이 함수 밖으로 탈출하던 문제 수정
 """
 
 import re
@@ -102,18 +104,16 @@ def _fetch_naver_index(symbol: str):
         resp.raise_for_status()
         text = resp.text
 
-        # 현재값
         m_val = re.search(r'id="now_value"[^>]*>([\d,\.]+)', text)
         m_pct = re.search(r'id="change_percent"[^>]*>([\d\.]+)', text)
         m_dir = re.search(r'class="(up|down|dn|no)"', text)
 
         if not m_val:
             return None, None
-        value = float(m_val.group(1).replace(",", ""))
-        pct   = float(m_pct.group(1)) if m_pct else 0.0
-        raw_dir = (m_dir.group(1) if m_dir else "").lower()
+        value     = float(m_val.group(1).replace(",", ""))
+        pct       = float(m_pct.group(1)) if m_pct else 0.0
+        raw_dir   = (m_dir.group(1) if m_dir else "").lower()
         direction = "up" if "up" in raw_dir else "down" if ("down" in raw_dir or "dn" in raw_dir) else "flat"
-        # 방향에 따라 부호 보정
         if direction == "down":
             pct = -abs(pct)
         return value, pct
@@ -132,12 +132,10 @@ def _fetch_naver_forex():
         resp = requests.get(url, headers=_NAVER_HEADERS, timeout=10)
         resp.raise_for_status()
         text = resp.text
-        # USD/KRW 영역 파싱
         m_val = re.search(
             r'USD/KRW.*?value["\s]+>([\d,\.]+)', text, re.DOTALL
         )
         if not m_val:
-            # 대안 패턴
             m_val = re.search(r'"exchangeRate"[^>]*>([\d,\.]+)', text)
         if not m_val:
             return None, None
@@ -157,16 +155,14 @@ def collect_market_overview() -> dict:
     반환 예시
     ---------
     {
-        "kospi":        {"value": 8012.34, "change_pct": +1.23, "direction": "up"},
-        "kosdaq":       {"value":  900.12, "change_pct": -0.45, "direction": "down"},
+        "kospi":        {"value": 2500.0, "change_pct": +1.23, "direction": "up"},
+        "kosdaq":       {"value":  900.0, "change_pct": -0.45, "direction": "down"},
         "nasdaq":       {"value": 19800.0, "change_pct": +0.80, "direction": "up"},
         "sp500":        {"value":  5500.0, "change_pct": +0.55, "direction": "up"},
         "dow":          {"value": 42000.0, "change_pct": +0.30, "direction": "up"},
-        "night_future": {"value":  8020.0, "change_pct": +0.10, "direction": "up"},
+        "night_future": {"value":  2520.0, "change_pct": +0.10, "direction": "up"},
         "usd_krw":      {"value":  1380.0, "change_pct":  0.00, "direction": "flat"},
     }
-
-    html_generator._INDICATOR_DEFS 의 키 목록과 반드시 일치해야 한다.
     """
     print("\n[시장수집] 지표 수집 시작...")
     result = {}
@@ -205,13 +201,14 @@ def collect_market_overview() -> dict:
         result["dow"] = _make_indicator(val, pct)
         print(f"  DOW: {val:,.2f} ({pct:+.2f}%)")
 
-# ── 야간선물 (코스피200 선물) ─────────────────────────────────────────────
-val, pct = _fetch_yf("^KS200")
-if val is None:
-    val, pct = _fetch_naver_index("KOSPI200")
-if val is not None:
-    result["night_future"] = _make_indicator(val, pct)
-    print(f"  야간선물: {val:,.2f} ({pct:+.2f}%)")
+    # ── 야간선물 (코스피200 선물) ─────────────────────────────────────────────
+    # FIX-MKT-3: 들여쓰기 수정 — 함수 내부로 복귀
+    val, pct = _fetch_yf("^KS200")
+    if val is None:
+        val, pct = _fetch_naver_index("KOSPI200")
+    if val is not None:
+        result["night_future"] = _make_indicator(val, pct)
+        print(f"  야간선물: {val:,.2f} ({pct:+.2f}%)")
 
     # ── USD/KRW ───────────────────────────────────────────────────────────────
     val, pct = _fetch_naver_forex()
