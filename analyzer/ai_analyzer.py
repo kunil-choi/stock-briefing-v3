@@ -1,17 +1,29 @@
 # analyzer/ai_analyzer.py
+"""
+AI 주식 브리핑 분석 엔진
+
+수정 이력:
+- BUG-CR-1   : 상대 임포트로 전환
+- BUG-HIDDEN : 히든픽 로직 정비
+- BUG-CACHE  : stock_map 캐시 키 우선순위 정비
+- BUG-KEY-1  : ai_strategy 키 통일
+- V2-PROMPT  : Claude 프롬프트를 V2 수준으로 개선
+               (summary / catalyst / risk / channel_mentions 필드 추가)
+- V2-SYNC    : channel_mentions → reasons 동기화 블록 추가
+"""
+
 import json
 import os
 import re
 import math
 from datetime import datetime, timezone, timedelta
 
-# BUG-CR-1 수정: anthropic_api → .api_client (상대임포트)
 from .api_client import call_claude_with_retry
 
-KST = timezone(timedelta(hours=9))
+KST              = timezone(timedelta(hours=9))
 STOCK_CACHE_FILE = "data/stock_names_cache.json"
 OUTPUT_FILE      = "data/briefing_data.json"
-CB = "```"
+CB               = "```"
 
 _SKIP_NAMES = {
     "삼성", "현대", "LG", "SK", "롯데", "한화", "포스코", "GS", "CJ",
@@ -24,13 +36,13 @@ _SKIP_NAMES = {
     "매수", "매도", "상승", "하락", "급등", "급락", "시장", "투자",
     "주식", "펀드", "ETF", "채권", "선물", "옵션",
     "경제", "금융", "부동산", "인플레이션", "디플레이션",
-    "중국", "미국", "유럽", "일본", "한국"
+    "중국", "미국", "유럽", "일본", "한국",
 }
-_MIN_NAME_LEN = 2
-
-# 히든픽 기준: 이 채널 유형에서만 언급된 종목은 히든픽 후보
+_MIN_NAME_LEN       = 2
 _HIGH_QUALITY_TYPES = {"애널리스트", "경제방송TV", "경제방송"}
 
+
+# ── 종목명 유효성 검사 ─────────────────────────────────────────────────────────
 
 def _is_valid_stock_name(name: str) -> bool:
     if len(name) < _MIN_NAME_LEN:
@@ -71,16 +83,13 @@ def load_stock_names() -> dict:
     """
     종목명 → 코드 딕셔너리 반환.
     우선순위: 오늘 날짜 캐시 → KRX API → fallback 내장 목록
-    BUG-CR-2 호환: 캐시 키 stock_map 사용 (naver_finance.py와 통일)
     """
     today_kst = datetime.now(KST).strftime("%Y-%m-%d")
 
-    # 캐시 확인
     if os.path.exists(STOCK_CACHE_FILE):
         try:
             with open(STOCK_CACHE_FILE, "r", encoding="utf-8") as f:
                 cache = json.load(f)
-            # stock_map 키 우선, 구버전 stocks 키 fallback
             cached_map = cache.get("stock_map") or cache.get("stocks", {})
             if cache.get("date") == today_kst and cached_map:
                 print(f"[종목캐시] {len(cached_map)}개 로드 (캐시)")
@@ -88,17 +97,16 @@ def load_stock_names() -> dict:
         except Exception:
             pass
 
-    # KRX API
     stock_map = {}
     try:
         import requests
         for market_id in ["STK", "KSQ"]:
             url = "http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
             payload = {
-                "bld": "dbms/MDC/STAT/standard/MDCSTAT01901",
-                "mktId": market_id,
-                "share": "1",
-                "csvxls_isNo": "false"
+                "bld":         "dbms/MDC/STAT/standard/MDCSTAT01901",
+                "mktId":       market_id,
+                "share":       "1",
+                "csvxls_isNo": "false",
             }
             headers = {"Referer": "http://data.krx.co.kr/"}
             resp = requests.post(url, data=payload, headers=headers, timeout=10)
@@ -111,17 +119,15 @@ def load_stock_names() -> dict:
         if stock_map:
             os.makedirs("data", exist_ok=True)
             with open(STOCK_CACHE_FILE, "w", encoding="utf-8") as f:
-                json.dump({
-                    "date": today_kst,
-                    "stock_map": stock_map,
-                    "stocks": stock_map        # 구버전 호환 키
-                }, f, ensure_ascii=False)
+                json.dump(
+                    {"date": today_kst, "stock_map": stock_map, "stocks": stock_map},
+                    f, ensure_ascii=False,
+                )
             print(f"[종목로드] KRX에서 {len(stock_map)}개 로드")
             return stock_map
     except Exception as e:
         print(f"[종목로드] KRX 요청 실패: {e}, fallback 사용")
 
-    # Fallback 내장 목록
     stock_map = {
         "삼성전자": "005930", "SK하이닉스": "000660", "LG에너지솔루션": "373220",
         "삼성바이오로직스": "207940", "현대차": "005380", "NAVER": "035420",
@@ -159,16 +165,6 @@ def load_stock_names() -> dict:
 
 def extract_mentions(all_data: list, stock_map: dict,
                      channels_data: dict = None) -> dict:
-    """
-    수집 데이터에서 종목 언급 추출 + 채널 가중치 적용.
-    반환: {
-      종목명: {
-        code, total_count, weighted_score,
-        channel_types(list),
-        channels: { 채널유형: [{source_name, snippet, link, content_id, weight}] }
-      }
-    }
-    """
     weight_map = _build_channel_weight_map(channels_data) if channels_data else {}
 
     type_map = {
@@ -194,8 +190,7 @@ def extract_mentions(all_data: list, stock_map: dict,
         summary  = item.get("summary", "") or item.get("content", "")
         link     = item.get("link", "") or item.get("url", "")
         text     = f"{title} {summary}"
-
-        weight = weight_map.get(src_name, default_weights.get(ch_type, 1.0))
+        weight   = weight_map.get(src_name, default_weights.get(ch_type, 1.0))
 
         for name, code in stock_map.items():
             if not _is_valid_stock_name(name):
@@ -207,11 +202,11 @@ def extract_mentions(all_data: list, stock_map: dict,
 
             if name not in mentions:
                 mentions[name] = {
-                    "code": code,
-                    "total_count": 0,
+                    "code":           code,
+                    "total_count":    0,
                     "weighted_score": 0.0,
-                    "channel_types": set(),
-                    "channels": {}
+                    "channel_types":  set(),
+                    "channels":       {},
                 }
 
             entry = mentions[name]
@@ -235,7 +230,7 @@ def extract_mentions(all_data: list, stock_map: dict,
                 "snippet":     snippet,
                 "link":        link,
                 "content_id":  content_id,
-                "weight":      round(weight, 2)
+                "weight":      round(weight, 2),
             })
             entry["total_count"]    += 1
             entry["weighted_score"] += weight
@@ -248,7 +243,6 @@ def extract_mentions(all_data: list, stock_map: dict,
 
 
 def filter_mentions(mentions: dict, min_channel_types: int = 2) -> list:
-    """2개 이상 채널 유형에서 언급된 종목 필터링 (weighted_score 정렬)"""
     filtered = [
         (name, data) for name, data in mentions.items()
         if len(data["channel_types"]) >= min_channel_types
@@ -262,37 +256,24 @@ def filter_mentions(mentions: dict, min_channel_types: int = 2) -> list:
 
 def extract_hidden_picks(mentions: dict, filtered_names: set,
                           max_picks: int = 3) -> list:
-    """
-    히든픽 후보 추출 규칙:
-    1. filter_mentions()를 통과하지 못한 종목 (단일 채널 언급)
-    2. 그 단일 채널이 _HIGH_QUALITY_TYPES(애널리스트/경제방송TV/경제방송) 중 하나
-    3. weighted_score 내림차순 정렬 후 최대 max_picks개 반환
-    """
     candidates = []
-
     for name, data in mentions.items():
         if name in filtered_names:
             continue
-
         ch_types = set(data["channel_types"])
-
         if len(ch_types) != 1:
             continue
-
         sole_type = list(ch_types)[0]
-
         if sole_type not in _HIGH_QUALITY_TYPES:
             continue
-
         candidates.append({
-            "name":          name,
-            "code":          data["code"],
-            "channel_type":  sole_type,
-            "channels":      data["channels"],
+            "name":           name,
+            "code":           data["code"],
+            "channel_type":   sole_type,
+            "channels":       data["channels"],
             "weighted_score": round(data["weighted_score"], 2),
-            "total_count":   data["total_count"]
+            "total_count":    data["total_count"],
         })
-
     candidates.sort(key=lambda x: x["weighted_score"], reverse=True)
     result = candidates[:max_picks]
     print(f"[히든픽] 후보 {len(candidates)}개 중 {len(result)}개 선택")
@@ -330,24 +311,40 @@ def generate_market_summary(market_overview: dict, recent_headlines: list,
                 f"({kospi.get('change_pct', 'N/A')}%)로 마감했습니다.")
 
 
-# ── Claude 프롬프트 생성 ──────────────────────────────────────────────────────
+# ── Claude 프롬프트 생성 (V2 수준) ───────────────────────────────────────────
 
 def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
                            all_data: list, today_date: str,
                            now_kst: str) -> str:
     """
-    Claude 분석 프롬프트 생성.
-    hidden_candidates를 프롬프트에 직접 제공 → Claude 임의 생성 방지.
+    V2 수준의 Claude 분석 프롬프트.
+    - 종목별 summary / catalyst / risk / channel_mentions 필드 요청
+    - reasons 배열은 source_type / source_name / detail / source_url 구조
+    - hidden_picks는 반드시 hidden_candidates 목록에서만 선택
     """
-    headlines = []
-    for item in all_data:
-        if item.get("source_type") == "뉴스":
-            t = item.get("title", "").strip()
-            if t:
-                headlines.append(t)
-    headlines = list(dict.fromkeys(headlines))[:30]
 
-    # 관심종목 (상위 15개)
+    # 헤드라인 수집 (소스별 최대 60건)
+    headlines = []
+    for item in all_data[:150]:
+        title   = (item.get("title") or "").strip()
+        src     = item.get("source_name", "")
+        stype   = item.get("source_type", "")
+        stock   = item.get("stock_name", "")
+        url     = item.get("link") or item.get("url", "")
+        summary = (item.get("summary") or item.get("content") or "")[:120]
+        if title:
+            line = f"[{stype}/{src}] {title}"
+            if stock:
+                line += f" (종목: {stock})"
+            if summary:
+                line += f" → {summary}"
+            if url:
+                line += f" [URL: {url}]"
+            headlines.append(line)
+    headlines = headlines[:60]
+    headlines_text = "\n".join(headlines)
+
+    # 관심종목 (상위 15개) — 채널별 원문 snippet 포함
     top_stocks  = filtered_mentions[:15]
     stocks_info = []
     for rank, (name, data) in enumerate(top_stocks, 1):
@@ -359,12 +356,14 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         for ch_type, items in data["channels"].items():
             for item in items[:5]:
                 w_str = f"[가중치:{item.get('weight', 1.0):.1f}]"
+                link  = item.get("link", "")
+                url_str = f" [URL: {link}]" if link else ""
                 stocks_info.append(
                     f"   [{ch_type}]{w_str} {item['source_name']}: "
-                    f"{item['snippet'][:150]}"
+                    f"{item['snippet'][:200]}{url_str}"
                 )
 
-    # 히든픽 후보 목록
+    # 히든픽 후보
     hidden_info = []
     for i, pick in enumerate(hidden_candidates, 1):
         name    = pick["name"]
@@ -373,46 +372,55 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
                 f"채널:{ch_type}, 가중점수:{pick['weighted_score']:.1f})")
         hidden_info.append(line)
         for item in pick["channels"].get(ch_type, [])[:3]:
+            link    = item.get("link", "")
+            url_str = f" [URL: {link}]" if link else ""
             hidden_info.append(
-                f"   [{ch_type}] {item['source_name']}: {item['snippet'][:150]}"
+                f"   [{ch_type}] {item['source_name']}: "
+                f"{item['snippet'][:200]}{url_str}"
             )
 
-    stocks_text    = "\n".join(stocks_info)
-    hidden_text    = "\n".join(hidden_info) if hidden_info else "해당 없음"
-    headlines_text = "\n".join(f"- {h}" for h in headlines)
+    stocks_text = "\n".join(stocks_info)
+    hidden_text = "\n".join(hidden_info) if hidden_info else "해당 없음"
 
-    # BUG-KEY-1: JSON 키를 ai_strategy로 통일
-    #            (html_generator.py가 ai_strategy 키를 읽기 때문)
-    prompt = f"""당신은 15년 경력의 한국 주식시장 전문 애널리스트입니다.
-아래 데이터를 분석하여 오늘의 주식 브리핑을 JSON 형식으로 작성하세요.
+    return f"""당신은 15년 경력의 한국 주식시장 전문 애널리스트입니다.
+아래 데이터를 분석하여 오늘의 주식 브리핑 JSON을 작성하세요.
 
 [분석 날짜] {today_date} ({now_kst} KST)
 
-[관심종목 - 2개 이상 채널에서 언급, 가중치 점수 기준 정렬]
-{stocks_text}
-
-[히든픽 후보 - 전문가 소스(애널리스트/경제방송TV)에서만 단독 언급]
-{hidden_text}
-
-[오늘의 뉴스 헤드라인]
+[수집된 원문 데이터 - 채널별 언급 내용]
 {headlines_text}
 
-[출력 형식] 반드시 아래 JSON 구조만 출력하세요:
+[관심종목 후보 - 2개 이상 채널 유형에서 언급, 가중치 점수 기준 정렬]
+{stocks_text}
+
+[히든픽 후보 - 전문가 소스(애널리스트/경제방송TV/경제방송)에서만 단독 언급]
+{hidden_text}
+
+[출력 형식] 반드시 아래 JSON 구조만 출력:
 {CB}json
 {{
   "briefing_date": "{today_date}",
-  "market_summary": "시장 요약 (5단락, \\n\\n 구분)",
-  "hot_sectors": ["섹터1", "섹터2", "섹터3"],
+  "market_summary": "시장 전체 요약 (5개 단락, \\n\\n 구분, 각 단락 3~4문장. 시장개요/주요이슈/투자포인트/리스크/전망 순서)",
+  "hot_sectors": [
+    {{"name": "섹터명", "reason": "주목 이유 1문장"}}
+  ],
   "stocks": [
     {{
       "rank": 1,
       "name": "종목명",
       "code": "종목코드",
-      "signal": "positive|negative|neutral",
-      "description": "종목 설명 (3~4문장)",
-      "price_trend": "현재 주가 흐름 설명",
-      "catalyst": "상승/하락 촉매",
-      "risk": "주요 리스크",
+      "signal": "positive|negative|neutral 중 하나",
+      "summary": "기업 소개 2~3문장 (업종, 사업내용, 시장 내 위치)",
+      "catalyst": "상승 촉매 2~3문장 (구체적 수치/이벤트/목표가 포함)",
+      "risk": "핵심 리스크 1~2문장",
+      "channel_mentions": [
+        {{
+          "source_type": "뉴스|경제방송|경제방송TV|유튜브|애널리스트 중 하나",
+          "source_name": "채널명 또는 증권사명",
+          "content": "이 채널에서 이 종목을 언급한 핵심 내용 1~2문장",
+          "url": "원문 URL (없으면 빈 문자열)"
+        }}
+      ],
       "channel_counts": {{}},
       "total_count": 0,
       "weighted_score": 0.0,
@@ -421,8 +429,8 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         {{
           "source_type": "채널유형",
           "source_name": "출처명",
-          "detail": "언급 이유/내용 요약",
-          "source_url": ""
+          "detail": "언급 내용 요약 1문장",
+          "source_url": "URL 또는 빈 문자열"
         }}
       ]
     }}
@@ -433,34 +441,38 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
       "name": "종목명",
       "code": "종목코드",
       "signal": "positive",
-      "description": "종목 소개 (2~3문장)",
-      "catalyst": "전문가가 주목한 이유",
-      "risk": "주요 리스크",
-      "channel_type": "애널리스트|경제방송TV|경제방송",
+      "summary": "기업 소개 2~3문장",
+      "catalyst": "전문가가 주목한 이유 2~3문장 (구체적 근거 포함)",
+      "risk": "핵심 리스크 1문장",
+      "channel_type": "애널리스트|경제방송TV|경제방송 중 하나",
+      "channel_name": "채널명 또는 증권사명",
       "reasons": [
         {{
           "source_type": "채널유형",
           "source_name": "출처명",
           "detail": "언급 내용 요약",
-          "source_url": ""
+          "source_url": "URL 또는 빈 문자열"
         }}
       ]
     }}
   ],
-  "ai_strategy": "오늘의 AI 투자 전략 (3~5문장)"
+  "ai_strategy": "오늘의 AI 투자 전략 (300자 이상, 구체적 매수/비중/리스크관리 액션 포함)"
 }}
 {CB}
 
-[작성 지침]
-- stocks: 가중치 점수 높은 순 최대 5개
-- signal: 언급 맥락 분석 (단순 언급=neutral, 긍정적 맥락=positive, 부정적=negative)
-- hidden_picks: 반드시 위 [히든픽 후보] 목록에서만 선택, 임의 추가 금지
-- hidden_picks가 없으면 빈 배열 [] 반환
-- 국내 상장 종목만 포함, 해외 주식/ETF 제외
-- weighted_score는 위 데이터 값 그대로 사용
-- reasons의 텍스트 키는 반드시 "detail" 사용"""
-
-    return prompt
+[작성 규칙]
+1. stocks: 관심종목 후보에서 가중치 점수 높은 순 최대 5개 선택
+2. signal: 언급 맥락 분석 — 긍정적=positive, 부정적=negative, 단순언급=neutral
+3. summary / catalyst / risk: 반드시 작성, 빈 문자열 절대 금지
+4. channel_mentions: 위 원문 데이터에서 해당 종목을 실제로 언급한 채널만 기재 (최대 4개)
+5. hidden_picks: 반드시 위 [히든픽 후보] 목록에서만 선택, 임의 추가 절대 금지
+6. hidden_picks 후보가 없으면 빈 배열 [] 반환
+7. market_summary: 5단락, \\n\\n으로 구분, 각 단락 3~4문장, 400자 이상
+8. ai_strategy: 구체적 종목/비중/매수전략/리스크 관리 포함, 300자 이상
+9. channel_counts / total_count / weighted_score / overlap_count: 위 데이터 값 그대로
+10. reasons의 텍스트 키는 반드시 "detail" 사용 ("reason" 사용 금지)
+11. URL은 원문 데이터에 있는 것만 사용, 없으면 빈 문자열
+12. 국내 상장 종목만 포함, 해외 주식/지수/ETF 제외"""
 
 
 # ── source_url 복원 ───────────────────────────────────────────────────────────
@@ -483,8 +495,6 @@ def _restore_source_url(reason: dict, real_channel_data: list) -> dict:
 def _try_parse_json(text: str):
     if not text:
         return None
-
-    # ```json ... ``` 블록 추출
     match = re.search(r'```json\s*(.*?)\s*```', text, re.DOTALL)
     if match:
         candidate = match.group(1)
@@ -495,7 +505,6 @@ def _try_parse_json(text: str):
             return None
         candidate = text[start:end + 1]
 
-    # 제어문자 및 후행 쉼표 제거
     candidate = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', candidate)
     candidate = re.sub(r',\s*([}\]])', r'\1', candidate)
 
@@ -510,12 +519,10 @@ def _try_parse_json(text: str):
             return None
 
 
-# ── fallback HTML 생성 ────────────────────────────────────────────────────────
+# ── fallback HTML ─────────────────────────────────────────────────────────────
 
 def _fallback_html(channels_data, gh_repo, market_overview,
                    all_data, briefing_date, message):
-    """분석 실패 시 최소 HTML 반환"""
-    # BUG-CR-1 수정: 상대임포트
     from .html_generator import generate_html
     return generate_html(
         {
@@ -524,9 +531,9 @@ def _fallback_html(channels_data, gh_repo, market_overview,
             "hot_sectors":    [],
             "stocks":         [],
             "hidden_picks":   [],
-            "ai_strategy":    ""
+            "ai_strategy":    "",
         },
-        channels_data, gh_repo, "", market_overview, all_data
+        channels_data, gh_repo, "", market_overview, all_data,
     )
 
 
@@ -552,15 +559,15 @@ def analyze_and_generate_html(
     if not stock_map:
         print("[AI분석] 종목 목록 로드 실패")
         return _fallback_html(
-            channels_data, gh_repo, market_overview, all_data,
-            today_date, "종목 데이터를 불러오지 못했습니다."
+            channels_data, gh_repo, market_overview,
+            all_data, today_date, "종목 데이터를 불러오지 못했습니다.",
         )
 
     # ── 2. 언급 추출 ─────────────────────────────────────────────────────────
     mentions = extract_mentions(all_data, stock_map, channels_data)
 
     # ── 3. 관심종목 필터링 ───────────────────────────────────────────────────
-    filtered = filter_mentions(mentions)
+    filtered       = filter_mentions(mentions)
     filtered_names = {name for name, _ in filtered}
 
     # ── 4. 히든픽 후보 추출 ──────────────────────────────────────────────────
@@ -569,8 +576,8 @@ def analyze_and_generate_html(
     if not filtered and not hidden_candidates:
         print("[AI분석] 관심종목/히든픽 모두 없음")
         return _fallback_html(
-            channels_data, gh_repo, market_overview, all_data,
-            today_date, "오늘 분석 가능한 종목이 없습니다."
+            channels_data, gh_repo, market_overview,
+            all_data, today_date, "오늘 분석 가능한 종목이 없습니다.",
         )
 
     # ── 5. Claude 호출 ───────────────────────────────────────────────────────
@@ -587,8 +594,8 @@ def analyze_and_generate_html(
     if not result:
         print("[AI분석] JSON 파싱 실패")
         return _fallback_html(
-            channels_data, gh_repo, market_overview, all_data,
-            today_date, "AI 분석 결과를 파싱하지 못했습니다."
+            channels_data, gh_repo, market_overview,
+            all_data, today_date, "AI 분석 결과를 파싱하지 못했습니다.",
         )
 
     print(f"[AI분석] 파싱 성공: "
@@ -633,12 +640,26 @@ def analyze_and_generate_html(
         for reason in pick.get("reasons", []):
             _restore_source_url(reason, all_data)
 
-    # ── 10. 검증 (validation.py) ─────────────────────────────────────────────
-    # BUG-VALIDATE-1: validate_stocks 인자 4개 (data, all_data, api_key, stock_map)
+    # ── 10. V2-SYNC: channel_mentions → reasons 동기화 ───────────────────────
+    # Claude가 channel_mentions를 채워줬으면 reasons에도 반영
+    for stock in result.get("stocks", []) + result.get("hidden_picks", []):
+        cm = stock.get("channel_mentions", [])
+        if cm and not stock.get("reasons"):
+            stock["reasons"] = [
+                {
+                    "source_type": m.get("source_type", ""),
+                    "source_name": m.get("source_name", ""),
+                    "detail":      m.get("content", ""),
+                    "source_url":  m.get("url", ""),
+                }
+                for m in cm
+            ]
+
+    # ── 11. 검증 ─────────────────────────────────────────────────────────────
     from .validation import validate_stocks
     result = validate_stocks(result, all_data, api_key, stock_map)
 
-    # ── 11. 결과 저장 (chart_base64 제외) ────────────────────────────────────
+    # ── 12. 결과 저장 (chart_base64 제외) ────────────────────────────────────
     save_data = json.loads(json.dumps(result))
     for stock in save_data.get("stocks", []):
         stock.pop("chart_base64", None)
@@ -649,13 +670,12 @@ def analyze_and_generate_html(
         json.dump(save_data, f, ensure_ascii=False, indent=2)
     print(f"[AI분석] 결과 저장: {OUTPUT_FILE}")
 
-    # ── 12. HTML 생성 ────────────────────────────────────────────────────────
+    # ── 13. HTML 생성 ────────────────────────────────────────────────────────
     gh_token = os.environ.get("GH_TOKEN", "")
-    # BUG-CR-1 수정: 상대임포트
     from .html_generator import generate_html
     html = generate_html(
         result, channels_data, gh_repo, gh_token,
-        market_overview, all_data
+        market_overview, all_data,
     )
     print("[AI분석] 완료")
     return html
