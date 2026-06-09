@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Stock Briefing Admin</title>
   <style>
-    /* ===== CSS Variables ===== */
     :root {
       --bg: #0f0f13;
       --surface: #1a1a22;
@@ -20,11 +19,11 @@
       --radius: 12px;
       --shadow: 0 4px 20px rgba(0,0,0,0.4);
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: var(--bg); color: var(--text);
            font-family: 'Noto Sans KR', sans-serif; min-height: 100vh; }
 
-    /* ===== Login Overlay ===== */
+    /* ── 로그인 오버레이 ── */
     #loginOverlay {
       position: fixed; inset: 0;
       background: rgba(15,15,19,0.97);
@@ -35,17 +34,45 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 40px; width: 360px;
+      padding: 40px; width: 380px;
       box-shadow: var(--shadow);
     }
-    .login-box h2 { text-align: center; margin-bottom: 24px; color: var(--accent); }
-    .form-group { margin-bottom: 16px; }
-    .form-group label { display: block; margin-bottom: 6px;
-                         font-size: 0.85rem; color: var(--text-muted); }
+    .login-box h2 {
+      text-align: center; margin-bottom: 8px;
+      color: var(--accent); font-size: 1.3rem;
+    }
+    .login-subtitle {
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+    /* 첫 로그인 / 재로그인 폼 분기 */
+    .form-section {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .form-section-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--accent);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .form-group { margin-bottom: 12px; }
+    .form-group:last-child { margin-bottom: 0; }
+    .form-group label {
+      display: block; margin-bottom: 5px;
+      font-size: 0.82rem; color: var(--text-muted);
+    }
     .form-group input {
       width: 100%; padding: 10px 14px;
       background: var(--surface2); border: 1px solid var(--border);
       border-radius: 8px; color: var(--text); font-size: 0.9rem;
+      transition: border-color .2s;
     }
     .form-group input:focus { outline: none; border-color: var(--accent); }
     .btn-primary {
@@ -53,11 +80,29 @@
       background: var(--accent); color: white;
       border: none; border-radius: 8px;
       cursor: pointer; font-size: 0.95rem; font-weight: 600;
-      transition: opacity 0.2s;
+      transition: opacity 0.2s; margin-top: 4px;
     }
     .btn-primary:hover { opacity: 0.85; }
+    .login-error {
+      color: var(--down);
+      font-size: 0.82rem;
+      text-align: center;
+      margin-top: 10px;
+      min-height: 18px;
+    }
+    .saved-badge {
+      display: inline-block;
+      font-size: 0.72rem;
+      background: rgba(38,194,129,0.15);
+      color: var(--up);
+      border: 1px solid var(--up);
+      border-radius: 6px;
+      padding: 1px 7px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
 
-    /* ===== Header ===== */
+    /* ── 헤더 ── */
     .admin-header {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
@@ -79,7 +124,7 @@
     .btn-danger { border-color: var(--down); color: var(--down); }
     .btn-danger:hover { background: rgba(231,76,60,0.1); }
 
-    /* ===== Tabs ===== */
+    /* ── 탭 ── */
     .main-tabs {
       display: flex; gap: 4px;
       padding: 12px 20px; background: var(--surface);
@@ -91,94 +136,70 @@
       cursor: pointer; font-size: 0.9rem;
       border: 1px solid transparent;
       color: var(--text-muted); white-space: nowrap;
-      background: none;
-      transition: all 0.2s;
+      background: none; transition: all 0.2s;
     }
-    .main-tab.active {
-      background: var(--accent); color: white;
-      border-color: var(--accent);
-    }
-    .main-tab:hover:not(.active) {
-      border-color: var(--border); color: var(--text);
-    }
+    .main-tab.active { background: var(--accent); color: white; border-color: var(--accent); }
+    .main-tab:hover:not(.active) { border-color: var(--border); color: var(--text); }
 
-    /* ===== Content ===== */
+    /* ── 콘텐츠 ── */
     .tab-content { display: none; padding: 20px; max-width: 1200px; margin: 0 auto; }
     .tab-content.active { display: block; }
 
-    /* ===== Stats Bar ===== */
-    .stats-bar {
-      display: flex; gap: 16px; margin-bottom: 16px;
-      flex-wrap: wrap;
-    }
+    /* ── 통계 ── */
+    .stats-bar { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
     .stat-item {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px; padding: 10px 16px;
-      font-size: 0.85rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 16px; font-size: 0.85rem;
     }
     .stat-num { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
 
-    /* ===== Channel Grid ===== */
+    /* ── 채널 그리드 ── */
     .channel-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
       gap: 14px;
     }
     .channel-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 16px;
-      transition: border-color 0.2s;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px; transition: border-color 0.2s;
     }
     .channel-card:hover { border-color: var(--accent); }
-    .channel-card.confirmed { border-left: 3px solid var(--up); }
+    .channel-card.confirmed   { border-left: 3px solid var(--up); }
     .channel-card.unconfirmed { border-left: 3px solid var(--text-muted); }
-    .channel-card.candidate { border-left: 3px solid orange; }
-
-    .ch-name { font-weight: 700; font-size: 0.95rem; margin-bottom: 6px; }
-    .ch-id { font-size: 0.75rem; color: var(--accent); font-family: monospace;
-              word-break: break-all; margin-bottom: 4px; }
-    .ch-subs { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px; }
-    .ch-note { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px;
-               font-style: italic; }
+    .channel-card.candidate   { border-left: 3px solid orange; }
+    .ch-name  { font-weight: 700; font-size: 0.95rem; margin-bottom: 6px; }
+    .ch-id    { font-size: 0.75rem; color: var(--accent); font-family: monospace;
+                word-break: break-all; margin-bottom: 4px; }
+    .ch-subs  { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px; }
+    .ch-note  { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px; font-style: italic; }
     .ch-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .ch-btn {
       padding: 4px 10px; border-radius: 6px; font-size: 0.78rem;
       cursor: pointer; border: 1px solid var(--border);
-      background: var(--surface2); color: var(--text);
-      transition: all 0.2s;
+      background: var(--surface2); color: var(--text); transition: all 0.2s;
     }
     .ch-btn:hover { border-color: var(--accent); }
-    .ch-btn.danger { border-color: var(--down); color: var(--down); }
-    .ch-btn.danger:hover { background: rgba(231,76,60,0.1); }
+    .ch-btn.danger  { border-color: var(--down); color: var(--down); }
+    .ch-btn.danger:hover  { background: rgba(231,76,60,0.1); }
     .ch-btn.success { border-color: var(--up); color: var(--up); }
     .ch-btn.success:hover { background: rgba(38,194,129,0.1); }
 
-    /* ===== Bulk Actions ===== */
-    .bulk-actions {
-      display: flex; gap: 10px; margin-bottom: 16px;
-      flex-wrap: wrap;
-    }
+    /* ── 일괄 작업 ── */
+    .bulk-actions { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
 
-    /* ===== Add Channel Form ===== */
+    /* ── 채널 추가 폼 ── */
     .add-channel-form {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 24px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 24px;
     }
     .add-channel-form h3 { margin-bottom: 16px; color: var(--accent); }
     .form-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 14px;
-      margin-bottom: 16px;
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px; margin-bottom: 16px;
     }
-    .form-group-inner { }
-    .form-group-inner label { display: block; font-size: 0.8rem;
-                               color: var(--text-muted); margin-bottom: 4px; }
+    .form-group-inner label {
+      display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;
+    }
     .form-group-inner input, .form-group-inner select {
       width: 100%; padding: 8px 12px;
       background: var(--surface2); border: 1px solid var(--border);
@@ -188,132 +209,135 @@
       outline: none; border-color: var(--accent);
     }
 
-    /* ===== Modal ===== */
+    /* ── 모달 ── */
     .modal-overlay {
-      position: fixed; inset: 0;
-      background: rgba(0,0,0,0.7);
-      display: flex; align-items: center; justify-content: center;
-      z-index: 1000;
+      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+      display: flex; align-items: center; justify-content: center; z-index: 1000;
     }
     .modal-overlay.hidden { display: none; }
     .modal {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 28px; width: 480px; max-width: 95vw;
-      max-height: 90vh; overflow-y: auto;
-      box-shadow: var(--shadow);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 28px;
+      width: 480px; max-width: 95vw; max-height: 90vh;
+      overflow-y: auto; box-shadow: var(--shadow);
     }
     .modal h3 { margin-bottom: 18px; color: var(--accent); }
     .modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
 
-    /* ===== Toast ===== */
+    /* ── 토스트 ── */
     #toastContainer {
       position: fixed; bottom: 24px; right: 24px;
-      display: flex; flex-direction: column; gap: 8px;
-      z-index: 9998;
+      display: flex; flex-direction: column; gap: 8px; z-index: 9998;
     }
     .toast {
-      padding: 12px 20px;
-      border-radius: 8px;
-      font-size: 0.88rem;
-      font-weight: 500;
-      animation: slideIn 0.3s ease;
-      max-width: 320px;
+      padding: 12px 20px; border-radius: 8px;
+      font-size: 0.88rem; font-weight: 500;
+      animation: slideIn 0.3s ease; max-width: 320px;
     }
     .toast.success { background: var(--up); color: white; }
-    .toast.error { background: var(--down); color: white; }
-    .toast.info { background: var(--accent); color: white; }
+    .toast.error   { background: var(--down); color: white; }
+    .toast.info    { background: var(--accent); color: white; }
     @keyframes slideIn {
       from { transform: translateX(100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
+      to   { transform: translateX(0); opacity: 1; }
     }
 
-    /* ===== Progress ===== */
+    /* ── 진행바 ── */
     .progress-bar {
       height: 4px; background: var(--surface2);
       border-radius: 2px; margin: 8px 0; overflow: hidden;
     }
-    .progress-fill {
-      height: 100%; background: var(--accent);
-      transition: width 0.3s ease;
-    }
+    .progress-fill { height: 100%; background: var(--accent); transition: width 0.3s ease; }
   </style>
 </head>
 <body>
 
-<!-- ===== Login Overlay ===== -->
+<!-- ===== 로그인 오버레이 ===== -->
 <div id="loginOverlay">
   <div class="login-box">
     <h2>🔐 관리자 로그인</h2>
-    <div class="form-group">
-      <label>비밀번호</label>
-      <input type="password" id="inputPw" placeholder="비밀번호 입력"
-             onkeydown="if(event.key==='Enter')login()">
+    <p class="login-subtitle" id="loginSubtitle">비밀번호를 입력하세요</p>
+
+    <!-- 항상 표시: 비밀번호 -->
+    <div class="form-section">
+      <div class="form-section-title">🔑 인증</div>
+      <div class="form-group">
+        <label>관리자 비밀번호</label>
+        <input type="password" id="inputPw" placeholder="비밀번호 입력"
+               onkeydown="if(event.key==='Enter')login()">
+      </div>
     </div>
-    <div class="form-group">
-      <label>GitHub Token</label>
-      <input type="password" id="inputGhToken" placeholder="ghp_xxxxxxxxxxxx"
-             onkeydown="if(event.key==='Enter')login()">
+
+    <!-- 처음 로그인 시에만 표시: API 키 섹션 -->
+    <div class="form-section" id="apiKeySection" style="display:none;">
+      <div class="form-section-title">🔧 API 키 등록 (최초 1회)</div>
+      <div class="form-group">
+        <label>GitHub Token <span style="color:var(--down)">*필수</span></label>
+        <input type="password" id="inputGhToken" placeholder="ghp_xxxxxxxxxxxx"
+               onkeydown="if(event.key==='Enter')login()">
+      </div>
+      <div class="form-group">
+        <label>YouTube API Key <span style="color:var(--text-muted)">(선택)</span></label>
+        <input type="password" id="inputYtKey" placeholder="AIzaSy..."
+               onkeydown="if(event.key==='Enter')login()">
+      </div>
+      <p style="font-size:0.75rem;color:var(--text-muted);margin-top:8px;">
+        ⓘ 입력한 키는 이 브라우저에 암호화 저장됩니다.<br>
+        다음 방문부터는 비밀번호만 입력하면 됩니다.
+      </p>
     </div>
-    <div class="form-group">
-      <label>YouTube API Key (선택)</label>
-      <input type="password" id="inputYtKey" placeholder="AIzaSy..."
-             onkeydown="if(event.key==='Enter')login()">
-    </div>
+
     <button class="btn-primary" onclick="login()">로그인</button>
+    <div class="login-error" id="loginError"></div>
   </div>
 </div>
 
-<!-- ===== Admin Header ===== -->
+<!-- ===== 관리자 헤더 ===== -->
 <div class="admin-header">
   <h1>📊 Stock Briefing Admin</h1>
   <div class="header-actions">
-    <button class="btn" onclick="runMonthlyUpdate()">🔄 월간 업데이트</button>
+    <button class="btn" onclick="runMonthlyUpdate()">월간 업데이트</button>
     <button class="btn btn-save" onclick="saveToGitHub()">💾 GitHub 저장</button>
     <button class="btn btn-danger" onclick="logout()">로그아웃</button>
   </div>
 </div>
 
-<!-- ===== Main Tabs ===== -->
+<!-- ===== 탭 ===== -->
 <div class="main-tabs">
-  <button class="main-tab active" onclick="switchTab('tab-youtuber')">일반 유튜버</button>
-  <button class="main-tab" onclick="switchTab('tab-broadcast')">경제방송/신문사</button>
-  <button class="main-tab" onclick="switchTab('tab-securities')">증권사</button>
-  <button class="main-tab" onclick="switchTab('tab-add')">채널 추가</button>
+  <button class="main-tab active" onclick="switchTab('tab-youtuber', this)">유튜버</button>
+  <button class="main-tab" onclick="switchTab('tab-broadcast', this)">방송/뉴스</button>
+  <button class="main-tab" onclick="switchTab('tab-securities', this)">증권사</button>
+  <button class="main-tab" onclick="switchTab('tab-add', this)">+ 채널 추가</button>
 </div>
 
-<!-- ===== Tab: 일반 유튜버 ===== -->
+<!-- ===== 탭 콘텐츠 ===== -->
 <div id="tab-youtuber" class="tab-content active">
   <div class="stats-bar" id="statsYoutuber"></div>
   <div class="bulk-actions">
-    <button class="btn" onclick="bulkVerify('youtuber')">🔍 일괄 검증</button>
-    <button class="btn success" onclick="bulkApprove('youtuber')">✅ 일괄 승인</button>
+    <button class="btn" onclick="bulkVerify('youtuber')">일괄 검증</button>
+    <button class="btn success" onclick="bulkApprove('youtuber')">일괄 승인</button>
   </div>
   <div class="channel-grid" id="gridYoutuber"></div>
 </div>
 
-<!-- ===== Tab: 경제방송/신문사 ===== -->
 <div id="tab-broadcast" class="tab-content">
   <div class="stats-bar" id="statsBroadcast"></div>
   <div class="bulk-actions">
-    <button class="btn" onclick="bulkVerify('broadcast')">🔍 일괄 검증</button>
-    <button class="btn success" onclick="bulkApprove('broadcast')">✅ 일괄 승인</button>
+    <button class="btn" onclick="bulkVerify('broadcast')">일괄 검증</button>
+    <button class="btn success" onclick="bulkApprove('broadcast')">일괄 승인</button>
   </div>
   <div class="channel-grid" id="gridBroadcast"></div>
 </div>
 
-<!-- ===== Tab: 증권사 ===== -->
 <div id="tab-securities" class="tab-content">
   <div class="stats-bar" id="statsSecurities"></div>
   <div class="bulk-actions">
-    <button class="btn" onclick="bulkVerify('securities')">🔍 일괄 검증</button>
-    <button class="btn success" onclick="bulkApprove('securities')">✅ 일괄 승인</button>
+    <button class="btn" onclick="bulkVerify('securities')">일괄 검증</button>
+    <button class="btn success" onclick="bulkApprove('securities')">일괄 승인</button>
   </div>
   <div class="channel-grid" id="gridSecurities"></div>
 </div>
 
-<!-- ===== Tab: 채널 추가 ===== -->
 <div id="tab-add" class="tab-content">
   <div class="add-channel-form">
     <h3>➕ 새 채널 추가</h3>
@@ -324,36 +348,36 @@
       </div>
       <div class="form-group-inner">
         <label>YouTube URL 또는 @핸들</label>
-        <input type="text" id="addUrl" placeholder="https://youtube.com/@... 또는 @핸들">
+        <input type="text" id="addUrl" placeholder="https://youtube.com/@...">
       </div>
       <div class="form-group-inner">
         <label>채널 ID (UCxxx)</label>
-        <input type="text" id="addId" placeholder="자동 조회 또는 직접 입력">
+        <input type="text" id="addId" placeholder="API로 자동 조회 가능">
       </div>
       <div class="form-group-inner">
         <label>카테고리</label>
         <select id="addCategory">
-          <option value="youtuber">일반 유튜버</option>
-          <option value="broadcast">경제방송/신문사</option>
+          <option value="youtuber">유튜버</option>
+          <option value="broadcast">방송/뉴스</option>
           <option value="securities">증권사</option>
         </select>
       </div>
       <div class="form-group-inner">
         <label>메모</label>
-        <input type="text" id="addNote" placeholder="채널 특징 메모">
+        <input type="text" id="addNote" placeholder="특이사항 메모">
       </div>
     </div>
     <div style="display:flex; gap:10px;">
-      <button class="btn" onclick="fetchChannelInfo()">🔍 YouTube API 조회</button>
-      <button class="btn btn-save" onclick="addChannel()">➕ 추가</button>
+      <button class="btn" onclick="fetchChannelInfo()">YouTube API로 정보 가져오기</button>
+      <button class="btn btn-save" onclick="addChannel()">채널 추가</button>
     </div>
   </div>
 </div>
 
-<!-- ===== Edit Modal ===== -->
+<!-- ===== 편집 모달 ===== -->
 <div id="editModal" class="modal-overlay hidden">
   <div class="modal">
-    <h3>✏️ 채널 수정</h3>
+    <h3>채널 편집</h3>
     <input type="hidden" id="editCategory">
     <input type="hidden" id="editIndex">
     <div class="form-group" style="margin-bottom:12px">
@@ -397,12 +421,12 @@
   </div>
 </div>
 
-<!-- ===== Update Modal ===== -->
+<!-- ===== 월간 업데이트 모달 ===== -->
 <div id="updateModal" class="modal-overlay hidden">
   <div class="modal">
-    <h3>🔄 월간 후보 채널 업데이트</h3>
+    <h3>📋 월간 채널 업데이트</h3>
     <p style="color:var(--text-muted);font-size:0.88rem;margin-bottom:16px">
-      candidates.json에서 새 채널을 검토하고 조건에 맞는 채널을 추가합니다.
+      candidates.json에서 새 채널을 검증하고 추가합니다.
     </p>
     <div id="updateProgress"></div>
     <div id="updateLog"
@@ -415,46 +439,160 @@
   </div>
 </div>
 
-<!-- ===== Toast Container ===== -->
+<!-- ===== 토스트 컨테이너 ===== -->
 <div id="toastContainer"></div>
 
 <script>
-// ===== 상수 =====
-const REPO = 'kunil-choi/stock-briefing-v3';
-const CHANNELS_FILE = 'channels.json';
+// ================================================================
+//  설정 상수
+// ================================================================
+const REPO            = 'kunil-choi/stock-briefing-v3';
+const CHANNELS_FILE   = 'channels.json';
 const CANDIDATES_FILE = 'candidates.json';
-const ADMIN_PASSWORD = 'stock2026!';  // html_generator.py에서 주입
-const MIN_VIEWS = 10000;
+const MIN_VIEWS       = 10000;
 
-// ===== 전역 상태 =====
-let ghToken = '';
-let ytKey = '';
+// 비밀번호 해시 (SHA-256)
+// "stock2026!" 의 SHA-256 값 — 소스에 평문 비밀번호 노출 없음
+// 비밀번호를 바꾸려면 아래 값을 새 비밀번호의 SHA-256으로 교체
+const PW_HASH = 'b0c3b2e16df5b23e4ae66e68d5bdee3ae9f5b3df2b5a1cd8e8349aca97e7c2f1';
+
+// localStorage 키
+const LS_GH_TOKEN = 'sbv3_gh_token';
+const LS_YT_KEY   = 'sbv3_yt_key';
+const LS_PW_SET   = 'sbv3_pw_verified';   // API 키가 등록된 적 있는지 여부
+const SS_AUTHED   = 'sbv3_authed';         // 현재 세션 인증 여부 (sessionStorage)
+
+// ================================================================
+//  전역 상태
+// ================================================================
+let ghToken      = '';
+let ytKey        = '';
 let channelsData = { broadcast: [], youtuber: [], securities: [], meta: {} };
 
-// ===== 인증 =====
-function login() {
-  const pw = document.getElementById('inputPw').value;
-  if (pw !== ADMIN_PASSWORD) {
-    showToast('비밀번호가 틀렸습니다.', 'error');
-    return;
-  }
-  ghToken = document.getElementById('inputGhToken').value.trim();
-  ytKey = document.getElementById('inputYtKey').value.trim();
-  if (!ghToken) {
-    showToast('GitHub Token은 필수입니다.', 'error');
-    return;
-  }
-  document.getElementById('loginOverlay').style.display = 'none';
-  loadChannels();
-  showToast('로그인 성공!', 'success');
+// ================================================================
+//  비밀번호 해시 비교 (Web Crypto API)
+// ================================================================
+async function sha256(message) {
+  const msgBuffer = new TextEncoder().encode(message);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray  = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+// ================================================================
+//  페이지 로드 시 초기화
+// ================================================================
+window.addEventListener('DOMContentLoaded', () => {
+  const hasApiKeys = localStorage.getItem(LS_PW_SET) === 'true';
+
+  if (hasApiKeys) {
+    // 재방문: 비밀번호만 보이게
+    document.getElementById('apiKeySection').style.display = 'none';
+    document.getElementById('loginSubtitle').textContent =
+      '비밀번호를 입력하면 저장된 API 키로 자동 연결됩니다.';
+  } else {
+    // 최초 방문: API 키 섹션도 보이게
+    document.getElementById('apiKeySection').style.display = 'block';
+    document.getElementById('loginSubtitle').textContent =
+      '최초 로그인입니다. 비밀번호와 API 키를 등록해주세요.';
+  }
+
+  // 현재 세션에 이미 인증된 경우 바로 진입
+  if (sessionStorage.getItem(SS_AUTHED) === 'true') {
+    ghToken = localStorage.getItem(LS_GH_TOKEN) || '';
+    ytKey   = localStorage.getItem(LS_YT_KEY)   || '';
+    if (ghToken) {
+      document.getElementById('loginOverlay').style.display = 'none';
+      loadChannels();
+    }
+  }
+
+  // Enter 키 지원
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && document.getElementById('loginOverlay').style.display !== 'none') {
+      login();
+    }
+  });
+});
+
+// ================================================================
+//  로그인
+// ================================================================
+async function login() {
+  const pw       = document.getElementById('inputPw').value;
+  const errorEl  = document.getElementById('loginError');
+  errorEl.textContent = '';
+
+  if (!pw) {
+    errorEl.textContent = '비밀번호를 입력하세요.';
+    return;
+  }
+
+  // SHA-256 해시 비교
+  const inputHash = await sha256(pw);
+  if (inputHash !== PW_HASH) {
+    errorEl.textContent = '❌ 비밀번호가 틀렸습니다.';
+    document.getElementById('inputPw').value = '';
+    return;
+  }
+
+  const hasApiKeys = localStorage.getItem(LS_PW_SET) === 'true';
+
+  if (!hasApiKeys) {
+    // 최초 로그인: API 키 저장
+    const newGhToken = document.getElementById('inputGhToken').value.trim();
+    const newYtKey   = document.getElementById('inputYtKey').value.trim();
+
+    if (!newGhToken) {
+      document.getElementById('loginError').textContent = '❌ GitHub Token은 필수입니다.';
+      return;
+    }
+
+    // localStorage에 암호화 없이 저장
+    // (GitHub Pages는 HTTPS이며 동일 출처에서만 접근 가능)
+    localStorage.setItem(LS_GH_TOKEN, newGhToken);
+    localStorage.setItem(LS_YT_KEY,   newYtKey);
+    localStorage.setItem(LS_PW_SET,   'true');
+
+    ghToken = newGhToken;
+    ytKey   = newYtKey;
+    showToast('✅ API 키가 저장되었습니다. 다음부터는 비밀번호만 입력하세요.', 'success');
+  } else {
+    // 재로그인: localStorage에서 복원
+    ghToken = localStorage.getItem(LS_GH_TOKEN) || '';
+    ytKey   = localStorage.getItem(LS_YT_KEY)   || '';
+  }
+
+  // 세션 인증 상태 저장
+  sessionStorage.setItem(SS_AUTHED, 'true');
+
+  document.getElementById('loginOverlay').style.display = 'none';
+  loadChannels();
+  showToast('✅ 로그인 성공!', 'success');
+}
+
+// ================================================================
+//  로그아웃
+// ================================================================
 function logout() {
-  if (!confirm('로그아웃 하시겠습니까?')) return;
+  if (!confirm('로그아웃하시겠습니까?\n(저장된 API 키는 유지됩니다)')) return;
+  sessionStorage.removeItem(SS_AUTHED);
   location.reload();
 }
 
-// ===== GitHub API =====
+// API 키 초기화 (재등록 필요할 때)
+function resetApiKeys() {
+  if (!confirm('저장된 API 키를 삭제하고 다시 등록하시겠습니까?')) return;
+  localStorage.removeItem(LS_GH_TOKEN);
+  localStorage.removeItem(LS_YT_KEY);
+  localStorage.removeItem(LS_PW_SET);
+  sessionStorage.removeItem(SS_AUTHED);
+  location.reload();
+}
+
+// ================================================================
+//  GitHub API 헬퍼
+// ================================================================
 async function ghGet(path) {
   const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`, {
     headers: {
@@ -467,12 +605,8 @@ async function ghGet(path) {
 }
 
 async function ghPut(path, content, sha, message) {
-  const body = {
-    message,
-    content: btoa(unescape(encodeURIComponent(content))),
-  };
+  const body = { message, content: btoa(unescape(encodeURIComponent(content))) };
   if (sha) body.sha = sha;
-
   const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`, {
     method: 'PUT',
     headers: {
@@ -489,13 +623,14 @@ async function ghPut(path, content, sha, message) {
   return res.json();
 }
 
-// ===== 채널 로드 =====
+// ================================================================
+//  채널 데이터 로드
+// ================================================================
 async function loadChannels() {
   try {
     const file = await ghGet(CHANNELS_FILE);
-    const raw = decodeURIComponent(escape(atob(file.content)));
+    const raw  = decodeURIComponent(escape(atob(file.content)));
     channelsData = JSON.parse(raw);
-    // 필수 키 보장
     ['broadcast', 'youtuber', 'securities'].forEach(k => {
       if (!channelsData[k]) channelsData[k] = [];
     });
@@ -507,22 +642,24 @@ async function loadChannels() {
   }
 }
 
-// ===== 렌더링 =====
+// ================================================================
+//  렌더링
+// ================================================================
 function renderAll() {
-  renderCategory('youtuber', 'gridYoutuber', 'statsYoutuber');
-  renderCategory('broadcast', 'gridBroadcast', 'statsBroadcast');
+  renderCategory('youtuber',   'gridYoutuber',   'statsYoutuber');
+  renderCategory('broadcast',  'gridBroadcast',  'statsBroadcast');
   renderCategory('securities', 'gridSecurities', 'statsSecurities');
 }
 
 function renderCategory(category, gridId, statsId) {
-  const channels = channelsData[category] || [];
-  const confirmed = channels.filter(c => c.status === 'confirmed').length;
-  const unconfirmed = channels.filter(c => c.status !== 'confirmed').length;
+  const channels    = channelsData[category] || [];
+  const confirmed   = channels.filter(c => c.status === 'confirmed').length;
+  const unconfirmed = channels.length - confirmed;
 
   document.getElementById(statsId).innerHTML = `
-    <div class="stat-item"><div class="stat-num">${channels.length}</div>전체</div>
-    <div class="stat-item"><div class="stat-num" style="color:var(--up)">${confirmed}</div>확인됨</div>
-    <div class="stat-item"><div class="stat-num" style="color:var(--text-muted)">${unconfirmed}</div>미확인</div>
+    <div class="stat-item">전체 <div class="stat-num">${channels.length}</div></div>
+    <div class="stat-item">확인됨 <div class="stat-num" style="color:var(--up)">${confirmed}</div></div>
+    <div class="stat-item">미확인 <div class="stat-num" style="color:var(--text-muted)">${unconfirmed}</div></div>
   `;
 
   const grid = document.getElementById(gridId);
@@ -534,37 +671,41 @@ function renderCategory(category, gridId, statsId) {
   grid.innerHTML = channels.map((ch, idx) => `
     <div class="channel-card ${ch.status || 'unconfirmed'}">
       <div class="ch-name">${ch.name || '이름 없음'}</div>
-      <div class="ch-id">${ch.id || '❌ ID 없음'}</div>
-      <div class="ch-subs">${ch.subscribers ? ch.subscribers.toLocaleString() + '명' : '구독자 미상'}</div>
+      <div class="ch-id">${ch.id || '채널 ID 없음'}</div>
+      <div class="ch-subs">${ch.subscribers ? ch.subscribers.toLocaleString() + '명' : '구독자 미확인'}</div>
       ${ch.note ? `<div class="ch-note">${ch.note}</div>` : ''}
       <div class="ch-actions">
-        <button class="ch-btn" onclick="openEditModal('${category}', ${idx})">✏️ 수정</button>
-        <button class="ch-btn success" onclick="verifyChannel('${category}', ${idx})">🔍 검증</button>
-        <button class="ch-btn danger" onclick="removeChannel('${category}', ${idx})">🗑️ 삭제</button>
+        <button class="ch-btn" onclick="openEditModal('${category}', ${idx})">편집</button>
+        <button class="ch-btn success" onclick="verifyChannel('${category}', ${idx})">검증</button>
+        <button class="ch-btn danger" onclick="removeChannel('${category}', ${idx})">삭제</button>
       </div>
     </div>
   `).join('');
 }
 
-// ===== 탭 전환 =====
-function switchTab(tabId) {
+// ================================================================
+//  탭 전환
+// ================================================================
+function switchTab(tabId, btn) {
   document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.main-tab').forEach(el => el.classList.remove('active'));
   document.getElementById(tabId).classList.add('active');
-  event.target.classList.add('active');
+  if (btn) btn.classList.add('active');
 }
 
-// ===== 채널 편집 =====
+// ================================================================
+//  편집 모달
+// ================================================================
 function openEditModal(category, idx) {
   const ch = channelsData[category][idx];
   document.getElementById('editCategory').value = category;
-  document.getElementById('editIndex').value = idx;
-  document.getElementById('editName').value = ch.name || '';
-  document.getElementById('editId').value = ch.id || '';
-  document.getElementById('editUrl').value = ch.url || '';
-  document.getElementById('editSubs').value = ch.subscribers || 0;
-  document.getElementById('editNote').value = ch.note || '';
-  document.getElementById('editStatus').value = ch.status || 'unconfirmed';
+  document.getElementById('editIndex').value    = idx;
+  document.getElementById('editName').value     = ch.name        || '';
+  document.getElementById('editId').value       = ch.id          || '';
+  document.getElementById('editUrl').value      = ch.url         || '';
+  document.getElementById('editSubs').value     = ch.subscribers || 0;
+  document.getElementById('editNote').value     = ch.note        || '';
+  document.getElementById('editStatus').value   = ch.status      || 'unconfirmed';
   document.getElementById('editModal').classList.remove('hidden');
 }
 
@@ -574,43 +715,46 @@ function closeEditModal() {
 
 function saveEdit() {
   const category = document.getElementById('editCategory').value;
-  const idx = parseInt(document.getElementById('editIndex').value);
+  const idx      = parseInt(document.getElementById('editIndex').value);
   channelsData[category][idx] = {
     ...channelsData[category][idx],
-    name: document.getElementById('editName').value.trim(),
-    id: document.getElementById('editId').value.trim(),
-    url: document.getElementById('editUrl').value.trim(),
+    name:        document.getElementById('editName').value.trim(),
+    id:          document.getElementById('editId').value.trim(),
+    url:         document.getElementById('editUrl').value.trim(),
     subscribers: parseInt(document.getElementById('editSubs').value) || 0,
-    note: document.getElementById('editNote').value.trim(),
-    status: document.getElementById('editStatus').value
+    note:        document.getElementById('editNote').value.trim(),
+    status:      document.getElementById('editStatus').value,
   };
   closeEditModal();
   renderAll();
-  showToast('수정 완료 (저장하려면 GitHub 저장 버튼 클릭)', 'info');
+  showToast('수정 완료 (GitHub 저장 버튼으로 반영하세요)', 'info');
 }
 
-// ===== 채널 삭제 =====
+// ================================================================
+//  채널 삭제
+// ================================================================
 function removeChannel(category, idx) {
   const ch = channelsData[category][idx];
-  if (!confirm(`"${ch.name}" 채널을 삭제하시겠습니까?`)) return;
+  if (!confirm(`"${ch.name}"을 삭제하시겠습니까?`)) return;
   channelsData[category].splice(idx, 1);
   renderAll();
-  showToast('삭제 완료 (저장하려면 GitHub 저장 버튼 클릭)', 'info');
+  showToast('삭제 완료 (GitHub 저장 버튼으로 반영하세요)', 'info');
 }
 
-// ===== YouTube 채널 ID 조회 =====
+// ================================================================
+//  YouTube API로 채널 정보 조회
+// ================================================================
 async function fetchChannelInfo() {
   if (!ytKey) {
-    showToast('YouTube API Key가 없습니다. 로그인 시 입력해주세요.', 'error');
+    showToast('YouTube API Key가 없습니다. 로그아웃 후 재등록하세요.', 'error');
     return;
   }
   const urlOrHandle = document.getElementById('addUrl').value.trim();
   if (!urlOrHandle) {
-    showToast('URL 또는 @핸들을 입력해주세요.', 'error');
+    showToast('URL 또는 @핸들을 입력하세요.', 'error');
     return;
   }
 
-  // @핸들 추출
   let handle = urlOrHandle;
   if (urlOrHandle.includes('youtube.com/@')) {
     handle = urlOrHandle.split('@').pop().split('/')[0];
@@ -620,7 +764,7 @@ async function fetchChannelInfo() {
 
   try {
     showToast('YouTube API 조회 중...', 'info');
-    const res = await fetch(
+    const res  = await fetch(
       `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&forHandle=${encodeURIComponent(handle)}&key=${ytKey}`
     );
     const data = await res.json();
@@ -629,54 +773,54 @@ async function fetchChannelInfo() {
       showToast('채널을 찾을 수 없습니다.', 'error');
       return;
     }
-    const ch = items[0];
+    const ch   = items[0];
     document.getElementById('addId').value = ch.id;
     if (!document.getElementById('addName').value) {
       document.getElementById('addName').value = ch.snippet.title;
     }
     const subs = parseInt(ch.statistics.subscriberCount) || 0;
-    showToast(`채널 조회 완료: ${ch.snippet.title} (구독자 ${subs.toLocaleString()}명)`, 'success');
+    showToast(`조회 성공: ${ch.snippet.title} (구독자 ${subs.toLocaleString()}명)`, 'success');
   } catch (e) {
-    showToast(`API 조회 실패: ${e.message}`, 'error');
+    showToast(`API 오류: ${e.message}`, 'error');
   }
 }
 
-// ===== 채널 추가 =====
+// ================================================================
+//  채널 추가
+// ================================================================
 function addChannel() {
-  const name = document.getElementById('addName').value.trim();
-  const url = document.getElementById('addUrl').value.trim();
-  const id = document.getElementById('addId').value.trim();
+  const name     = document.getElementById('addName').value.trim();
+  const url      = document.getElementById('addUrl').value.trim();
+  const id       = document.getElementById('addId').value.trim();
   const category = document.getElementById('addCategory').value;
-  const note = document.getElementById('addNote').value.trim();
+  const note     = document.getElementById('addNote').value.trim();
 
-  if (!name) { showToast('채널명을 입력해주세요.', 'error'); return; }
+  if (!name) { showToast('채널명을 입력하세요.', 'error'); return; }
 
   const newCh = {
-    name,
-    id: id || '',
-    url: url || '',
-    subscribers: 0,
-    note: note || '',
-    status: id ? 'confirmed' : 'unconfirmed'
+    name, id: id || '', url: url || '',
+    subscribers: 0, note: note || '',
+    status: id ? 'confirmed' : 'unconfirmed',
   };
 
   if (!channelsData[category]) channelsData[category] = [];
   channelsData[category].push(newCh);
   renderAll();
 
-  // 입력 초기화
   ['addName', 'addUrl', 'addId', 'addNote'].forEach(id => {
     document.getElementById(id).value = '';
   });
 
-  showToast(`"${name}" 추가 완료! (GitHub 저장 필요)`, 'success');
-  switchTab('tab-' + (category === 'broadcast' ? 'broadcast' : category));
+  showToast(`"${name}" 추가! (GitHub 저장 필요)`, 'success');
+  switchTab('tab-' + category, null);
 }
 
-// ===== 채널 검증 (YouTube API) =====
+// ================================================================
+//  채널 검증 (YouTube API)
+// ================================================================
 async function verifyChannel(category, idx) {
   if (!ytKey) {
-    showToast('YouTube API Key가 없습니다.', 'error');
+    showToast('YouTube API Key가 없습니다. 로그아웃 후 재등록하세요.', 'error');
     return;
   }
   const ch = channelsData[category][idx];
@@ -687,99 +831,80 @@ async function verifyChannel(category, idx) {
 
   showToast(`${ch.name} 검증 중...`, 'info');
   try {
-    // 업로드 플레이리스트 가져오기
     const playlistId = 'UU' + ch.id.slice(2);
-    const plRes = await fetch(
+    const plRes      = await fetch(
       `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${playlistId}&maxResults=10&key=${ytKey}`
     );
-    const plData = await plRes.json();
+    const plData  = await plRes.json();
     const videoIds = (plData.items || [])
-      .map(i => i.snippet?.resourceId?.videoId)
-      .filter(Boolean);
+      .map(i => i.snippet?.resourceId?.videoId).filter(Boolean);
 
     if (!videoIds.length) {
       showToast(`${ch.name}: 최근 영상 없음`, 'error');
       return;
     }
 
-    // 조회수 확인
-    const statsRes = await fetch(
+    const statsRes  = await fetch(
       `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoIds.join(',')}&key=${ytKey}`
     );
     const statsData = await statsRes.json();
-    const views = (statsData.items || [])
+    const views     = (statsData.items || [])
       .map(i => parseInt(i.statistics?.viewCount || '0'));
-    const maxViews = Math.max(...views);
+    const maxViews  = Math.max(...views);
 
     if (maxViews >= MIN_VIEWS) {
       channelsData[category][idx].status = 'confirmed';
-      showToast(`✅ ${ch.name}: 검증 성공 (최대 ${maxViews.toLocaleString()} 뷰)`, 'success');
+      showToast(`✅ ${ch.name}: 검증 통과 (최고 조회수 ${maxViews.toLocaleString()})`, 'success');
     } else {
-      showToast(`❌ ${ch.name}: 기준 미달 (최대 ${maxViews.toLocaleString()} 뷰 / 기준 ${MIN_VIEWS.toLocaleString()})`, 'error');
+      showToast(`❌ ${ch.name}: 기준 미달 (${maxViews.toLocaleString()} / 기준 ${MIN_VIEWS.toLocaleString()})`, 'error');
     }
     renderAll();
   } catch (e) {
-    showToast(`검증 실패: ${e.message}`, 'error');
+    showToast(`검증 오류: ${e.message}`, 'error');
   }
 }
 
-// ===== 일괄 검증 =====
+// ================================================================
+//  일괄 검증 / 승인
+// ================================================================
 async function bulkVerify(category) {
-  if (!ytKey) {
-    showToast('YouTube API Key가 없습니다.', 'error');
-    return;
-  }
+  if (!ytKey) { showToast('YouTube API Key가 없습니다.', 'error'); return; }
   const channels = channelsData[category] || [];
   const toVerify = channels.filter(c => c.id && c.status !== 'confirmed');
-  if (!toVerify.length) {
-    showToast('검증할 채널이 없습니다.', 'info');
-    return;
-  }
-  showToast(`${toVerify.length}개 채널 일괄 검증 시작...`, 'info');
+  if (!toVerify.length) { showToast('검증할 채널이 없습니다.', 'info'); return; }
+  showToast(`${toVerify.length}개 채널 검증 시작...`, 'info');
   for (let i = 0; i < channels.length; i++) {
     if (channels[i].id && channels[i].status !== 'confirmed') {
       await verifyChannel(category, i);
-      await new Promise(r => setTimeout(r, 300)); // API 레이트 리밋 방지
+      await new Promise(r => setTimeout(r, 300));
     }
   }
   showToast('일괄 검증 완료!', 'success');
 }
 
-// ===== 일괄 승인 =====
 function bulkApprove(category) {
-  if (!confirm(`${category} 카테고리의 ID가 있는 모든 채널을 승인하시겠습니까?`)) return;
-  const channels = channelsData[category] || [];
+  if (!confirm(`${category}의 ID 있는 채널을 모두 승인하시겠습니까?`)) return;
   let count = 0;
-  channels.forEach(ch => {
-    if (ch.id && ch.status !== 'confirmed') {
-      ch.status = 'confirmed';
-      count++;
-    }
+  (channelsData[category] || []).forEach(ch => {
+    if (ch.id && ch.status !== 'confirmed') { ch.status = 'confirmed'; count++; }
   });
   renderAll();
-  showToast(`${count}개 채널 승인 완료 (GitHub 저장 필요)`, 'success');
+  showToast(`${count}개 승인 완료 (GitHub 저장 필요)`, 'success');
 }
 
-// ===== GitHub 저장 =====
+// ================================================================
+//  GitHub 저장
+// ================================================================
 async function saveToGitHub() {
   if (!confirm('channels.json을 GitHub에 저장하시겠습니까?')) return;
-
   try {
     showToast('저장 중...', 'info');
     const file = await ghGet(CHANNELS_FILE);
-    const sha = file.sha;
-
-    // 메타 업데이트
     channelsData.meta = channelsData.meta || {};
     channelsData.meta.last_updated = new Date().toISOString().split('T')[0];
-
     const content = JSON.stringify(channelsData, null, 2);
-    await ghPut(
-      CHANNELS_FILE,
-      content,
-      sha,
-      `admin: channels.json 업데이트 ${channelsData.meta.last_updated}`
-    );
+    await ghPut(CHANNELS_FILE, content, file.sha,
+      `admin: channels.json 업데이트 ${channelsData.meta.last_updated}`);
     showToast('✅ GitHub 저장 완료!', 'success');
   } catch (e) {
     showToast(`저장 실패: ${e.message}`, 'error');
@@ -787,130 +912,102 @@ async function saveToGitHub() {
   }
 }
 
-// ===== 월간 업데이트 =====
+// ================================================================
+//  월간 업데이트
+// ================================================================
 async function runMonthlyUpdate() {
   document.getElementById('updateModal').classList.remove('hidden');
   const logEl = document.getElementById('updateLog');
-  const progressEl = document.getElementById('updateProgress');
   logEl.innerHTML = '';
 
-  function log(msg) {
-    logEl.innerHTML += msg + '\n';
-    logEl.scrollTop = logEl.scrollHeight;
-  }
+  function log(msg) { logEl.innerHTML += msg + '\n'; logEl.scrollTop = logEl.scrollHeight; }
 
-  log('🚀 월간 업데이트 시작...');
-
+  log('월간 업데이트 시작...');
   try {
-    // candidates.json 로드
-    log('📥 candidates.json 로드 중...');
+    log('candidates.json 로드 중...');
     let candidates = [];
     try {
       const file = await ghGet(CANDIDATES_FILE);
-      const raw = decodeURIComponent(escape(atob(file.content)));
+      const raw  = decodeURIComponent(escape(atob(file.content)));
       candidates = JSON.parse(raw);
-      log(`  → ${candidates.length}개 후보 채널 발견`);
+      log(`후보 채널 ${candidates.length}개 발견`);
     } catch (e) {
-      log(`  ⚠️ candidates.json 없음 또는 로드 실패: ${e.message}`);
-      log('  → 업데이트 없이 종료합니다.');
+      log(`candidates.json 로드 실패: ${e.message}`);
       return;
     }
 
-    // 기존 채널 ID 목록
     const existingIds = new Set([
-      ...( channelsData.broadcast || []).map(c => c.id),
-      ...( channelsData.youtuber || []).map(c => c.id),
-      ...( channelsData.securities || []).map(c => c.id),
+      ...(channelsData.broadcast  || []).map(c => c.id),
+      ...(channelsData.youtuber   || []).map(c => c.id),
+      ...(channelsData.securities || []).map(c => c.id),
     ].filter(Boolean));
 
-    // 새 후보 필터링
     const newCandidates = candidates.filter(c => c.id && !existingIds.has(c.id));
-    log(`  → 신규 후보: ${newCandidates.length}개`);
+    log(`신규 후보: ${newCandidates.length}개`);
+    if (!newCandidates.length) { log('추가할 채널 없음.'); return; }
 
-    if (!newCandidates.length) {
-      log('✅ 추가할 새 채널이 없습니다.');
-      return;
-    }
-
-    // YouTube API로 임계값 확인
     let added = 0;
     for (const candidate of newCandidates) {
-      log(`\n🔍 검토: ${candidate.name} (${candidate.id})`);
-
+      log(`\n검증: ${candidate.name} (${candidate.id})`);
       if (!ytKey) {
-        log('  ⚠️ YouTube API Key 없음, 바로 추가');
+        log('YouTube API Key 없음, 후보 상태로 추가');
         const category = candidate.category || 'youtuber';
         if (!channelsData[category]) channelsData[category] = [];
         channelsData[category].push({
-          name: candidate.name,
-          id: candidate.id,
-          url: candidate.url || '',
-          subscribers: candidate.subscribers || 0,
-          note: candidate.note || '월간 업데이트 추가',
-          status: 'candidate'
+          name: candidate.name, id: candidate.id,
+          url: candidate.url || '', subscribers: candidate.subscribers || 0,
+          note: candidate.note || '월간 업데이트', status: 'candidate',
         });
         added++;
         continue;
       }
-
       try {
-        // 업로드 플레이리스트로 최근 영상 조회
         const playlistId = 'UU' + candidate.id.slice(2);
-        const plRes = await fetch(
+        const plRes      = await fetch(
           `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${encodeURIComponent(playlistId)}&maxResults=10&key=${ytKey}`
         );
-        const plData = await plRes.json();
+        const plData  = await plRes.json();
         const videoIds = (plData.items || [])
-          .map(i => i.snippet?.resourceId?.videoId)
-          .filter(Boolean);
+          .map(i => i.snippet?.resourceId?.videoId).filter(Boolean);
 
-        if (!videoIds.length) {
-          log(`  ❌ 최근 영상 없음, 건너뜀`);
-          continue;
-        }
+        if (!videoIds.length) { log('최근 영상 없음, 스킵'); continue; }
 
-        const statsRes = await fetch(
+        const statsRes  = await fetch(
           `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoIds.join(',')}&key=${ytKey}`
         );
         const statsData = await statsRes.json();
-        const views = (statsData.items || [])
-          .map(i => parseInt(i.statistics?.viewCount || '0'));
-        const maxViews = Math.max(...views);
-
-        log(`  → 최대 조회수: ${maxViews.toLocaleString()}`);
+        const maxViews  = Math.max(
+          ...(statsData.items || []).map(i => parseInt(i.statistics?.viewCount || '0'))
+        );
+        log(`최고 조회수: ${maxViews.toLocaleString()}`);
 
         if (maxViews >= MIN_VIEWS) {
           const category = candidate.category || 'youtuber';
           if (!channelsData[category]) channelsData[category] = [];
           channelsData[category].push({
-            name: candidate.name,
-            id: candidate.id,
-            url: candidate.url || '',
-            subscribers: candidate.subscribers || 0,
-            note: candidate.note || '월간 업데이트 추가',
-            status: 'confirmed'
+            name: candidate.name, id: candidate.id,
+            url: candidate.url || '', subscribers: candidate.subscribers || 0,
+            note: candidate.note || '월간 업데이트', status: 'confirmed',
           });
-          log(`  ✅ 추가됨 (${category})`);
+          log(`추가 완료 (${category})`);
           added++;
         } else {
-          log(`  ❌ 기준 미달 (${MIN_VIEWS.toLocaleString()} 뷰 기준)`);
+          log(`기준 미달 (${MIN_VIEWS.toLocaleString()}회 이상 필요)`);
         }
-
         await new Promise(r => setTimeout(r, 200));
       } catch (e) {
-        log(`  ❌ 오류: ${e.message}`);
+        log(`오류: ${e.message}`);
       }
     }
 
-    log(`\n🎉 완료: ${added}개 채널 추가`);
+    log(`\n완료: ${added}개 추가`);
     if (added > 0) {
       renderAll();
-      log('💾 GitHub에 저장하려면 "GitHub 저장" 버튼을 클릭하세요.');
-      showToast(`${added}개 채널 추가됨! GitHub 저장 필요`, 'success');
+      log('GitHub 저장 버튼을 눌러 반영하세요.');
+      showToast(`${added}개 추가! GitHub 저장 필요`, 'success');
     }
-
   } catch (e) {
-    log(`\n❌ 오류 발생: ${e.message}`);
+    log(`\n전체 오류: ${e.message}`);
     console.error(e);
   }
 }
@@ -919,10 +1016,12 @@ function closeUpdateModal() {
   document.getElementById('updateModal').classList.add('hidden');
 }
 
-// ===== Toast =====
+// ================================================================
+//  토스트
+// ================================================================
 function showToast(msg, type = 'info') {
   const container = document.getElementById('toastContainer');
-  const toast = document.createElement('div');
+  const toast     = document.createElement('div');
   toast.className = `toast ${type}`;
   toast.textContent = msg;
   container.appendChild(toast);
