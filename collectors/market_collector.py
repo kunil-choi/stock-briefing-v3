@@ -205,14 +205,13 @@ def collect_market_overview() -> dict:
         result["dow"] = _make_indicator(val, pct)
         print(f"  DOW: {val:,.2f} ({pct:+.2f}%)")
 
-    # ── 야간선물 (코스피200 선물) ─────────────────────────────────────────────
-    val, pct = _fetch_yf("KS200=F")
-    if val is None:
-        # 대안 티커
-        val, pct = _fetch_yf("^KS200")
-    if val is not None:
-        result["night_future"] = _make_indicator(val, pct)
-        print(f"  야간선물: {val:,.2f} ({pct:+.2f}%)")
+# ── 야간선물 (코스피200 선물) ─────────────────────────────────────────────
+val, pct = _fetch_yf("^KS200")
+if val is None:
+    val, pct = _fetch_naver_index("KOSPI200")
+if val is not None:
+    result["night_future"] = _make_indicator(val, pct)
+    print(f"  야간선물: {val:,.2f} ({pct:+.2f}%)")
 
     # ── USD/KRW ───────────────────────────────────────────────────────────────
     val, pct = _fetch_naver_forex()
