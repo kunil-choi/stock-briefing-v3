@@ -8,8 +8,8 @@ BUG-CR-1: call_claude_with_retry 시그니처를 (prompt, api_key, ...) 순서�
 import time
 import anthropic
 
-# 기본 모델명 상수 (최신 claude-opus-4-5 사용)
-DEFAULT_MODEL = "claude-opus-4-5"
+# 기본 모델명 상수 (최신 claude-sonnet-4-6 사용)
+DEFAULT_MODEL = "claude-sonnet-4-6"
 DEFAULT_MAX_TOKENS = 8000
 DEFAULT_RETRIES = 3
 DEFAULT_DELAY = 5  # 초
