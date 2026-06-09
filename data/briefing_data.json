@@ -1,10 +1,27 @@
 {
-  "briefing_date": "2026-05-28",
-  "market_summary": "코스피가 사상 최고치 랠리를 이어가며 8,000선을 돌파하는 역사적인 장세가 연출되고 있습니다. 삼성전자와 SK하이닉스로 대표되는 반도체 대형주에 수급이 집중되며 시장 상승을 주도하고 있으며, 특히 SK하이닉스는 시가총액 1조 달러 클럽에 진입하는 쾌거를 달성했습니다.\n\n미래에셋증권이 삼성전자와 SK하이닉스 단일종목 2배 레버리지 ETN을 업계 최초로 상장하면서 개인투자자들의 폭발적인 관심을 받고 있습니다. '삼전닉스 ETF'라 불리는 이 상품들이 시장의 블랙홀이 되어 유동성을 흡수하고 있어, 코스닥 및 중소형주에는 상대적 약세 우려가 제기되고 있습니다.\n\n반도체 업황에 대한 낙관론이 확산되며 전문가들은 '반도체 사이클 공식의 종언'을 언급하고 있습니다. AI 수요 폭발로 인한 구조적 성장이 기존의 순환적 사이클을 대체하고 있다는 분석이 힘을 얻고 있으며, 미래에셋증권은 삼성전자 목표가 55만원, SK하이닉스 380만원으로 상향 조정했습니다.\n\n엔비디아 젠슨 황 CEO가 다음 주 삼성, SK, 현대차, LG 경영진과 회동을 예고하면서 AI 동맹 강화에 대한 기대감도 고조되고 있습니다. 현대차는 로봇 사업 본격화와 함께 '현대차·기아 채권혼합 ETF' 출시 소식까지 전해지며 주목받고 있습니다.\n\n다만 반도체 쏠림 장세가 심화되면서 시장 전반의 건전성에 대한 우려도 존재합니다. 코스닥 및 바이오, 2차전지 등 기존 주도주들의 소외 현상이 뚜렷해지고 있어 포트폴리오 분산 전략이 필요한 시점입니다.",
+  "briefing_date": "2026-06-09",
+  "market_summary": "2026년 6월 9일 코스피는 전날 8%대 폭락에서 하루 만에 역대 최대 상승폭인 8% 급등을 기록하며 8,000선을 빠르게 회복했다. 달러당 원화값도 1,510원대로 회복되며 패닉 장세가 일단 진정되는 모습을 보였다. 반도체 대형주를 중심으로 저가 매수세가 강하게 유입되며 시장 전반의 반등을 이끌었다.\n\n오늘의 핵심 이슈는 1분기 실질 GDP 성장률 1.8% 확정으로, 이는 5년 6개월 만의 최고치이며 명목 GDP는 50년 만에 최대 성장폭인 10.5%를 기록했다. 반도체 수출 호조(+5.9%)가 성장을 견인했고, 총저축률은 37년 만에 최고치를 달성했다. 아울러 삼성전자의 D램 점유율 나홀로 상승, SK하이닉스의 연간 영업이익 69조 전망 등 반도체 업황 강세 신호가 잇따랐다. 알테오젠은 유럽특허청으로부터 ALT-B4 특허 의향통지를 받으며 바이오 섹터 반등을 주도했다.\n\n투자 포인트로는 반도체 대형주의 급반등과 함께 삼성전기(+18%)가 목표가 줄상향을 받으며 시총 4위를 탈환한 점이 주목된다. NAVER는 6개 증권사가 동시에 AI 팩토리 가치를 재평가하며 강력한 매수 의견을 제시했다. 비수도권 기업에 대한 세제 인센티브 추진, 한미전략투자특별법(2,000억 달러 대미 투자, 연 5% 이상 수익률 기준)도 중장기 투자 환경에 긍정적 요인이다.\n\n리스크 요인으로는 원화 하루 변동성이 17년 만에 최대치를 기록하며 금융지주의 대출 여력이 축소되고 있다는 점이 부담이다. 국고채 3년물 금리가 4%에 육박하는 등 채권시장도 불안한 상황이며, 월가 채권 거물은 AI 투자 확대가 인플레를 자극해 내년 금리 인상 가능성을 경고했다. 레미콘 운송 노조 휴업 이틀째로 수도권 건설 현장 70곳이 공사 차질을 빚는 등 건설 업황 불확실성도 지속되고 있다.\n\n단기 전망은 반등 모멘텀이 유지되는 가운데 변동성 장세가 이어질 것으로 판단된다. 환율 안정 여부와 미국 FOMC 금리 결정이 향후 방향성의 핵심 변수다. 반도체·바이오·AI 인프라 섹터의 실적 모멘텀이 뚜렷한 만큼 선별적 대응 전략이 유효하며, 극심한 변동성 속에서 분할 매수 원칙을 고수하는 것이 중요하다.",
   "hot_sectors": [
-    "반도체",
-    "AI/인공지능",
-    "로봇"
+    {
+      "name": "반도체",
+      "reason": "삼성전자 D램 점유율 나홀로 상승, SK하이닉스 연간 영업이익 69조 전망, 삼성전기 목표가 줄상향 등 실적 모멘텀이 강화되며 코스피 반등을 주도"
+    },
+    {
+      "name": "제약·바이오",
+      "reason": "알테오젠의 유럽특허청 ALT-B4 특허 의향통지와 K-바이오 기술수출 13조 돌파로 하반기 반등 트리거 가시화"
+    },
+    {
+      "name": "AI·플랫폼",
+      "reason": "NAVER가 AI 팩토리 사업으로 진화하며 6개 증권사 동시 목표가 상향, 엔비디아와의 협력 확대로 수혜 기대"
+    },
+    {
+      "name": "자동차·로봇",
+      "reason": "현대차가 엔비디아와의 협력 및 피지컬 AI 로봇 사업 확대로 차세대 성장동력으로 재평가되며 관심 집중"
+    },
+    {
+      "name": "K-바이오 ADC",
+      "reason": "리가켐바이오의 대형 기술수출 임박 기대감과 셀트리온 포함 ADC 섹터 전반에 기술수출 모멘텀 확산"
+    }
   ],
   "stocks": [
     {
@@ -12,312 +29,448 @@
       "name": "삼성전자",
       "code": "005930",
       "signal": "positive",
-      "description": "코스피 8,000선 돌파의 핵심 동력으로, 역대급 실적과 함께 AI 반도체 수요 급증의 최대 수혜주로 부각되고 있습니다. 미래에셋증권은 목표가를 55만원으로 상향하며 '밸류에이션 집중 추격 구간'에 진입했다고 평가했습니다. 1인당 6억원에 달하는 성과급 지급 소식이 전해지며 실적 호조를 반증하고 있습니다.",
-      "price_trend": "전일 2.7% 급등하며 30만원대('30만전자')로 사상 최고치 경신",
-      "catalyst": "AI 반도체 수요 폭발, 레버리지 ETN 상장으로 인한 수급 집중, 엔비디아 젠슨 황 회동 예정",
-      "risk": "반도체 쏠림에 따른 밸류에이션 부담, 레버리지 상품 변동성 확대 가능성",
-      "channel_counts": {
-        "뉴스": 11,
-        "경제방송": 26,
-        "유튜브": 25,
-        "애널리스트": 1
-      },
-      "total_count": 63,
-      "weighted_score": 105.99,
-      "overlap_count": 4,
-      "reasons": [
-        {
-          "source_type": "애널리스트",
-          "source_name": "미래에셋증권",
-          "detail": "목표가 55만원 제시, '밸류에이션 집중 추격 구간' 진입 평가",
-          "source_url": "https://finance.naver.com/research/company_read.naver?nid=93297&page=1"
-        },
+      "summary": "삼성전자는 국내 최대 종합 반도체·가전·디스플레이 기업으로, 메모리 반도체(D램·낸드플래시)와 파운드리 사업을 양축으로 글로벌 반도체 시장을 선도하고 있다. 시가총액 기준 국내 1위 기업으로 코스피 시장 내 최대 비중을 차지하며 시장 전체의 방향성을 좌우한다.",
+      "catalyst": "오늘 전날 급락을 딛고 30만원대를 회복하며 강한 반등을 기록했으며, D램 점유율 나홀로 상승 소식이 투자 심리를 크게 자극했다. 미래에셋증권은 '어두울 땐 실적을 켜자'는 리포트를 통해 실적 가시성을 근거로 매수 의견을 제시했다. 1분기 한국 명목 GDP가 반도체 수출 호조에 힘입어 10.5% 성장하며 삼성전자의 수출 기여도가 재확인됐다.",
+      "risk": "원화 변동성이 17년 만에 최대 수준을 유지하고 있어 환율 리스크가 실적에 미치는 영향이 크며, 미중 무역 긴장 지속과 글로벌 경기 둔화 시 수요 감소 우려가 상존한다.",
+      "channel_mentions": [
         {
           "source_type": "뉴스",
           "source_name": "연합뉴스 경제",
-          "detail": "코스피 8천선 돌파, SK하이닉스와 함께 상승 동력 역할",
-          "source_url": "https://www.yna.co.kr/view/AKR20260527150100002"
+          "content": "삼성전자 주가가 전날 급락을 딛고 30만원대를 회복하며 SK하이닉스와 함께 역대 최대 상승률을 기록했다.",
+          "url": "https://www.yna.co.kr/view/AKR20260609041251008"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "이데일리TV",
+          "content": "삼성전자 D램 점유율이 나홀로 상승하며 반도체 업황 내 경쟁력 강화를 확인했고, 조정 이후 반등 신호탄이 올랐다는 분석이 나왔다.",
+          "url": "https://www.youtube.com/watch?v=B2t--DGE97U"
         },
         {
           "source_type": "유튜브",
-          "source_name": "삼프로TV",
-          "detail": "반도체 투톱 급등, 이유 있는 쏠림에 비중 확대 권고",
-          "source_url": "https://www.youtube.com/watch?v=XjHpvUYFM7s"
+          "source_name": "815머니톡",
+          "content": "삼성전자는 급락할 때가 오히려 매수 기회이며, 수급이 들어오면 급등할 저평가 주식이라는 전문가 의견이 제시됐다.",
+          "url": "https://www.youtube.com/watch?v=CC5wIO1jT2o"
+        },
+        {
+          "source_type": "애널리스트",
+          "source_name": "미래에셋증권",
+          "content": "'어두울 땐 실적을 켜자' 리포트를 통해 실적 모멘텀 기반의 매수 전략을 제시하며 목표주가를 유지했다.",
+          "url": "https://finance.naver.com/research/company_read.naver?nid=93457&page=1"
+        }
+      ],
+      "channel_counts": {
+        "뉴스": 1,
+        "경제방송": 12,
+        "유튜브": 4,
+        "애널리스트": 1
+      },
+      "total_count": 18,
+      "weighted_score": 29.32,
+      "overlap_count": 4,
+      "reasons": [
+        {
+          "source_type": "뉴스",
+          "source_name": "연합뉴스 경제",
+          "detail": "전날 급락 후 30만원 회복, 역대 최대 상승률 기록",
+          "source_url": "https://www.yna.co.kr/view/AKR20260609041251008"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "이데일리TV",
+          "detail": "D램 점유율 나홀로 상승으로 반도체 업황 내 경쟁력 차별화 확인",
+          "source_url": "https://www.youtube.com/watch?v=B2t--DGE97U"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "이데일리TV",
+          "detail": "호남 첫 반도체 공장 추진 소식으로 생산능력 확대 기대감 부각",
+          "source_url": "https://www.youtube.com/watch?v=hMMN-90v0tE"
+        },
+        {
+          "source_type": "유튜브",
+          "source_name": "경제 원탑",
+          "detail": "삼성전자 목표주가 50만원 전망, 분할 매수 전략 권고",
+          "source_url": "https://www.youtube.com/watch?v=9IDYkctZyjw"
+        },
+        {
+          "source_type": "애널리스트",
+          "source_name": "미래에셋증권",
+          "detail": "실적 가시성 기반 매수 의견 제시, 어닝 모멘텀 강조",
+          "source_url": "https://finance.naver.com/research/company_read.naver?nid=93457&page=1"
         }
       ],
       "market": "국내",
       "naver_code": "005930",
-      "verified_price": {
-        "price": "N/A",
-        "change": "",
-        "change_pct": "",
-        "code": "005930",
-        "naver_url": "https://finance.naver.com/item/main.naver?code=005930"
-      },
-      "channel_type": null
+      "verified_price": 322000,
+      "naver_url": "https://finance.naver.com/item/main.naver?code=005930"
     },
     {
       "rank": 2,
       "name": "SK하이닉스",
       "code": "000660",
       "signal": "positive",
-      "description": "시가총액 1조 달러 클럽에 국내 두 번째로 진입하며 글로벌 반도체 기업으로서의 위상을 확고히 했습니다. 미래에셋증권과 현대차증권이 동시에 '밸류에이션 대기권 돌파'를 언급하며 목표가 380만원을 제시했습니다. HBM 등 AI 메모리 분야에서 독보적 경쟁력을 바탕으로 구조적 성장이 예상됩니다.",
-      "price_trend": "전일 9.3% 급등하며 224만원대('224만닉스')로 사상 최고치 경신",
-      "catalyst": "시총 1조 달러 달성, AI 메모리 수요 급증, 레버리지 ETN 상장 효과",
-      "risk": "급등에 따른 단기 조정 가능성, 레버리지 상품 쏠림으로 인한 변동성",
-      "channel_counts": {
-        "뉴스": 8,
-        "경제방송": 19,
-        "유튜브": 14,
-        "애널리스트": 1
-      },
-      "total_count": 42,
-      "weighted_score": 70.84,
-      "overlap_count": 4,
-      "reasons": [
-        {
-          "source_type": "애널리스트",
-          "source_name": "미래에셋증권 / 현대차증권",
-          "detail": "목표가 380만원, '밸류에이션 대기권 돌파' 동시 평가",
-          "source_url": "https://finance.naver.com/research/company_read.naver?nid=93282&page=1"
-        },
+      "summary": "SK하이닉스는 D램과 낸드플래시 메모리 반도체 분야의 글로벌 2위 기업으로, HBM(고대역폭메모리) 분야에서 세계 최고 수준의 기술력을 보유하고 있다. AI 데이터센터 투자 확대의 최대 수혜주로 꼽히며, 엔비디아 등 글로벌 빅테크와의 긴밀한 공급 관계를 유지하고 있다.",
+      "catalyst": "미래에셋증권은 '(깐부)치킨게임 시작' 리포트를 통해 SK하이닉스가 HBM 시장에서 압도적 우위를 바탕으로 경쟁사 대비 유리한 고지를 점할 것이라고 분석했다. 2026년 연간 영업이익 69조 원이라는 역대급 전망이 제시됐으며, 오늘 주가는 20만원대를 회복하며 역대 최대 상승률을 기록했다. 레버리지 ETF 3종의 투자유의종목 적출 후 정상가격 거래 복귀도 수급 안정 신호로 해석된다.",
+      "risk": "레버리지 ETF 투자유의 종목 적출 이슈로 파생 수급 교란 가능성이 있으며, 미국의 대중 반도체 수출 규제 강화 시 공급망 재편 리스크가 잠재한다.",
+      "channel_mentions": [
         {
           "source_type": "뉴스",
           "source_name": "연합뉴스 경제",
-          "detail": "시가총액 1조 달러 돌파, 국내 두 번째 기록",
-          "source_url": "https://www.yna.co.kr/view/AKR20260527150100002"
-        },
-        {
-          "source_type": "유튜브",
-          "source_name": "삼프로TV",
-          "detail": "매수 사이드카 발동, 반도체 불장 지속 전망",
-          "source_url": "https://www.youtube.com/watch?v=XjHpvUYFM7s"
-        }
-      ],
-      "market": "국내",
-      "naver_code": "000660",
-      "verified_price": {
-        "price": "N/A",
-        "change": "",
-        "change_pct": "",
-        "code": "000660",
-        "naver_url": "https://finance.naver.com/item/main.naver?code=000660"
-      },
-      "channel_type": null
-    },
-    {
-      "rank": 3,
-      "name": "현대차",
-      "code": "005380",
-      "signal": "positive",
-      "description": "로봇 사업 본격화와 엔비디아 젠슨 황 CEO와의 회동 예정 소식으로 AI 동맹 강화 기대감이 고조되고 있습니다. 보스턴다이나믹스의 아틀라스 로봇 상용화 임박 소식과 함께 '현대차·기아 채권혼합 ETF' 출시 계획도 발표되었습니다. 자동차를 넘어 미래 모빌리티 기업으로의 변신을 가속화하고 있습니다.",
-      "price_trend": "반도체 쏠림 속에서도 로봇·AI 테마로 관심 유지",
-      "catalyst": "엔비디아 경영진 회동, 아틀라스 로봇 상용화, 채권혼합 ETF 출시 예정",
-      "risk": "글로벌 자동차 시장 경쟁 심화, 로봇 사업 수익화 시점 불확실",
-      "channel_counts": {
-        "뉴스": 1,
-        "경제방송": 4,
-        "유튜브": 2,
-        "애널리스트": 2
-      },
-      "total_count": 9,
-      "weighted_score": 16.75,
-      "overlap_count": 4,
-      "reasons": [
-        {
-          "source_type": "경제방송",
-          "source_name": "TomatoTV",
-          "detail": "엔비디아 젠슨 황, 삼성·SK·현대차·LG 경영진 회동으로 AI 동맹 강화",
-          "source_url": "https://www.youtube.com/watch?v=QtMuLNagU0I"
+          "content": "SK하이닉스 주가가 전날 급락을 딛고 역대 최대 상승률을 기록하며 20만원대를 회복했다.",
+          "url": "https://www.yna.co.kr/view/AKR20260609041251008"
         },
         {
           "source_type": "경제방송",
           "source_name": "이데일리TV",
-          "detail": "아틀라스 로봇 데뷔 임박, 월드컵 로봇 선수 등장 가능성",
-          "source_url": "https://www.youtube.com/watch?v=ZDYD1UVoXXI"
+          "content": "SK하이닉스 연간 영업이익 69조 원이라는 역대급 전망이 제시되며 HBM 시장 독주 체제 강화 기대가 높아졌다.",
+          "url": "https://www.youtube.com/watch?v=cJTxpqUrgb4"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "TomatoTV",
+          "content": "FOMC 금리 결정을 앞두고 HBM 공급 재개 모멘텀을 바탕으로 AI 핵심주로서 지금이 매수 타이밍이라는 분석이 나왔다.",
+          "url": "https://www.youtube.com/watch?v=P9Y4XtSUm_g"
+        },
+        {
+          "source_type": "애널리스트",
+          "source_name": "미래에셋증권",
+          "content": "'(깐부)치킨게임 시작' 리포트를 통해 HBM 시장 치킨게임에서 SK하이닉스의 경쟁 우위를 강조하며 강력 매수 의견을 제시했다.",
+          "url": "https://finance.naver.com/research/company_read.naver?nid=93458&page=1"
+        }
+      ],
+      "channel_counts": {
+        "뉴스": 3,
+        "경제방송": 6,
+        "유튜브": 3,
+        "애널리스트": 1
+      },
+      "total_count": 13,
+      "weighted_score": 21.26,
+      "overlap_count": 4,
+      "reasons": [
+        {
+          "source_type": "뉴스",
+          "source_name": "연합뉴스 경제",
+          "detail": "전날 급락 후 20만원 회복, 상승률 역대 최대 기록",
+          "source_url": "https://www.yna.co.kr/view/AKR20260609041251008"
+        },
+        {
+          "source_type": "뉴스",
+          "source_name": "연합뉴스 경제",
+          "detail": "레버리지 ETF 3종 투자유의종목 적출 후 정상가격 거래 복귀",
+          "source_url": "https://www.yna.co.kr/view/AKR20260609072251008"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "이데일리TV",
+          "detail": "연간 영업이익 69조 전망, 역대급 실적 폭발 기대감 부각",
+          "source_url": "https://www.youtube.com/watch?v=cJTxpqUrgb4"
         },
         {
           "source_type": "유튜브",
-          "source_name": "웅달 책방",
-          "detail": "현대차와 로봇주 10배 상승 전망 제시",
-          "source_url": "https://www.youtube.com/watch?v=SWDTavS0Ujg"
+          "source_name": "815머니톡",
+          "detail": "급락 시 매수 기회로, 수급 유입 시 급등 가능한 저평가 종목으로 추천",
+          "source_url": "https://www.youtube.com/watch?v=CC5wIO1jT2o"
+        },
+        {
+          "source_type": "애널리스트",
+          "source_name": "미래에셋증권",
+          "detail": "HBM 치킨게임 주도 기업으로 경쟁 우위 유지, 강력 매수 의견",
+          "source_url": "https://finance.naver.com/research/company_read.naver?nid=93458&page=1"
         }
       ],
       "market": "국내",
-      "naver_code": "005380",
-      "verified_price": {
-        "price": "N/A",
-        "change": "",
-        "change_pct": "",
-        "code": "005380",
-        "naver_url": "https://finance.naver.com/item/main.naver?code=005380"
-      },
-      "channel_type": null
+      "naver_code": "000660",
+      "verified_price": 2215000,
+      "naver_url": "https://finance.naver.com/item/main.naver?code=000660"
     },
     {
-      "rank": 4,
-      "name": "미래에셋증권",
-      "code": "006800",
+      "rank": 3,
+      "name": "알테오젠",
+      "code": "196170",
       "signal": "positive",
-      "description": "삼성전자·SK하이닉스 단일종목 2배 레버리지 ETN을 업계 최초로 상장하며 시장의 주목을 받고 있습니다. 반도체 불장에서 파생상품 시장을 선점하며 증권업 수익 다변화에 성공하고 있습니다. 여의도 본사 부지에 31층 금융업무시설 신축 계획도 발표되었습니다.",
-      "price_trend": "ETN 상장 효과로 거래량 증가 및 관심 집중",
-      "catalyst": "삼전닉스 레버리지 ETN 독점 출시, 증권업 호황 수혜",
-      "risk": "레버리지 상품 관련 규제 리스크, 증시 조정 시 파생상품 손실 가능성",
+      "summary": "알테오젠은 피하주사(SC) 제형 변환 플랫폼 기술(ALT-B4, 히알루로니다제)을 보유한 국내 바이오텍으로, 글로벌 빅파마와의 기술 라이선스 계약을 통해 성장하고 있다. 국내 바이오 섹터 내 플랫폼 기술 기업으로서 독보적인 입지를 확보하고 있으며, 다수의 글로벌 파이프라인을 보유하고 있다.",
+      "catalyst": "오늘 자체 개발한 재조합 인간 히알루로니다제 'ALT-B4'에 대해 유럽 특허청으로부터 특허 의향통지를 받으며 주가가 12% 급등했다. 유럽 특허 등록 성공은 글로벌 시장에서의 기술력 인정을 의미하며, K-바이오 기술수출 13조 돌파라는 호재와 맞물려 바이오 대장주 귀환 기대감을 높였다. 이데일리TV는 알테오젠이 시장을 장악하며 바이오주 하반기 반등의 핵심 트리거로 부상했다고 평가했다.",
+      "risk": "특허 의향통지 이후 최종 등록까지의 불확실성이 남아 있으며, 글로벌 빅파마와의 기술수출 협상 결렬 시 주가 급락 리스크가 상존한다.",
+      "channel_mentions": [
+        {
+          "source_type": "뉴스",
+          "source_name": "연합뉴스 경제",
+          "content": "알테오젠이 ALT-B4에 대한 유럽 특허청 특허 의향통지 소식으로 12% 급등했다.",
+          "url": "https://www.yna.co.kr/view/AKR20260609066151008"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "이데일리TV",
+          "content": "글로벌 시장에서 기술력을 인정받은 알테오젠이 날개를 달았으며, 바이오 대장주 귀환 신호로 평가됐다.",
+          "url": "https://www.youtube.com/watch?v=nOJ2iV7maBA"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "이데일리TV",
+          "content": "K-바이오 기술수출 13조 돌파의 핵심 기업으로 알테오젠이 지목됐으며, 하반기 바이오주 반등의 트리거로 분석됐다.",
+          "url": "https://www.youtube.com/watch?v=Sn26-FqZrSQ"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "이데일리TV",
+          "content": "ALT-B4 유럽 특허 등록 성공으로 바이오 섹터 내 알테오젠의 시장 지배력이 강화됐다는 분석이 제시됐다.",
+          "url": "https://www.youtube.com/watch?v=I8OtxuX7JB4"
+        }
+      ],
       "channel_counts": {
-        "뉴스": 3,
-        "애널리스트": 4
+        "뉴스": 1,
+        "경제방송": 6
       },
       "total_count": 7,
-      "weighted_score": 14.5,
+      "weighted_score": 11.42,
       "overlap_count": 2,
       "reasons": [
         {
           "source_type": "뉴스",
           "source_name": "연합뉴스 경제",
-          "detail": "업계 최초 삼성전자·SK하이닉스 단일종목 레버리지 ETN 상장",
-          "source_url": "https://www.yna.co.kr/view/AKR20260527150100002"
+          "detail": "유럽특허청 ALT-B4 특허 의향통지로 당일 12% 급등",
+          "source_url": "https://www.yna.co.kr/view/AKR20260609066151008"
         },
         {
-          "source_type": "뉴스",
-          "source_name": "연합뉴스 경제",
-          "detail": "삼성전자 55만원, SK하이닉스 380만원 목표가 상향 발표",
-          "source_url": "https://www.yna.co.kr/view/AKR20260527150100002"
+          "source_type": "경제방송",
+          "source_name": "이데일리TV",
+          "detail": "바이오 대장주 귀환, 시장 장악 평가와 함께 하반기 반등 트리거로 지목",
+          "source_url": "https://www.youtube.com/watch?v=2427To4f-lU"
         },
         {
-          "source_type": "애널리스트",
-          "source_name": "미래에셋증권",
-          "detail": "루닛, 뉴로핏 등 바이오·AI 종목 커버리지 확대",
-          "source_url": "https://finance.naver.com/research/company_read.naver?nid=93297&page=1"
+          "source_type": "경제방송",
+          "source_name": "이데일리TV",
+          "detail": "K-바이오 기술수출 13조 돌파의 핵심 기업으로 글로벌 경쟁력 인정",
+          "source_url": "https://www.youtube.com/watch?v=Sn26-FqZrSQ"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "이데일리TV",
+          "detail": "ALT-B4 유럽 특허 등록 성공으로 플랫폼 기술의 글로벌 확장성 확인",
+          "source_url": "https://www.youtube.com/watch?v=I8OtxuX7JB4"
         }
       ],
       "market": "국내",
-      "naver_code": "006800",
-      "verified_price": {
-        "price": "N/A",
-        "change": "",
-        "change_pct": "",
-        "code": "006800",
-        "naver_url": "https://finance.naver.com/item/main.naver?code=006800"
+      "naver_code": "196170",
+      "verified_price": 326500,
+      "naver_url": "https://finance.naver.com/item/main.naver?code=196170"
+    },
+    {
+      "rank": 4,
+      "name": "현대차",
+      "code": "005380",
+      "signal": "positive",
+      "summary": "현대차는 국내 최대 완성차 기업으로 전기차, 수소차, 로보틱스 등 미래 모빌리티 분야로의 전환을 적극 추진하고 있다. 엔비디아와의 협력을 통해 AI 기반 자율주행 및 피지컬 AI 로봇 사업으로의 진화가 주목받고 있으며, 글로벌 전기차 시장에서의 경쟁력을 강화하고 있다.",
+      "catalyst": "엔비디아와의 파트너십이 부각되며 AI 다음 성장축인 로봇 분야의 핵심 기업으로 재평가받고 있다. 하나자산운용이 현대차·기아를 50% 비중으로 편입한 채권혼합 ETF를 상장하며 기관 투자 수요가 확인됐다. 이완수 그레너리투자자문 대표 등 전문가들이 코스피 변동성 확대 국면에서 현대차를 추가 매수 대상으로 지목했다.",
+      "risk": "미국의 자동차 관세 부과 가능성과 글로벌 전기차 수요 성장 둔화가 단기 실적 불확실성을 높이는 리스크 요인이다.",
+      "channel_mentions": [
+        {
+          "source_type": "뉴스",
+          "source_name": "연합뉴스 경제",
+          "content": "하나자산운용이 현대차·기아를 합산 50% 비중으로 편입한 채권혼합 ETF를 상장하며 기관의 현대차 투자 수요를 반영했다.",
+          "url": "https://www.yna.co.kr/view/AKR20260609070900008"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "이데일리TV",
+          "content": "변동성 확대 국면에서 현대차를 추가 매수 이유가 있는 종목으로 지목하며 저점 매수 전략을 제시했다.",
+          "url": "https://www.youtube.com/watch?v=7Wp0RoAHnnM"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "TomatoTV",
+          "content": "엔비디아와 손잡은 현대차가 피지컬 AI 로봇 시장의 핵심 기업으로 AI 다음 성장축을 선점하고 있다는 분석이 제시됐다.",
+          "url": "https://www.youtube.com/watch?v=DsV0VdynGKk"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "TomatoTV",
+          "content": "미 반도체 급락 속에서도 현대차·현대모비스를 포트폴리오에 담아야 할 조정에 강한 황제주로 선정했다.",
+          "url": "https://www.youtube.com/watch?v=zsCheWmUWGg"
+        }
+      ],
+      "channel_counts": {
+        "뉴스": 1,
+        "경제방송": 5
       },
-      "channel_type": null
+      "total_count": 6,
+      "weighted_score": 9.63,
+      "overlap_count": 2,
+      "reasons": [
+        {
+          "source_type": "뉴스",
+          "source_name": "연합뉴스 경제",
+          "detail": "현대차·기아 50% 편입 채권혼합 ETF 상장으로 기관 수요 확인",
+          "source_url": "https://www.yna.co.kr/view/AKR20260609070900008"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "TomatoTV",
+          "detail": "엔비디아·LG와의 협업으로 AI 로봇 분야 핵심 수혜주로 부각",
+          "source_url": "https://www.youtube.com/watch?v=JPX2B2ILG4Q"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "TomatoTV",
+          "detail": "아틀라스 로봇 기반 피지컬 AI 시장에서 핵심 플레이어로 평가",
+          "source_url": "https://www.youtube.com/watch?v=DsV0VdynGKk"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "이데일리TV",
+          "detail": "변동성 확대 국면에서 추가 매수 근거 있는 종목으로 지목",
+          "source_url": "https://www.youtube.com/watch?v=7Wp0RoAHnnM"
+        }
+      ],
+      "market": "국내",
+      "naver_code": "005380",
+      "verified_price": 639000,
+      "naver_url": "https://finance.naver.com/item/main.naver?code=005380"
     },
     {
       "rank": 5,
       "name": "삼성전기",
       "code": "009150",
       "signal": "positive",
-      "description": "AI 서버용 MLCC 수요 급증으로 '삼성전자 동생'이라 불리며 동반 상승세를 보이고 있습니다. 일부 전문가는 22만원의 파격적인 목표가를 제시하며 AI 기판 공급 부족 수혜를 전망하고 있습니다. 반도체 호황 다음 수혜 섹터로 MLCC/기판 업종이 주목받고 있습니다.",
-      "price_trend": "삼성전자·SK하이닉스 급등에 동반 상승세 지속",
-      "catalyst": "AI 서버용 MLCC 수요 폭발, 기판 공급 부족 장기화",
-      "risk": "반도체 대비 상대적 주목도 낮음, 스마트폰 시장 둔화",
-      "channel_counts": {
-        "경제방송": 2,
-        "유튜브": 1
-      },
-      "total_count": 3,
-      "weighted_score": 5.08,
-      "overlap_count": 2,
-      "reasons": [
+      "summary": "삼성전기는 MLCC(적층세라믹콘덴서), 카메라 모듈, 반도체 패키지 기판 등을 생산하는 국내 최대 전자부품 기업이다. AI 서버 및 데이터센터 투자 확대로 고사양 MLCC와 유리기판 수요가 급증하며 실적 모멘텀이 강화되고 있으며, 시총 4위를 탈환할 만큼 시장의 관심이 집중됐다.",
+      "catalyst": "오늘 증권가의 목표가 줄상향에 힘입어 주가가 18% 급등하며 시총 4위를 탈환했다. iM증권은 '가늠할 수 없는 이익의 지평'이라는 리포트를 통해 삼성전기의 이익 성장 잠재력이 기존 추정치를 크게 상회할 수 있다고 평가했다. AI 데이터센터 투자 확대에 따른 유리기판 및 고사양 MLCC 수요 급증이 실적 업사이드의 핵심 동력으로 지목됐다.",
+      "risk": "스마트폰 수요 회복 지연 시 MLCC 주력 사업의 성장이 제한될 수 있으며, 유리기판 양산 일정 지연 리스크도 주시해야 한다.",
+      "channel_mentions": [
         {
-          "source_type": "경제방송",
-          "source_name": "이데일리TV",
-          "detail": "22만원 파격 목표가 제시, MLCC 수요 급증 수혜",
-          "source_url": "https://www.youtube.com/watch?v=ZDYD1UVoXXI"
+          "source_type": "뉴스",
+          "source_name": "연합뉴스 경제",
+          "content": "삼성전기 주가가 증권가의 목표가 줄상향 속에 18% 넘게 급등하며 시총 4위를 탈환했다.",
+          "url": "https://www.yna.co.kr/view/AKR20260609062451008"
         },
         {
-          "source_type": "유튜브",
-          "source_name": "깨비증권 마블TV",
-          "detail": "반도체 호황 다음은 MLCC/기판의 시대, 삼성전기 주목",
-          "source_url": ""
+          "source_type": "경제방송",
+          "source_name": "TomatoTV",
+          "content": "삼성전기의 목표가가 추가 상승 여력이 있다는 분석과 함께 지금이 매수 타이밍이라는 강한 투자 의견이 제시됐다.",
+          "url": "https://www.youtube.com/watch?v=ZnNOKxdNtCs"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "TomatoTV",
+          "content": "LS ELECTRIC과의 비교에서 삼성전기가 유리기판 모멘텀을 바탕으로 오늘의 우승 종목으로 선정됐다.",
+          "url": "https://www.youtube.com/watch?v=fJsvAQdzWtU"
+        },
+        {
+          "source_type": "애널리스트",
+          "source_name": "iM증권",
+          "content": "'가늠할 수 없는 이익의 지평'이라는 리포트를 통해 AI 투자 확대에 따른 삼성전기의 이익 성장 잠재력을 극찬했다.",
+          "url": "https://finance.naver.com/research/company_read.naver?nid=93454&page=1"
+        }
+      ],
+      "channel_counts": {
+        "뉴스": 1,
+        "경제방송": 3,
+        "애널리스트": 1
+      },
+      "total_count": 5,
+      "weighted_score": 8.82,
+      "overlap_count": 3,
+      "reasons": [
+        {
+          "source_type": "뉴스",
+          "source_name": "연합뉴스 경제",
+          "detail": "목표가 줄상향으로 18% 급등, 시총 4위 탈환이라는 강한 퍼포먼스 시현",
+          "source_url": "https://www.yna.co.kr/view/AKR20260609062451008"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "TomatoTV",
+          "detail": "AI 데이터센터 수요 기반 MLCC·유리기판 성장으로 목표가 추가 상향 여지",
+          "source_url": "https://www.youtube.com/watch?v=ZnNOKxdNtCs"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "TomatoTV",
+          "detail": "조정 국면에서도 포트폴리오에 담아야 할 황제주 중 하나로 선정",
+          "source_url": "https://www.youtube.com/watch?v=zsCheWmUWGg"
+        },
+        {
+          "source_type": "애널리스트",
+          "source_name": "iM증권",
+          "detail": "이익 성장 잠재력이 기존 추정치를 크게 상회할 수 있다는 강력 매수 리포트 발간",
+          "source_url": "https://finance.naver.com/research/company_read.naver?nid=93454&page=1"
         }
       ],
       "market": "국내",
       "naver_code": "009150",
-      "verified_price": {
-        "price": "N/A",
-        "change": "",
-        "change_pct": "",
-        "code": "009150",
-        "naver_url": "https://finance.naver.com/item/main.naver?code=009150"
-      },
-      "channel_type": null
+      "verified_price": 1970000,
+      "naver_url": "https://finance.naver.com/item/main.naver?code=009150"
     }
   ],
   "hidden_picks": [
     {
       "rank": 1,
-      "name": "알테오젠",
-      "code": "196170",
+      "name": "리가켐바이오",
+      "code": "141080",
       "signal": "positive",
-      "description": "키트루다SC 상업화와 추가 기술이전 기대감으로 바이오 대장주 독주가 예상되고 있습니다. 반도체 쏠림 장세 속에서도 전문가들이 추천 종목으로 꼽으며 차별화된 관심을 받고 있습니다.",
-      "catalyst": "키트루다SC 상업화 임박, 추가 기술이전 기대, 실적 폭증 전망",
-      "risk": "바이오 섹터 전반적 소외, 글로벌 임상 불확실성",
+      "summary": "리가켐바이오는 항체-약물 접합체(ADC) 플랫폼 기술을 기반으로 글로벌 빅파마와의 기술수출을 추진하는 국내 바이오텍이다. ADC는 차세대 항암 치료제 분야에서 가장 주목받는 모달리티로, 리가켐바이오는 독자적인 링커-페이로드 기술로 글로벌 경쟁력을 인정받고 있다.",
+      "catalyst": "이데일리TV FinalShot 프로그램은 리가켐바이오의 대형 기술수출이 임박했다는 기대감을 여러 차례 강조하며 바이오주 하반기 반등의 핵심 트리거로 지목했다. K-바이오 기술수출 13조 돌파의 주역 중 하나로 언급되며 ADC 섹터 내 대장주 지위가 재확인됐다. 알테오젠의 특허 성공 이후 바이오 섹터 전반의 투자 심리가 개선되는 가운데, 리가켐바이오의 다음 기술수출 계약 발표가 주가 급등의 촉매제가 될 수 있다는 분석이 나왔다.",
+      "risk": "기술수출 협상 타결 지연 또는 임상 실패 시 주가가 급락할 수 있는 바이오 고유의 이벤트 리스크가 존재한다.",
       "channel_type": "경제방송",
+      "channel_name": "이데일리TV",
       "reasons": [
         {
           "source_type": "경제방송",
-          "source_name": "TomatoTV",
-          "detail": "키트루다SC 상업화+추가 기술이전+실적 폭증으로 바이오 대장주 독주 시작 전망",
-          "source_url": "https://www.youtube.com/watch?v=QtMuLNagU0I"
+          "source_name": "이데일리TV",
+          "detail": "대형 기술수출 임박 기대감으로 주가가 들썩이며 ADC 섹터 내 주목 종목으로 부각",
+          "source_url": "https://www.youtube.com/watch?v=aDVvxPoRE5I"
         },
         {
           "source_type": "경제방송",
           "source_name": "이데일리TV",
-          "detail": "종목레이더에서 SK스퀘어, 현대모비스와 함께 관심 종목으로 선정",
-          "source_url": "https://www.youtube.com/watch?v=ZDYD1UVoXXI"
+          "detail": "K-바이오 기술수출 13조 돌파의 핵심 기업으로 하반기 바이오 반등 트리거 지목",
+          "source_url": "https://www.youtube.com/watch?v=Sn26-FqZrSQ"
+        },
+        {
+          "source_type": "경제방송",
+          "source_name": "이데일리TV",
+          "detail": "알테오젠과 함께 바이오주 하반기 반등을 이끌 양대 핵심 기업으로 분석",
+          "source_url": "https://www.youtube.com/watch?v=hAsyPKqMZhI"
         }
       ],
-      "total_count": 3,
-      "weighted_score": 4.87,
+      "total_count": 4,
+      "weighted_score": 6.61,
       "market": "국내",
-      "naver_code": "196170",
-      "verified_price": {
-        "price": "N/A",
-        "change": "",
-        "change_pct": "",
-        "code": "196170",
-        "naver_url": "https://finance.naver.com/item/main.naver?code=196170"
-      },
-      "overlap_count": null,
-      "channel_counts": null
+      "naver_code": "141080",
+      "verified_price": 128000,
+      "naver_url": "https://finance.naver.com/item/main.naver?code=141080"
     },
     {
       "rank": 2,
-      "name": "에코프로",
-      "code": "086520",
-      "signal": "neutral",
-      "description": "반도체 쏠림 장세에 상대적으로 소외되고 있으나, 2차전지 섹터의 대표주로서 코스닥 상승 시 주도주 역할이 기대됩니다. 전문가들은 새로운 모멘텀 발생 시 강한 반등 가능성을 언급하고 있습니다.",
-      "catalyst": "코스닥 반등 시 수급 유입 기대, 2차전지 탑픽 선정",
-      "risk": "반도체 쏠림으로 인한 자금 이탈, 중국 배터리 경쟁 심화",
+      "name": "셀트리온",
+      "code": "068270",
+      "signal": "positive",
+      "summary": "셀트리온은 국내 최대 바이오시밀러 기업으로 램시마, 허쥬마 등 글로벌 블록버스터 바이오시밀러를 판매하고 있으며, 최근 ADC 기반 항암제 등 신약 파이프라인 확충에도 적극 나서고 있다. 글로벌 바이오시밀러 시장에서의 선도적 위치를 바탕으로 K-바이오의 대표 기업 중 하나로 꼽힌다.",
+      "catalyst": "이데일리TV는 K-바이오 기술수출 13조 돌파 비결을 다루며 셀트리온을 알테오젠, 리가켐바이오와 함께 바이오주 하반기 반등을 이끌 핵심 기업으로 언급했다. ADC 섹터 전반의 투자 심리 개선과 함께 셀트리온의 글로벌 임상 파이프라인 진전이 하반기 모멘텀의 핵심 변수로 분석됐다.",
+      "risk": "바이오시밀러 시장의 가격 경쟁 심화와 미국 의약품 가격 정책 변화가 수익성에 부정적 영향을 미칠 수 있다.",
       "channel_type": "경제방송",
+      "channel_name": "이데일리TV",
       "reasons": [
         {
           "source_type": "경제방송",
           "source_name": "이데일리TV",
-          "detail": "냉각공조장비·2차전지 탑픽으로 선정",
-          "source_url": "https://www.youtube.com/watch?v=ZDYD1UVoXXI"
+          "detail": "바이오주 하반기 반등 트리거 관련 핵심 종목으로 언급, ADC 포함 파이프라인 모멘텀 주목",
+          "source_url": "https://www.youtube.com/watch?v=hAsyPKqMZhI"
         },
         {
           "source_type": "경제방송",
-          "source_name": "TomatoTV",
-          "detail": "코스닥 상승 초입 구간, 새로운 모멘텀으로 상승 이끌 종목으로 주목",
-          "source_url": "https://www.youtube.com/watch?v=QtMuLNagU0I"
+          "source_name": "이데일리TV",
+          "detail": "K-바이오 기술수출 13조 돌파의 핵심 기업 중 하나로 글로벌 경쟁력 재확인",
+          "source_url": "https://www.youtube.com/watch?v=Sn26-FqZrSQ"
         }
       ],
-      "total_count": 3,
-      "weighted_score": 4.87,
+      "total_count": 2,
+      "weighted_score": 3.31,
       "market": "국내",
-      "naver_code": "086520",
-      "verified_price": {
-        "price": "N/A",
-        "change": "",
-        "change_pct": "",
-        "code": "086520",
-        "naver_url": "https://finance.naver.com/item/main.naver?code=086520"
-      },
-      "overlap_count": null,
-      "channel_counts": null
+      "naver_code": "068270",
+      "verified_price": 170000,
+      "naver_url": "https://finance.naver.com/item/main.naver?code=068270"
     }
   ],
-  "ai_strategy": "반도체 대형주 쏠림이 극심한 가운데 삼성전자·SK하이닉스 비중을 핵심으로 유지하되, 레버리지 ETN은 변동성 관리에 유의해야 합니다. 젠슨 황 CEO 방한 일정이 다음 주로 예정되어 있어 AI 관련 모멘텀은 지속될 전망이며, 현대차·삼성전기 등 2차 수혜주로의 확산 가능성도 열어두어야 합니다. 바이오(알테오젠)와 2차전지(에코프로) 섹터는 현재 소외되고 있으나 반도체 과열 조정 시 순환매 대상이 될 수 있어 관심 종목으로 모니터링이 필요합니다. 코스닥 및 중소형주는 당분간 관망하며, 시장 전체의 과열 신호에 대비한 현금 비중 10~15% 유지를 권장합니다."
+  "ai_strategy": "오늘 코스피가 역대 최대 상승폭으로 반등하며 8,000선을 회복했지만, 원화 변동성이 17년 만에 최대라는 점과 국고채 금리 급등, 미국 금리 인상 가능성 재부상 등 구조적 리스크가 해소되지 않은 만큼 '반등 확인 후 분할 매수' 전략을 권고합니다.\n\n■ 핵심 매수 전략: 삼성전자(005930)와 SK하이닉스(000660)는 포트폴리오 합산 30~35% 비중으로 접근하되, 오늘 반등 이후 추가 조정 시 2~3회 분할 매수를 권고합니다. 삼성전자는 28만원대, SK하이닉스는 18만원대를 1차 분할 매수 목표가로 설정하고, 각각 목표주가를 삼성전자 40만원, SK하이닉스 28만원으로 중기 목표를 설정합니다.\n\n■ 고성장 모멘텀 종목: 삼성전기(009150)는 18% 급등에도 불구하고 iM증권의 '가늠할 수 없는 이익의 지평' 리포트에서 보듯 AI 유리기판·MLCC 모멘텀이 강력해 10% 비중으로 편입을 검토합니다. 알테오젠(196170)은 유럽 특허 등록 성공을 확인한 만큼 5% 비중으로 바이오 대표 포지션을 구성하고, 추가 기술수출 계약 발표 시 비중을 늘립니다.\n\n■ 리스크 관리: 원/달러 환율 1,550원 재돌파 시 전체 포지션의 20%를 축소하는 손절 기준을 설정합니다. 달러 예금 마케팅 자제 지침 등 금융당국의 환율 개입 강도를 모니터링하며, 미국 FOMC 결정 전후 변동성 확대 구간에서는 신규 매수를 자제하고 기존 보유 종목 비중을 유지합니다. NAVER(035420)는 6개 증권사 동시 매수 의견이라는 강력한 신호를 감안해 5% 비중으로 관찰 편입하며, AI 팩토리 실적 가시화 확인 후 비중을 확대합니다."
 }
