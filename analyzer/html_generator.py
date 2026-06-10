@@ -14,10 +14,14 @@ AI 주식 브리핑 HTML 생성 엔진
 - FIX-TV-1 : 경제방송TV 섹션 source_type 매칭 보완
 - FIX-IND-1: 시장 지표 키 유연 탐색
 - V2-CARD  : 종목 카드에 summary/catalyst/risk/channel_mentions 섹션 추가
+- FIX-ANA-1: _build_analyst_html 들여쓰기 버그 수정 (_report_card 내부화)
+- FIX-ARC-1: 사용하지 않는 archive_html 생성 블록 제거
+- FIX-SIG-1: _is_positive_signal에서 "상승" 키워드 제거
 """
 
 import os
 import re
+from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 
 KST         = timezone(timedelta(hours=9))
@@ -134,8 +138,6 @@ def _build_tv_html(all_data: list) -> str:
     if not items:
         return '<p style="color:#666;">경제방송 데이터 없음</p>'
 
-    # 채널별로 묶기
-    from collections import defaultdict, OrderedDict
     channel_map = OrderedDict()
     seen_titles = set()
 
@@ -151,10 +153,7 @@ def _build_tv_html(all_data: list) -> str:
         seen_titles.add(title)
 
         if channel not in channel_map:
-            channel_map[channel] = {
-                "date": date_str,
-                "stocks": [],   # (stock_name, title, link) 튜플
-            }
+            channel_map[channel] = {"date": date_str, "stocks": []}
 
         channel_map[channel]["stocks"].append((stock, title, link))
 
@@ -163,18 +162,10 @@ def _build_tv_html(all_data: list) -> str:
 
     html = ""
     for channel, info in channel_map.items():
-        date_str = info["date"]
-        stocks   = info["stocks"]
-
-        # 종목 항목 렌더링
+        date_str   = info["date"]
         items_html = ""
-        for (stock, title, link) in stocks:
-            # 종목명이 있으면 굵게, 없으면 제목만 표시
-            if stock:
-                stock_html = f'<span class="tv-stock-name">{stock}</span>'
-            else:
-                stock_html = ""
-
+        for (stock, title, link) in info["stocks"]:
+            stock_html = f'<span class="tv-stock-name">{stock}</span>' if stock else ""
             if link:
                 title_html = (
                     f'<a href="{link}" target="_blank" rel="noopener" '
@@ -205,6 +196,32 @@ def _build_tv_html(all_data: list) -> str:
 
 
 def _build_analyst_html(all_data: list) -> str:
+    # FIX-ANA-1: _report_card를 함수 내부에 정의하여 들여쓰기 버그 수정
+    def _report_card(r: dict) -> str:
+        stock  = r.get("stock_name", "")
+        title  = r.get("report_title") or r.get("title", "")
+        broker = r.get("brokers") or r.get("source_name", "")
+        link   = r.get("link", "")
+        is_new = r.get("new_coverage", False)
+        if not link and stock:
+            enc  = stock.replace(" ", "+")
+            link = (f"https://finance.naver.com/research/company_list.naver"
+                    f"?searchType=keyword&keyword={enc}")
+        new_badge = '<span class="new-coverage-badge">신규 커버리지</span>' if is_new else ""
+        if link:
+            title_html = (f'<a href="{link}" target="_blank" rel="noopener" '
+                          f'style="color:#74c0fc;text-decoration:none;">{title}</a>')
+        else:
+            title_html = f'<span style="color:#74c0fc;">{title}</span>'
+        return (
+            f'<div class="analyst-card">'
+            f'<span class="analyst-stock">{stock}</span> '
+            f'<span class="analyst-broker">{broker}</span> '
+            f'{new_badge} '
+            f'{title_html}'
+            f'</div>'
+        )
+
     analyst_items = [d for d in all_data if d.get("source_type") == "애널리스트"]
     if not analyst_items:
         return '<p style="color:#666;">애널리스트 리포트 데이터 없음</p>'
@@ -213,33 +230,6 @@ def _build_analyst_html(all_data: list) -> str:
     new_cov      = [r for r in analyst_items if r.get("analyst_category") == "new_coverage"]
     single       = [r for r in analyst_items
                     if r.get("analyst_category") in ("single_broker", "first_in_6months")]
-
-def _report_card(r: dict) -> str:
-    stock  = r.get("stock_name", "")
-    title  = r.get("report_title") or r.get("title", "")
-    broker = r.get("brokers") or r.get("source_name", "")
-    link   = r.get("link", "")
-    is_new = r.get("new_coverage", False)
-    if not link and stock:
-        enc  = stock.replace(" ", "+")
-        link = (f"https://finance.naver.com/research/company_list.naver"
-                f"?searchType=keyword&keyword={enc}")
-    new_badge  = '<span class="new-coverage-badge">신규 커버리지</span>' if is_new else ""
-    # FIX-UI-3: 한 줄로 표시 (종목명 · 증권사 · 리포트 제목)
-    # summary 중복 제거
-    if link:
-        title_html = (f'<a href="{link}" target="_blank" rel="noopener" '
-                      f'style="color:#74c0fc;text-decoration:none;">{title}</a>')
-    else:
-        title_html = f'<span style="color:#74c0fc;">{title}</span>'
-    return (
-        f'<div class="analyst-card">'
-        f'<span class="analyst-stock">{stock}</span> '
-        f'<span class="analyst-broker">{broker}</span> '
-        f'{new_badge} '
-        f'{title_html}'
-        f'</div>'
-    )
 
     html = ""
     if simultaneous:
@@ -283,7 +273,6 @@ def _render_reasons(reasons: list) -> str:
         if not rd:
             continue
         if rl:
-            # FIX-UI-1: 점선 밑줄 제거 (text-decoration:none)
             items += (f'<li><a href="{rl}" target="_blank" rel="noopener" '
                       f'style="color:#adb5bd;text-decoration:none;">{rd}</a></li>')
         else:
@@ -292,20 +281,19 @@ def _render_reasons(reasons: list) -> str:
 
 
 def _is_positive_signal(sig) -> bool:
+    # FIX-SIG-1: "상승" 제거 → 중립 맥락 문장이 긍정으로 오판되는 문제 방지
     if not sig:
         return False
     sig_l = str(sig).lower()
-    return any(k in sig_l for k in ("긍정", "매수", "강력", "상승", "positive", "buy"))
+    return any(k in sig_l for k in ("긍정", "매수", "강력", "positive", "buy"))
 
 
 def _render_stock_detail(stock: dict) -> str:
     """
     V2-CARD: summary / catalyst / risk / channel_mentions 렌더링.
-    FIX-UI-2: channel_mentions에서 분야 태그 제거, 매체명만 색상으로 구분
     """
     html = ""
 
-    # 종목 요약
     summary = (stock.get("summary") or stock.get("description") or "").strip()
     if summary:
         html += (
@@ -314,7 +302,6 @@ def _render_stock_detail(stock: dict) -> str:
             f'<p class="stock-section-text">{summary}</p></div>'
         )
 
-    # 상승 촉매
     catalyst = (stock.get("catalyst") or stock.get("price_trend") or "").strip()
     if catalyst:
         html += (
@@ -323,7 +310,6 @@ def _render_stock_detail(stock: dict) -> str:
             f'<p class="stock-section-text">{catalyst}</p></div>'
         )
 
-    # 리스크
     risk = (stock.get("risk") or "").strip()
     if risk:
         html += (
@@ -332,8 +318,6 @@ def _render_stock_detail(stock: dict) -> str:
             f'<p class="stock-section-text">{risk}</p></div>'
         )
 
-    # 채널별 언급 내용
-    # FIX-UI-2: 분야 태그 제거, 매체명만 색상으로 표시
     cm_list = stock.get("channel_mentions", [])
     if cm_list:
         cm_items = ""
@@ -343,7 +327,6 @@ def _render_stock_detail(stock: dict) -> str:
             content = cm.get("content", "")
             url     = cm.get("url", "")
             meta    = _TAG_META.get(stype, {"bg": "#2d2d44", "color": "#adb5bd"})
-            # 매체명만 색상으로 표시 (분야 태그 제거)
             name_html = (
                 f'<span style="color:{meta["color"]};font-weight:600;">'
                 f'{sname}</span>'
@@ -484,7 +467,6 @@ def generate_html(
         else:
             chart_btn_html = ""
 
-        # V2-CARD: summary/catalyst/risk/channel_mentions 렌더링
         detail_html   = _render_stock_detail(stock)
         reasons_block = _render_reasons(reasons)
 
@@ -558,7 +540,6 @@ def generate_html(
         else:
             chart_btn_html = ""
 
-        # V2-CARD: 히든픽도 동일한 상세 렌더링 적용
         detail_html   = _render_stock_detail(hp)
         reasons_block = _render_reasons(reasons)
 
@@ -587,30 +568,10 @@ def generate_html(
     else:
         chart_data_js = "const chartDataMap = {};"
 
-    # ── 애널리스트 / TV / 아카이브 ───────────────────────────────────────────
+    # ── 애널리스트 / TV ───────────────────────────────────────────────────────
+    # FIX-ARC-1: 사용하지 않는 archive_html 생성 블록 제거
     analyst_html = _build_analyst_html(all_data)
     tv_html      = _build_tv_html(all_data)
-
-    archive_html = ""
-    try:
-        base_dir    = os.path.dirname(os.path.abspath(__file__))
-        archive_dir = os.path.normpath(os.path.join(base_dir, "..", "docs", "archive"))
-        if os.path.isdir(archive_dir) and gh_repo and "/" in gh_repo:
-            owner, repo = gh_repo.split("/", 1)
-            files = sorted(
-                [f for f in os.listdir(archive_dir) if f.endswith(".html")],
-                reverse=True,
-            )[:14]
-            if files:
-                links = "".join(
-                    f'<a href="https://{owner}.github.io/{repo}/archive/{f}" '
-                    f'target="_blank" rel="noopener" class="archive-link">'
-                    f'{f.replace(".html", "")}</a>'
-                    for f in files
-                )
-                archive_html = f'<div class="archive-list">{links}</div>'
-    except Exception as e:
-        print(f"  [ARCHIVE] 링크 생성 실패: {e}")
 
     # ── CSS ───────────────────────────────────────────────────────────────────
     css = """
@@ -854,17 +815,9 @@ a:hover { text-decoration: underline; }
   flex-wrap: wrap;
   gap: .4rem;
 }
-.analyst-card-header {
-  display: flex;
-  align-items: center;
-  gap: .5rem;
-  margin-bottom: .4rem;
-  flex-wrap: wrap;
-}
 .analyst-stock  { font-weight: 700; }
 .analyst-broker { font-size: .8rem; color: var(--text-muted); }
 .analyst-title  { font-size: .9rem; }
-.analyst-summary { font-size: .85rem; color: var(--text-muted); margin-top: .35rem; }
 .new-coverage-badge {
   font-size: .7rem;
   background: #1a3a2d;
@@ -924,18 +877,6 @@ a:hover { text-decoration: underline; }
   color: var(--border);
   font-size: .8rem;
 }
-
-/* ── 아카이브 ── */
-.archive-list { display: flex; flex-wrap: wrap; gap: .5rem; }
-.archive-link {
-  font-size: .82rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: .25rem .65rem;
-  color: var(--text-muted);
-}
-.archive-link:hover { border-color: var(--accent); color: var(--accent); }
 
 /* ── AI 전략 ── */
 .ai-strategy-box {
