@@ -133,30 +133,75 @@ def _build_tv_html(all_data: list) -> str:
                 if str(d.get("source_type", "")).lower().replace(" ", "") in tv_types]
     if not items:
         return '<p style="color:#666;">경제방송 데이터 없음</p>'
-    seen = set()
-    html = ""
-    for item in items[:20]:
-        title = item.get("title", "").strip()
-        if not title or title in seen:
-            continue
-        seen.add(title)
-        channel  = item.get("source_name", "")
-        date_str = item.get("date", "")
+
+    # 채널별로 묶기
+    from collections import defaultdict, OrderedDict
+    channel_map = OrderedDict()
+    seen_titles = set()
+
+    for item in items:
+        channel  = item.get("source_name", "알 수 없음").strip()
+        title    = item.get("title", "").strip()
+        stock    = item.get("stock_name", "").strip()
         link     = item.get("link") or item.get("url", "")
-        stock    = item.get("stock_name", "")
-        title_html  = (f'<a href="{link}" target="_blank" rel="noopener" '
-                       f'style="color:#74c0fc;text-decoration:none;">{title}</a>'
-                       if link else f'<span>{title}</span>')
-        stock_badge = (f'<span class="source-tag" style="background:#2d4a6b;">{stock}</span>'
-                       if stock else "")
-        html += (
-            f'<div class="tv-card">'
-            f'<div class="tv-card-header">{stock_badge}'
-            f'<span class="tv-channel">{channel}</span>'
-            f'<span class="tv-date">{date_str}</span></div>'
-            f'<div class="tv-card-title">{title_html}</div></div>'
-        )
-    return html or '<p style="color:#666;">경제방송 데이터 없음</p>'
+        date_str = item.get("date", "")
+
+        if not title or title in seen_titles:
+            continue
+        seen_titles.add(title)
+
+        if channel not in channel_map:
+            channel_map[channel] = {
+                "date": date_str,
+                "stocks": [],   # (stock_name, title, link) 튜플
+            }
+
+        channel_map[channel]["stocks"].append((stock, title, link))
+
+    if not channel_map:
+        return '<p style="color:#666;">경제방송 데이터 없음</p>'
+
+    html = ""
+    for channel, info in channel_map.items():
+        date_str = info["date"]
+        stocks   = info["stocks"]
+
+        # 종목 항목 렌더링
+        items_html = ""
+        for (stock, title, link) in stocks:
+            # 종목명이 있으면 굵게, 없으면 제목만 표시
+            if stock:
+                stock_html = f'<span class="tv-stock-name">{stock}</span>'
+            else:
+                stock_html = ""
+
+            if link:
+                title_html = (
+                    f'<a href="{link}" target="_blank" rel="noopener" '
+                    f'style="color:#adb5bd;text-decoration:none;">{title}</a>'
+                )
+            else:
+                title_html = f'<span style="color:#adb5bd;">{title}</span>'
+
+            if stock_html:
+                items_html += (
+                    f'<li>{stock_html}'
+                    f'<span class="tv-item-sep">·</span>'
+                    f'{title_html}</li>'
+                )
+            else:
+                items_html += f'<li>{title_html}</li>'
+
+        html += f"""
+<div class="tv-channel-card">
+  <div class="tv-channel-header">
+    <span class="tv-channel-name">📺 {channel}</span>
+    <span class="tv-date">{date_str}</span>
+  </div>
+  <ul class="tv-stock-list">{items_html}</ul>
+</div>"""
+
+    return html
 
 
 def _build_analyst_html(all_data: list) -> str:
@@ -830,23 +875,55 @@ a:hover { text-decoration: underline; }
 }
 
 /* ── TV 카드 ── */
-.tv-card {
+.tv-channel-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: .75rem 1rem;
-  margin-bottom: .6rem;
+  margin-bottom: .75rem;
 }
-.tv-card-header {
+.tv-channel-header {
   display: flex;
   align-items: center;
-  gap: .5rem;
+  justify-content: space-between;
+  margin-bottom: .55rem;
   flex-wrap: wrap;
-  margin-bottom: .3rem;
+  gap: .4rem;
 }
-.tv-channel { font-size: .8rem; color: #ffa94d; font-weight: 600; }
-.tv-date    { font-size: .75rem; color: var(--text-muted); margin-left: auto; }
-.tv-card-title { font-size: .9rem; }
+.tv-channel-name {
+  font-size: .9rem;
+  font-weight: 700;
+  color: #ffa94d;
+}
+.tv-date {
+  font-size: .75rem;
+  color: var(--text-muted);
+}
+.tv-stock-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+}
+.tv-stock-list li {
+  font-size: .88rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: baseline;
+  gap: .4rem;
+  flex-wrap: wrap;
+}
+.tv-stock-name {
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+.tv-item-sep {
+  color: var(--border);
+  font-size: .8rem;
+}
 
 /* ── 아카이브 ── */
 .archive-list { display: flex; flex-wrap: wrap; gap: .5rem; }
