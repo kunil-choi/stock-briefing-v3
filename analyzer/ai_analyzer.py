@@ -409,7 +409,7 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
       "rank": 1,
       "name": "종목명",
       "code": "종목코드",
-      "signal": "positive|negative|neutral 중 하나",
+      "signal": "긍정|부정|중립 중 하나",
       "summary": "기업 소개 2~3문장 (업종, 사업내용, 시장 내 위치)",
       "catalyst": "상승 촉매 2~3문장 (구체적 수치/이벤트/목표가 포함)",
       "risk": "핵심 리스크 1~2문장",
@@ -462,7 +462,7 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
 
 [작성 규칙]
 1. stocks: 관심종목 후보에서 가중치 점수 높은 순 최대 5개 선택
-2. signal: 언급 맥락 분석 — 긍정적=positive, 부정적=negative, 단순언급=neutral
+2. signal: 언급 맥락 분석 — 긍정적=긍정, 부정적=부정, 단순언급=중립
 3. summary / catalyst / risk: 반드시 작성, 빈 문자열 절대 금지
 4. channel_mentions: 위 원문 데이터에서 해당 종목을 실제로 언급한 채널만 기재 (최대 4개)
 5. hidden_picks: 반드시 위 [히든픽 후보] 목록에서만 선택, 임의 추가 절대 금지
