@@ -11,7 +11,7 @@ AI 주식 브리핑 분석 엔진
                (summary / catalyst / risk / channel_mentions 필드 추가)
 - V2-SYNC    : channel_mentions → reasons 동기화 블록 추가
 - FIX-ANA-2  : generate_market_summary 데드코드 제거
-               (market_summary는 메인 분석 JSON에서 수신하므로 별도 호출 불필요)
+- FIX-API-1  : Claude API 호출 실패 시 fallback HTML 반환 (try/except 추가)
 """
 
 import json
@@ -59,7 +59,6 @@ def _is_valid_stock_name(name: str) -> bool:
 # ── 채널 가중치 ───────────────────────────────────────────────────────────────
 
 def _channel_weight(subscribers: int) -> float:
-    """구독자 수 기반 채널 가중치 (로그 스케일, 0.5~3.0)"""
     if not subscribers or subscribers <= 0:
         return 0.5
     base = math.log10(max(subscribers, 10000)) - math.log10(100000)
@@ -82,10 +81,6 @@ def _build_channel_weight_map(channels_data: dict) -> dict:
 # ── 종목 코드 로드 ─────────────────────────────────────────────────────────────
 
 def load_stock_names() -> dict:
-    """
-    종목명 → 코드 딕셔너리 반환.
-    우선순위: 오늘 날짜 캐시 → KRX API → fallback 내장 목록
-    """
     today_kst = datetime.now(KST).strftime("%Y-%m-%d")
 
     if os.path.exists(STOCK_CACHE_FILE):
@@ -287,14 +282,7 @@ def extract_hidden_picks(mentions: dict, filtered_names: set,
 def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
                            all_data: list, today_date: str,
                            now_kst: str) -> str:
-    """
-    V2 수준의 Claude 분석 프롬프트.
-    - 종목별 summary / catalyst / risk / channel_mentions 필드 요청
-    - reasons 배열은 source_type / source_name / detail / source_url 구조
-    - hidden_picks는 반드시 hidden_candidates 목록에서만 선택
-    """
 
-    # 헤드라인 수집 (소스별 최대 60건)
     headlines = []
     for item in all_data[:150]:
         title   = (item.get("title") or "").strip()
@@ -312,10 +300,9 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
             if url:
                 line += f" [URL: {url}]"
             headlines.append(line)
-    headlines = headlines[:60]
+    headlines      = headlines[:60]
     headlines_text = "\n".join(headlines)
 
-    # 관심종목 (상위 15개) — 채널별 원문 snippet 포함
     top_stocks  = filtered_mentions[:15]
     stocks_info = []
     for rank, (name, data) in enumerate(top_stocks, 1):
@@ -326,15 +313,14 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         stocks_info.append(line)
         for ch_type, items in data["channels"].items():
             for item in items[:5]:
-                w_str = f"[가중치:{item.get('weight', 1.0):.1f}]"
-                link  = item.get("link", "")
+                w_str   = f"[가중치:{item.get('weight', 1.0):.1f}]"
+                link    = item.get("link", "")
                 url_str = f" [URL: {link}]" if link else ""
                 stocks_info.append(
                     f"   [{ch_type}]{w_str} {item['source_name']}: "
                     f"{item['snippet'][:200]}{url_str}"
                 )
 
-    # 히든픽 후보
     hidden_info = []
     for i, pick in enumerate(hidden_candidates, 1):
         name    = pick["name"]
@@ -353,97 +339,96 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
     stocks_text = "\n".join(stocks_info)
     hidden_text = "\n".join(hidden_info) if hidden_info else "해당 없음"
 
-    return f"""당신은 15년 경력의 한국 주식시장 전문 애널리스트입니다.
-아래 데이터를 분석하여 오늘의 주식 브리핑 JSON을 작성하세요.
+    prompt_json_structure = (
+        '{\n'
+        f'  "briefing_date": "{today_date}",\n'
+        '  "market_summary": "시장 전체 요약 (5개 단락, \\n\\n 구분, 각 단락 3~4문장. 시장개요/주요이슈/투자포인트/리스크/전망 순서)",\n'
+        '  "hot_sectors": [\n'
+        '    {"name": "섹터명", "reason": "주목 이유 1문장"}\n'
+        '  ],\n'
+        '  "stocks": [\n'
+        '    {\n'
+        '      "rank": 1,\n'
+        '      "name": "종목명",\n'
+        '      "code": "종목코드",\n'
+        '      "signal": "긍정|부정|중립 중 하나",\n'
+        '      "summary": "기업 소개 2~3문장 (업종, 사업내용, 시장 내 위치)",\n'
+        '      "catalyst": "상승 촉매 2~3문장 (구체적 수치/이벤트/목표가 포함)",\n'
+        '      "risk": "핵심 리스크 1~2문장",\n'
+        '      "channel_mentions": [\n'
+        '        {\n'
+        '          "source_type": "뉴스|경제방송|경제방송TV|유튜브|애널리스트 중 하나",\n'
+        '          "source_name": "채널명 또는 증권사명",\n'
+        '          "content": "이 채널에서 이 종목을 언급한 핵심 내용 1~2문장",\n'
+        '          "url": "원문 URL (없으면 빈 문자열)"\n'
+        '        }\n'
+        '      ],\n'
+        '      "channel_counts": {},\n'
+        '      "total_count": 0,\n'
+        '      "weighted_score": 0.0,\n'
+        '      "overlap_count": 0,\n'
+        '      "reasons": [\n'
+        '        {\n'
+        '          "source_type": "채널유형",\n'
+        '          "source_name": "출처명",\n'
+        '          "detail": "언급 내용 요약 1문장",\n'
+        '          "source_url": "URL 또는 빈 문자열"\n'
+        '        }\n'
+        '      ]\n'
+        '    }\n'
+        '  ],\n'
+        '  "hidden_picks": [\n'
+        '    {\n'
+        '      "rank": 1,\n'
+        '      "name": "종목명",\n'
+        '      "code": "종목코드",\n'
+        '      "signal": "positive",\n'
+        '      "summary": "기업 소개 2~3문장",\n'
+        '      "catalyst": "전문가가 주목한 이유 2~3문장 (구체적 근거 포함)",\n'
+        '      "risk": "핵심 리스크 1문장",\n'
+        '      "channel_type": "애널리스트|경제방송TV|경제방송 중 하나",\n'
+        '      "channel_name": "채널명 또는 증권사명",\n'
+        '      "reasons": [\n'
+        '        {\n'
+        '          "source_type": "채널유형",\n'
+        '          "source_name": "출처명",\n'
+        '          "detail": "언급 내용 요약",\n'
+        '          "source_url": "URL 또는 빈 문자열"\n'
+        '        }\n'
+        '      ]\n'
+        '    }\n'
+        '  ],\n'
+        '  "ai_strategy": "오늘의 AI 투자 전략 (300자 이상, 구체적 매수/비중/리스크관리 액션 포함)"\n'
+        '}'
+    )
 
-[분석 날짜] {today_date} ({now_kst} KST)
+    rules = (
+        "[작성 규칙]\n"
+        "1. stocks: 관심종목 후보에서 가중치 점수 높은 순 최대 5개 선택\n"
+        "2. signal: 언급 맥락 분석 — 긍정적=긍정, 부정적=부정, 단순언급=중립\n"
+        "3. summary / catalyst / risk: 반드시 작성, 빈 문자열 절대 금지\n"
+        "4. channel_mentions: 위 원문 데이터에서 해당 종목을 실제로 언급한 채널만 기재 (최대 4개)\n"
+        "5. hidden_picks: 반드시 위 [히든픽 후보] 목록에서만 선택, 임의 추가 절대 금지\n"
+        "6. hidden_picks 후보가 없으면 빈 배열 [] 반환\n"
+        "7. market_summary: 5단락, \\n\\n으로 구분, 각 단락 3~4문장, 400자 이상\n"
+        "8. ai_strategy: 구체적 종목/비중/매수전략/리스크 관리 포함, 300자 이상\n"
+        "9. channel_counts / total_count / weighted_score / overlap_count: 위 데이터 값 그대로\n"
+        "10. reasons의 텍스트 키는 반드시 \"detail\" 사용 (\"reason\" 사용 금지)\n"
+        "11. URL은 원문 데이터에 있는 것만 사용, 없으면 빈 문자열\n"
+        "12. 국내 상장 종목만 포함, 해외 주식/지수/ETF 제외"
+    )
 
-[수집된 원문 데이터 - 채널별 언급 내용]
-{headlines_text}
-
-[관심종목 후보 - 2개 이상 채널 유형에서 언급, 가중치 점수 기준 정렬]
-{stocks_text}
-
-[히든픽 후보 - 전문가 소스(애널리스트/경제방송TV/경제방송)에서만 단독 언급]
-{hidden_text}
-
-[출력 형식] 반드시 아래 JSON 구조만 출력:
-{CB}json
-{{
-  "briefing_date": "{today_date}",
-  "market_summary": "시장 전체 요약 (5개 단락, \\n\\n 구분, 각 단락 3~4문장. 시장개요/주요이슈/투자포인트/리스크/전망 순서)",
-  "hot_sectors": [
-    {{"name": "섹터명", "reason": "주목 이유 1문장"}}
-  ],
-  "stocks": [
-    {{
-      "rank": 1,
-      "name": "종목명",
-      "code": "종목코드",
-      "signal": "긍정|부정|중립 중 하나",
-      "summary": "기업 소개 2~3문장 (업종, 사업내용, 시장 내 위치)",
-      "catalyst": "상승 촉매 2~3문장 (구체적 수치/이벤트/목표가 포함)",
-      "risk": "핵심 리스크 1~2문장",
-      "channel_mentions": [
-        {{
-          "source_type": "뉴스|경제방송|경제방송TV|유튜브|애널리스트 중 하나",
-          "source_name": "채널명 또는 증권사명",
-          "content": "이 채널에서 이 종목을 언급한 핵심 내용 1~2문장",
-          "url": "원문 URL (없으면 빈 문자열)"
-        }}
-      ],
-      "channel_counts": {{}},
-      "total_count": 0,
-      "weighted_score": 0.0,
-      "overlap_count": 0,
-      "reasons": [
-        {{
-          "source_type": "채널유형",
-          "source_name": "출처명",
-          "detail": "언급 내용 요약 1문장",
-          "source_url": "URL 또는 빈 문자열"
-        }}
-      ]
-    }}
-  ],
-  "hidden_picks": [
-    {{
-      "rank": 1,
-      "name": "종목명",
-      "code": "종목코드",
-      "signal": "positive",
-      "summary": "기업 소개 2~3문장",
-      "catalyst": "전문가가 주목한 이유 2~3문장 (구체적 근거 포함)",
-      "risk": "핵심 리스크 1문장",
-      "channel_type": "애널리스트|경제방송TV|경제방송 중 하나",
-      "channel_name": "채널명 또는 증권사명",
-      "reasons": [
-        {{
-          "source_type": "채널유형",
-          "source_name": "출처명",
-          "detail": "언급 내용 요약",
-          "source_url": "URL 또는 빈 문자열"
-        }}
-      ]
-    }}
-  ],
-  "ai_strategy": "오늘의 AI 투자 전략 (300자 이상, 구체적 매수/비중/리스크관리 액션 포함)"
-}}
-{CB}
-
-[작성 규칙]
-1. stocks: 관심종목 후보에서 가중치 점수 높은 순 최대 5개 선택
-2. signal: 언급 맥락 분석 — 긍정적=긍정, 부정적=부정, 단순언급=중립
-3. summary / catalyst / risk: 반드시 작성, 빈 문자열 절대 금지
-4. channel_mentions: 위 원문 데이터에서 해당 종목을 실제로 언급한 채널만 기재 (최대 4개)
-5. hidden_picks: 반드시 위 [히든픽 후보] 목록에서만 선택, 임의 추가 절대 금지
-6. hidden_picks 후보가 없으면 빈 배열 [] 반환
-7. market_summary: 5단락, \\n\\n으로 구분, 각 단락 3~4문장, 400자 이상
-8. ai_strategy: 구체적 종목/비중/매수전략/리스크 관리 포함, 300자 이상
-9. channel_counts / total_count / weighted_score / overlap_count: 위 데이터 값 그대로
-10. reasons의 텍스트 키는 반드시 "detail" 사용 ("reason" 사용 금지)
-11. URL은 원문 데이터에 있는 것만 사용, 없으면 빈 문자열
-12. 국내 상장 종목만 포함, 해외 주식/지수/ETF 제외"""
+    return (
+        f"당신은 15년 경력의 한국 주식시장 전문 애널리스트입니다.\n"
+        f"아래 데이터를 분석하여 오늘의 주식 브리핑 JSON을 작성하세요.\n\n"
+        f"[분석 날짜] {today_date} ({now_kst} KST)\n\n"
+        f"[수집된 원문 데이터 - 채널별 언급 내용]\n{headlines_text}\n\n"
+        f"[관심종목 후보 - 2개 이상 채널 유형에서 언급, 가중치 점수 기준 정렬]\n{stocks_text}\n\n"
+        f"[히든픽 후보 - 전문가 소스(애널리스트/경제방송TV/경제방송)에서만 단독 언급]\n{hidden_text}\n\n"
+        f"[출력 형식] 반드시 아래 JSON 구조만 출력:\n"
+        f"```json\n{prompt_json_structure}\n```\n\n"
+        f"{rules}"
+    )
 
 
 # ── source_url 복원 ───────────────────────────────────────────────────────────
@@ -551,16 +536,24 @@ def analyze_and_generate_html(
             all_data, today_date, "오늘 분석 가능한 종목이 없습니다.",
         )
 
-    # ── 5. Claude 호출 ───────────────────────────────────────────────────────
+    # ── 5. Claude 프롬프트 생성 ──────────────────────────────────────────────
     prompt = build_analysis_prompt(
         filtered, hidden_candidates, all_data, today_date, now_str
     )
     print(f"[AI분석] Claude 호출 "
           f"(관심종목 {len(filtered)}개, 히든픽 후보 {len(hidden_candidates)}개)")
 
-    response = call_claude_with_retry(prompt, api_key, max_tokens=16000)
+    # ── 6. Claude API 호출 (FIX-API-1: 예외 처리 추가) ───────────────────────
+    try:
+        response = call_claude_with_retry(prompt, api_key, max_tokens=16000)
+    except Exception as e:
+        print(f"[AI분석] Claude API 호출 실패: {e}")
+        return _fallback_html(
+            channels_data, gh_repo, market_overview,
+            all_data, today_date, "AI 분석 중 오류가 발생했습니다.",
+        )
 
-    # ── 6. JSON 파싱 ─────────────────────────────────────────────────────────
+    # ── 7. JSON 파싱 ─────────────────────────────────────────────────────────
     result = _try_parse_json(response)
     if not result:
         print("[AI분석] JSON 파싱 실패 → fallback HTML 반환")
@@ -573,7 +566,7 @@ def analyze_and_generate_html(
           f"관심종목 {len(result.get('stocks', []))}개, "
           f"히든픽 {len(result.get('hidden_picks', []))}개")
 
-    # ── 7. 실제 집계값으로 카운트 보정 ──────────────────────────────────────
+    # ── 8. 실제 집계값으로 카운트 보정 ──────────────────────────────────────
     mention_dict = dict(filtered)
     for stock in result.get("stocks", []):
         name = stock.get("name", "")
@@ -584,7 +577,7 @@ def analyze_and_generate_html(
             stock["weighted_score"] = round(d["weighted_score"], 2)
             stock["overlap_count"]  = len(d["channel_types"])
 
-    # ── 8. 히든픽 보정 및 중복 제거 ─────────────────────────────────────────
+    # ── 9. 히든픽 보정 및 중복 제거 ─────────────────────────────────────────
     hidden_dict = {p["name"]: p for p in hidden_candidates}
     for hp in result.get("hidden_picks", []):
         name = hp.get("name", "")
@@ -603,7 +596,7 @@ def analyze_and_generate_html(
         if not hp.get("_remove")
     ]
 
-    # ── 9. source_url 복원 ───────────────────────────────────────────────────
+    # ── 10. source_url 복원 ──────────────────────────────────────────────────
     for stock in result.get("stocks", []):
         for reason in stock.get("reasons", []):
             _restore_source_url(reason, all_data)
@@ -611,7 +604,7 @@ def analyze_and_generate_html(
         for reason in pick.get("reasons", []):
             _restore_source_url(reason, all_data)
 
-    # ── 10. V2-SYNC: channel_mentions → reasons 동기화 ───────────────────────
+    # ── 11. V2-SYNC: channel_mentions → reasons 동기화 ───────────────────────
     for stock in result.get("stocks", []) + result.get("hidden_picks", []):
         cm = stock.get("channel_mentions", [])
         if cm and not stock.get("reasons"):
@@ -625,11 +618,11 @@ def analyze_and_generate_html(
                 for m in cm
             ]
 
-    # ── 11. 검증 ─────────────────────────────────────────────────────────────
+    # ── 12. 검증 ─────────────────────────────────────────────────────────────
     from .validation import validate_stocks
     result = validate_stocks(result, all_data, api_key, stock_map)
 
-    # ── 12. 결과 저장 (chart_base64 제외) ────────────────────────────────────
+    # ── 13. 결과 저장 (chart_base64 제외) ────────────────────────────────────
     save_data = json.loads(json.dumps(result))
     for stock in save_data.get("stocks", []):
         stock.pop("chart_base64", None)
@@ -640,7 +633,7 @@ def analyze_and_generate_html(
         json.dump(save_data, f, ensure_ascii=False, indent=2)
     print(f"[AI분석] 결과 저장: {OUTPUT_FILE}")
 
-    # ── 13. HTML 생성 ────────────────────────────────────────────────────────
+    # ── 14. HTML 생성 ────────────────────────────────────────────────────────
     gh_token = os.environ.get("GH_TOKEN", "")
     from .html_generator import generate_html
     html = generate_html(
