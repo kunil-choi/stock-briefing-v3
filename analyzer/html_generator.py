@@ -236,8 +236,9 @@ def _render_reasons(reasons: list) -> str:
         if not rd:
             continue
         if rl:
+            # FIX-UI-1: 점선 밑줄 제거 (text-decoration:none)
             items += (f'<li><a href="{rl}" target="_blank" rel="noopener" '
-                      f'style="color:#adb5bd;text-decoration:underline dotted;">{rd}</a></li>')
+                      f'style="color:#adb5bd;text-decoration:none;">{rd}</a></li>')
         else:
             items += f'<li>{rd}</li>'
     return f'<ul class="reasons-list">{items}</ul>' if items else ""
