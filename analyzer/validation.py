@@ -273,13 +273,14 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
         for item in all_data_list:
             st   = item.get("source_type", "기타")
             text = " ".join(filter(None, [
-                item.get("title",      ""),
-                item.get("summary",    ""),
-                item.get("content",    ""),
-                item.get("transcript", ""),
-                item.get("stock_name", ""),
-            ])).lower()
-            source_pool.setdefault(st, []).append(text)
+              item.get("title",      "") or "",
+              item.get("summary",    "") or "",
+              item.get("content",    "") or "",
+              item.get("transcript", "") or "",
+              item.get("stock_name", "") or "",
+           ])).strip().lower()
+           if text:   # ← 빈 문자열은 풀에 넣지 않음
+               source_pool.setdefault(st, []).append(text)
 
         for stype, texts in source_pool.items():
             print(f"  [DATA] {stype}: {len(texts)}건")
@@ -299,7 +300,7 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
                     if not matched_texts:
                         verified_reasons.append(reason)
                         continue
-                    if any(_name_in_text(name, t) for t in matched_texts):
+                    if any(_name_in_text(name, t) for t in matched_texts if t):
                         verified_reasons.append(reason)
                     else:
                         removed_sources.append(reason_stype or "기타")
