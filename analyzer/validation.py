@@ -1,4 +1,17 @@
 # analyzer/validation.py
+"""
+AI 주식 브리핑 검증 엔진
+
+수정 이력:
+- BUG-V-1  : 팩트체크 후 보호 필드 덮어쓰기 방지
+- BUG-V-3  : reasons "reason" 필드 → "detail"로 매핑
+- BUG-V-4  : 차트 데이터 부족 시 7일 → 3일 재시도
+- BUG-V-11 : 보호 필드 복원 로직 강화
+- FIX-PRICE-1: verified_price를 int/None으로 평탄화
+- FIX-VAL-1: source_pool None 필터 처리 (NoneType iterable 오류 수정)
+- FIX-VAL-2: _PROTECTED_FIELDS에 "signal" 추가 (팩트체크 후 signal 덮어쓰기 방지)
+"""
+
 import json
 import os
 import re
@@ -34,11 +47,11 @@ TYPE_ALIASES = {
     "애널리스트": ["애널리스트", "리포트", "report", "증권사"],
 }
 
-# BUG-V-1: 팩트체크 후 Claude가 덮어쓰면 안 되는 보호 필드 목록
+# FIX-VAL-2: "signal" 추가 → 팩트체크 Claude가 signal 값을 임의 변경하지 못하도록 보호
 _PROTECTED_FIELDS = [
     "verified_price", "market", "naver_code", "code", "naver_url",
     "chart_base64", "rank", "total_count", "overlap_count",
-    "weighted_score", "channel_counts", "channel_type",
+    "weighted_score", "channel_counts", "channel_type", "signal",
 ]
 
 
@@ -218,7 +231,7 @@ def _fetch_chart(name: str, code: str) -> str | None:
     return None
 
 
-# ── FIX-PRICE-1: verified_price를 int/None으로 평탄화하는 헬퍼 ───────────────
+# ── FIX-PRICE-1: verified_price를 int/None으로 평탄화 ────────────────────────
 
 def _fetch_price_with_fallback(name: str, code: str) -> tuple[int | None, str]:
     """
@@ -269,8 +282,10 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
     if all_data_list:
         print("\n[검증-A] 각 소스별 원본 데이터 재확인...")
         source_pool: dict[str, list[str]] = {}
+
         for item in all_data_list:
             st = item.get("source_type", "기타")
+            # FIX-VAL-1: filter(None, ...) 으로 None/빈문자열 제거 후 join
             text = " ".join(filter(None, [
                 item.get("title",      "") or "",
                 item.get("summary",    "") or "",
@@ -299,6 +314,7 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
                     if not matched_texts:
                         verified_reasons.append(reason)
                         continue
+                    # FIX-VAL-1: if t 조건으로 None/빈문자열 건너뜀
                     if any(_name_in_text(name, t) for t in matched_texts if t):
                         verified_reasons.append(reason)
                     else:
