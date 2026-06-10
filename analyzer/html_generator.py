@@ -391,14 +391,18 @@ def generate_html(
                              f"?query={name.replace(' ', '+')}")
 
         sig_l = (signal or "").lower()
-        if "강력" in sig_l or "매수" in sig_l:
-            sig_class, sig_color = "signal-strong-buy", "#ff6b6b"
-        elif "긍정" in sig_l or "positive" in sig_l:
+        if "긍정" in sig_l or "positive" in sig_l:
             sig_class, sig_color = "signal-positive", "#ffa94d"
+            signal = "긍정"
+        elif "부정" in sig_l or "negative" in sig_l:
+            sig_class, sig_color = "signal-negative", "#ff6b6b"
+            signal = "부정"
         elif "중립" in sig_l or "neutral" in sig_l:
             sig_class, sig_color = "signal-neutral", "#adb5bd"
+            signal = "중립"
         else:
             sig_class, sig_color = "signal-default", "#74c0fc"
+            signal = "중립"
 
         source_tags_html = ""
         for src_type, cnt in channel_cnts.items():
