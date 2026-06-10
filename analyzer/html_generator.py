@@ -1028,8 +1028,6 @@ a:hover { text-decoration: underline; }
         + _section("🤖 AI 투자 전략",
                    f'<div class="ai-strategy-box">{ai_strategy or "분석 데이터 없음"}</div>',
                    show=bool((ai_strategy or "").strip()))
-        + _section("🗂 지난 브리핑", archive_html,
-                   show=bool(archive_html))
     )
 
     return f"""<!DOCTYPE html>
