@@ -802,8 +802,12 @@ a:hover { text-decoration: underline; }
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: .85rem 1rem;
-  margin-bottom: .6rem;
+  padding: .6rem 1rem;
+  margin-bottom: .5rem;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .4rem;
 }
 .analyst-card-header {
   display: flex;
