@@ -17,6 +17,8 @@ AI 주식 브리핑 HTML 생성 엔진
 - FIX-ANA-1: _build_analyst_html 들여쓰기 버그 수정 (_report_card 내부화)
 - FIX-ARC-1: 사용하지 않는 archive_html 생성 블록 제거
 - FIX-SIG-1: _is_positive_signal에서 "상승" 키워드 제거
+- FIX-SIG-2: filtered_hidden signal 없을 때 오늘의 픽 전체 미표시 버그 수정
+- FIX-JS-1 : showChart 방어코드 추가 (key 없을 때 빈 이미지 방지)
 """
 
 import os
@@ -381,8 +383,15 @@ def generate_html(
         if cc:
             stock["overlap_count"] = sum(1 for v in cc.values() if v and int(v) > 0)
 
-    filtered_stocks = [s for s in stocks      if s.get("overlap_count", 0) >= 2]
-    filtered_hidden = [h for h in hidden_picks if _is_positive_signal(h.get("signal"))]
+    filtered_stocks = [s for s in stocks if s.get("overlap_count", 0) >= 2]
+
+    # FIX-SIG-2: signal 없는 경우도 포함, 긍정/positive/빈값 모두 허용
+    filtered_hidden = [
+        h for h in hidden_picks
+        if (not h.get("signal"))
+        or _is_positive_signal(h.get("signal"))
+        or str(h.get("signal", "")).strip().lower() in ("positive", "긍정", "")
+    ]
 
     # ── 지표 / 요약 / 섹터 ───────────────────────────────────────────────────
     market_indicators_html = _build_market_indicators(market_overview)
@@ -569,7 +578,6 @@ def generate_html(
         chart_data_js = "const chartDataMap = {};"
 
     # ── 애널리스트 / TV ───────────────────────────────────────────────────────
-    # FIX-ARC-1: 사용하지 않는 archive_html 생성 블록 제거
     analyst_html = _build_analyst_html(all_data)
     tv_html      = _build_tv_html(all_data)
 
@@ -971,6 +979,37 @@ a:hover { text-decoration: underline; }
                    show=bool((ai_strategy or "").strip()))
     )
 
+    # ── JS ────────────────────────────────────────────────────────────────────
+    js = f"""
+{chart_data_js}
+
+// FIX-JS-1: key 없거나 데이터 없을 때 모달 열지 않음
+function showChart(key, name) {{
+  const src = chartDataMap[key];
+  if (!src) {{
+    console.warn('차트 데이터 없음:', key);
+    return;
+  }}
+  document.getElementById('modalImg').src   = src;
+  document.getElementById('modalTitle').textContent = name + ' 차트';
+  document.getElementById('chartModal').classList.add('active');
+}}
+
+function closeChart(e) {{
+  if (e.target === document.getElementById('chartModal')) {{
+    document.getElementById('chartModal').classList.remove('active');
+    document.getElementById('modalImg').src = '';
+  }}
+}}
+
+document.addEventListener('keydown', function(e) {{
+  if (e.key === 'Escape') {{
+    document.getElementById('chartModal').classList.remove('active');
+    document.getElementById('modalImg').src = '';
+  }}
+}});
+"""
+
     return f"""<!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -998,30 +1037,11 @@ a:hover { text-decoration: underline; }
   <div class="modal-box">
     <button class="modal-close"
       onclick="document.getElementById('chartModal').classList.remove('active')">✕</button>
-    <div class="modal-title" id="chartModalTitle"></div>
-    <img class="modal-img" id="chartModalImg" src="" alt="차트">
+    <div class="modal-title" id="modalTitle"></div>
+    <img class="modal-img" id="modalImg" src="" alt="차트">
   </div>
 </div>
 
-<script>
-{chart_data_js}
-function showChart(key, name) {{
-  var src = chartDataMap[key];
-  if (!src) {{ alert('차트 데이터가 없습니다.'); return; }}
-  document.getElementById('chartModalTitle').textContent = name + ' 차트';
-  document.getElementById('chartModalImg').src = src;
-  document.getElementById('chartModal').classList.add('active');
-}}
-function closeChart(e) {{
-  if (e.target.id === 'chartModal') {{
-    document.getElementById('chartModal').classList.remove('active');
-  }}
-}}
-document.addEventListener('keydown', function(e) {{
-  if (e.key === 'Escape') {{
-    document.getElementById('chartModal').classList.remove('active');
-  }}
-}});
-</script>
+<script>{js}</script>
 </body>
 </html>"""
