@@ -254,7 +254,7 @@ def _is_positive_signal(sig) -> bool:
 def _render_stock_detail(stock: dict) -> str:
     """
     V2-CARD: summary / catalyst / risk / channel_mentions 렌더링.
-    각 필드가 있을 때만 해당 섹션을 출력한다.
+    FIX-UI-2: channel_mentions에서 분야 태그 제거, 매체명만 색상으로 구분
     """
     html = ""
 
@@ -286,6 +286,7 @@ def _render_stock_detail(stock: dict) -> str:
         )
 
     # 채널별 언급 내용
+    # FIX-UI-2: 분야 태그 제거, 매체명만 색상으로 표시
     cm_list = stock.get("channel_mentions", [])
     if cm_list:
         cm_items = ""
@@ -295,16 +296,20 @@ def _render_stock_detail(stock: dict) -> str:
             content = cm.get("content", "")
             url     = cm.get("url", "")
             meta    = _TAG_META.get(stype, {"bg": "#2d2d44", "color": "#adb5bd"})
-            label   = (f'<span class="source-tag" '
-                       f'style="background:{meta["bg"]};color:{meta["color"]};">'
-                       f'{stype}</span>')
+            # 매체명만 색상으로 표시 (분야 태그 제거)
+            name_html = (
+                f'<span style="color:{meta["color"]};font-weight:600;">'
+                f'{sname}</span>'
+            )
             if url:
-                text_html = (f'<a href="{url}" target="_blank" rel="noopener" '
-                             f'style="color:#adb5bd;text-decoration:underline dotted;">'
-                             f'{content}</a>')
+                text_html = (
+                    f'<a href="{url}" target="_blank" rel="noopener" '
+                    f'style="color:#adb5bd;text-decoration:none;">'
+                    f'{content}</a>'
+                )
             else:
-                text_html = content
-            cm_items += f'<li>{label} <strong>{sname}</strong> {text_html}</li>'
+                text_html = f'<span style="color:#8b949e;">{content}</span>'
+            cm_items += f'<li>{name_html} {text_html}</li>'
         html += (
             f'<div class="stock-section">'
             f'<span class="stock-section-label">📢 채널별 언급 내용</span>'
