@@ -767,6 +767,10 @@ a:hover { text-decoration: underline; }
   line-height: 1.65;
 }
 
+/* ── 카드 본문 여백 ── */
+.stock-card-body { padding-top: .25rem; }
+.hp-card-body    { padding-top: .25rem; }
+
 /* ── 이유 목록 ── */
 .reasons-list { list-style: disc; padding-left: 1.2rem; margin-top: .4rem; }
 .reasons-list li {
