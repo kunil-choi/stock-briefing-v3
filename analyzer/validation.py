@@ -235,7 +235,6 @@ def _fetch_price_with_fallback(name: str, code: str) -> tuple[int | None, str]:
         result = fetch_naver_stock_price(name, code_override=code)
         if result:
             price_raw = result.get("price")
-            # 문자열 "75,400" → 정수 75400
             if isinstance(price_raw, str):
                 price_int = int(re.sub(r"[^\d]", "", price_raw)) if re.search(r"\d", price_raw) else None
             elif isinstance(price_raw, (int, float)):
@@ -263,7 +262,7 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
         for stock in stock_list:
             _normalize_reasons(stock)
 
-    all_data_list  = _normalize_all_data(all_data)
+    all_data_list = _normalize_all_data(all_data)
     _cached_verify, _get_code = _cached_verify_factory(stock_map)
 
     # ── 검증-A: 원본 데이터 재확인 ────────────────────────────────────────────
@@ -271,16 +270,16 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
         print("\n[검증-A] 각 소스별 원본 데이터 재확인...")
         source_pool: dict[str, list[str]] = {}
         for item in all_data_list:
-            st   = item.get("source_type", "기타")
+            st = item.get("source_type", "기타")
             text = " ".join(filter(None, [
-              item.get("title",      "") or "",
-              item.get("summary",    "") or "",
-              item.get("content",    "") or "",
-              item.get("transcript", "") or "",
-              item.get("stock_name", "") or "",
-           ])).strip().lower()
-           if text:   # ← 빈 문자열은 풀에 넣지 않음
-               source_pool.setdefault(st, []).append(text)
+                item.get("title",      "") or "",
+                item.get("summary",    "") or "",
+                item.get("content",    "") or "",
+                item.get("transcript", "") or "",
+                item.get("stock_name", "") or "",
+            ])).strip().lower()
+            if text:
+                source_pool.setdefault(st, []).append(text)
 
         for stype, texts in source_pool.items():
             print(f"  [DATA] {stype}: {len(texts)}건")
@@ -330,7 +329,6 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
 
             stock["market"] = "국내"
 
-            # 코드 확보
             code = str(
                 stock.get("code", "") or
                 stock.get("naver_code", "") or
@@ -346,7 +344,6 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
                 stock["naver_code"] = code
                 stock["code"]       = code
 
-                # FIX-PRICE-1: int 또는 None, naver_url 동시 설정
                 price_int, naver_url = _fetch_price_with_fallback(name, code)
                 stock["verified_price"] = price_int
                 stock["naver_url"]      = naver_url
@@ -356,14 +353,12 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
                 else:
                     print(f"  [PRICE] {name}: 조회 실패 (링크: {naver_url})")
 
-                # 차트 생성
                 stock["chart_base64"] = _fetch_chart(name, code)
 
             else:
                 print(f"  [WARN] {name}: 코드 조회 실패 → 종목 유지, 주가/차트 없음")
                 stock["verified_price"] = None
                 stock["chart_base64"]   = None
-                # 이름 기반 검색 URL은 html_generator에서 자동 생성
                 stock["naver_url"]      = (
                     f"https://finance.naver.com/search/searchResult.naver"
                     f"?query={name.replace(' ', '+')}"
@@ -414,7 +409,6 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
         company_block = "\n".join(company_info_lines) if company_info_lines else "기업정보 없음"
         price_block   = "\n".join(price_info_lines)   if price_info_lines   else "주가 데이터 없음"
 
-        # 차트 제외한 팩트체크용 사본
         check_target = json.loads(json.dumps(data, ensure_ascii=False))
         for key in ["stocks", "hidden_picks"]:
             for stock in check_target.get(key, []):
@@ -475,7 +469,6 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
                     if field in orig_stock:
                         corr_stock[field] = orig_stock[field]
 
-                # source_url 복원
                 corr_reasons = corr_stock.get("reasons", [])
                 orig_reasons = orig_stock.get("reasons", [])
                 if isinstance(corr_reasons, list):
@@ -490,7 +483,7 @@ def validate_stocks(data: dict, all_data=None, api_key: str = "",
             if corr_list:
                 data[key] = corr_list
 
-        # FIX-KEY-1: ai_strategy 키로 저장 (html_generator와 일치)
+        # FIX-KEY-1: ai_strategy 키로 저장
         for try_key in ("ai_strategy", "investment_strategy"):
             val = corrected.get(try_key, "")
             if isinstance(val, str) and val.strip():
