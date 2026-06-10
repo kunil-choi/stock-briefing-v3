@@ -169,30 +169,32 @@ def _build_analyst_html(all_data: list) -> str:
     single       = [r for r in analyst_items
                     if r.get("analyst_category") in ("single_broker", "first_in_6months")]
 
-    def _report_card(r: dict) -> str:
-        stock   = r.get("stock_name", "")
-        title   = r.get("report_title") or r.get("title", "")
-        broker  = r.get("brokers") or r.get("source_name", "")
-        summary = r.get("summary", "")
-        link    = r.get("link", "")
-        is_new  = r.get("new_coverage", False)
-        if not link and stock:
-            enc  = stock.replace(" ", "+")
-            link = (f"https://finance.naver.com/research/company_list.naver"
-                    f"?searchType=keyword&keyword={enc}")
-        new_badge    = '<span class="new-coverage-badge">신규 커버리지</span>' if is_new else ""
-        title_html   = (f'<a href="{link}" target="_blank" rel="noopener" '
-                        f'style="color:#74c0fc;text-decoration:none;">{title}</a>'
-                        if link else f'<span>{title}</span>')
-        summary_html = f'<p class="analyst-summary">{summary}</p>' if summary else ""
-        return (
-            f'<div class="analyst-card">'
-            f'<div class="analyst-card-header">'
-            f'<span class="analyst-stock">{stock}</span>{new_badge}'
-            f'<span class="analyst-broker">{broker}</span></div>'
-            f'<div class="analyst-title">{title_html}</div>'
-            f'{summary_html}</div>'
-        )
+def _report_card(r: dict) -> str:
+    stock  = r.get("stock_name", "")
+    title  = r.get("report_title") or r.get("title", "")
+    broker = r.get("brokers") or r.get("source_name", "")
+    link   = r.get("link", "")
+    is_new = r.get("new_coverage", False)
+    if not link and stock:
+        enc  = stock.replace(" ", "+")
+        link = (f"https://finance.naver.com/research/company_list.naver"
+                f"?searchType=keyword&keyword={enc}")
+    new_badge  = '<span class="new-coverage-badge">신규 커버리지</span>' if is_new else ""
+    # FIX-UI-3: 한 줄로 표시 (종목명 · 증권사 · 리포트 제목)
+    # summary 중복 제거
+    if link:
+        title_html = (f'<a href="{link}" target="_blank" rel="noopener" '
+                      f'style="color:#74c0fc;text-decoration:none;">{title}</a>')
+    else:
+        title_html = f'<span style="color:#74c0fc;">{title}</span>'
+    return (
+        f'<div class="analyst-card">'
+        f'<span class="analyst-stock">{stock}</span> '
+        f'<span class="analyst-broker">{broker}</span> '
+        f'{new_badge} '
+        f'{title_html}'
+        f'</div>'
+    )
 
     html = ""
     if simultaneous:
