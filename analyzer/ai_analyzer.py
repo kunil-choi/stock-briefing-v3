@@ -12,8 +12,6 @@ AI 주식 브리핑 분석 엔진
 - V2-SYNC    : channel_mentions → reasons 동기화 블록 추가
 - FIX-ANA-2  : generate_market_summary 데드코드 제거
 - FIX-API-1  : Claude API 호출 실패 시 fallback HTML 반환 (try/except 추가)
-- FIX-PARSE  : _try_parse_json() 잘린 JSON 복구 로직 추가
-- FIX-FALLBACK: JSON 파싱 실패 시 기존 briefing_data.json 활용 fallback 개선
 """
 
 import json
@@ -56,36 +54,6 @@ def _is_valid_stock_name(name: str) -> bool:
     if re.match(r'^[A-Z]{2,3}$', name):
         return False
     return True
-
-
-# ── 종목명 단어 경계 매칭 ─────────────────────────────────────────────────────
-# 한국어는 공백 기반 단어 경계(\\b)가 없어, "HD현대"가 "HD현대중공업" 안에서도
-# 단순 in 연산으로 매칭되는 오염 문제가 발생함.
-# → 매칭 위치의 바로 앞·뒤 문자가 한글/영문 숫자(즉, 종목명 구성 가능 문자)이면
-#   더 긴 이름의 일부이므로 무효 처리.
-_STOCK_CHAR = re.compile(r'[가-힣A-Za-z0-9&]')
-
-
-def _find_standalone(text: str, name: str) -> int:
-    """
-    text 내에서 name이 독립적인 의미 단위로 등장하는 첫 번째 인덱스를 반환.
-    더 긴 종목명의 부분 문자열로만 등장하면 -1 반환.
-
-    예) text="HD현대중공업 실적", name="HD현대"  → -1  (중공업이 뒤에 붙음)
-        text="HD현대 실적",    name="HD현대"  → 0   (뒤가 공백)
-    """
-    start = 0
-    nlen  = len(name)
-    while True:
-        idx = text.find(name, start)
-        if idx == -1:
-            return -1
-        before_ok = (idx == 0) or (not _STOCK_CHAR.match(text[idx - 1]))
-        after_ok  = (idx + nlen >= len(text)) or (not _STOCK_CHAR.match(text[idx + nlen]))
-        if before_ok and after_ok:
-            return idx
-        start = idx + 1
-    return -1
 
 
 # ── 채널 가중치 ───────────────────────────────────────────────────────────────
@@ -224,10 +192,7 @@ def extract_mentions(all_data: list, stock_map: dict,
         for name, code in stock_map.items():
             if not _is_valid_stock_name(name):
                 continue
-            # BUG-5: 단순 in 대신 의미 단위 매칭으로 교체
-            # "HD현대"가 "HD현대중공업" 텍스트에 오염 매칭되는 문제 방지
-            match_idx = _find_standalone(text, name)
-            if match_idx == -1:
+            if name not in text:
                 continue
 
             content_id = f"{src_name}_{link}_{name}"
@@ -254,7 +219,8 @@ def extract_mentions(all_data: list, stock_map: dict,
             if ch_type not in entry["channels"]:
                 entry["channels"][ch_type] = []
 
-            snippet = text[max(0, match_idx - 50): match_idx + 150].strip()
+            idx     = text.find(name)
+            snippet = text[max(0, idx - 50): idx + 150].strip()
 
             entry["channels"][ch_type].append({
                 "source_name": src_name,
@@ -432,56 +398,20 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         '      ]\n'
         '    }\n'
         '  ],\n'
-        '  "ai_strategy": {\n'
-        '    "core_scenario": "오늘 시장을 관통하는 핵심 시나리오 1문장 (예: FOMC 비둘기파 확인 시 반도체 중심 단기 반등 유효)",\n'
-        '    "allocation": [\n'
-        '      {"sector": "섹터명", "weight_pct": 50, "note": "배분 근거 1문장"}\n'
-        '    ],\n'
-        '    "stock_plans": [\n'
-        '      {\n'
-        '        "name": "종목명",\n'
-        '        "trigger": "매수 트리거 조건 (이벤트+지표 조합, 예: FOMC 동결 확인 + 코스피 2일 연속 양봉)",\n'
-        '        "initial_weight_pct": 5,\n'
-        '        "target_price": "1차 목표가 (수치 또는 조건, 예: +8~10% / 7월 실적 가이던스 전)",\n'
-        '        "stop_loss": "손절 기준 (수치 또는 조건, 예: 매수가 대비 -7% 또는 52주 고점 대비 -15%)"\n'
-        '      }\n'
-        '    ],\n'
-        '    "cash_policy": {\n'
-        '      "current_pct": 15,\n'
-        '      "deploy_trigger": "현금 투입 조건 (예: FOMC 동결 확인 후 다음 거래일 시가)",\n'
-        '      "raise_trigger": "현금 비중 확대 조건 (예: 코스피 2일 연속 음봉 + 외국인 순매도 1조 초과)"\n'
-        '    },\n'
-        '    "risk_scenarios": [\n'
-        '      {\n'
-        '        "scenario": "리스크 시나리오명 (예: FOMC 매파 서프라이즈)",\n'
-        '        "probability": "낮음|보통|높음 중 하나",\n'
-        '        "impact": "포트폴리오 영향 1문장",\n'
-        '        "response": "대응 방법 1문장 (예: 반도체 비중 즉시 절반 축소, 현금 30%로 확대)"\n'
-        '      }\n'
-        '    ],\n'
-        '    "theme_correlation": "테마 간 상관관계 및 동시 강세 불가 시나리오 설명 (예: 중동 분쟁 재발 시 유가 급등 → 인플레 우려 → 반도체 성장주 하락 역상관)"\n'
-        '  }\n'
+        '  "ai_strategy": "오늘의 AI 투자 전략 (300자 이상, 구체적 매수/비중/리스크관리 액션 포함)"\n'
         '}'
     )
 
     rules = (
         "[작성 규칙]\n"
-        "1. stocks: 관심종목 후보에서 가중치 점수 높은 순 최대 10개 선택\n"
-        "   (유의미한 언급이 있는 종목만 포함, 데이터가 충분치 않으면 10개 미만도 가능)\n"
+        "1. stocks: 관심종목 후보에서 가중치 점수 높은 순 최대 5개 선택\n"
         "2. signal: 언급 맥락 분석 — 긍정적=긍정, 부정적=부정, 단순언급=중립\n"
         "3. summary / catalyst / risk: 반드시 작성, 빈 문자열 절대 금지\n"
         "4. channel_mentions: 위 원문 데이터에서 해당 종목을 실제로 언급한 채널만 기재 (최대 4개)\n"
         "5. hidden_picks: 반드시 위 [히든픽 후보] 목록에서만 선택, 임의 추가 절대 금지\n"
         "6. hidden_picks 후보가 없으면 빈 배열 [] 반환\n"
         "7. market_summary: 5단락, \\n\\n으로 구분, 각 단락 3~4문장, 400자 이상\n"
-        "8. ai_strategy: 반드시 위 JSON 객체 구조로 작성, 문자열로 대체 절대 금지\n"
-        "   - core_scenario: 오늘 시장 핵심 시나리오 1문장, 구체적 트리거 포함\n"
-        "   - allocation: 섹터별 비중 합계 = 100% (현금 포함), 수치로 명시\n"
-        "   - stock_plans: stocks 섹션에 등장한 종목 위주로 2~5개, 각 항목마다\n"
-        "     trigger(이벤트+지표 조건문), initial_weight_pct(숫자), target_price, stop_loss 모두 필수\n"
-        "   - cash_policy: current_pct 숫자 필수, deploy_trigger/raise_trigger 조건문 형태로\n"
-        "   - risk_scenarios: 2~3개, probability는 낮음|보통|높음 중 하나, response는 구체적 대응 액션\n"
-        "   - theme_correlation: 주요 테마 간 역상관 관계 및 동시 약세 시나리오 반드시 포함\n"
+        "8. ai_strategy: 구체적 종목/비중/매수전략/리스크 관리 포함, 300자 이상\n"
         "9. channel_counts / total_count / weighted_score / overlap_count: 위 데이터 값 그대로\n"
         "10. reasons의 텍스트 키는 반드시 \"detail\" 사용 (\"reason\" 사용 금지)\n"
         "11. URL은 원문 데이터에 있는 것만 사용, 없으면 빈 문자열\n"
@@ -518,79 +448,6 @@ def _restore_source_url(reason: dict, real_channel_data: list) -> dict:
 
 # ── JSON 파싱 ─────────────────────────────────────────────────────────────────
 
-def _repair_truncated_json(text: str) -> str:
-    """
-    max_tokens 초과로 잘린 JSON을 복구 시도.
-    열린 괄호/따옴표 수를 계산해 닫는 문자를 추가한다.
-    """
-    # 마지막 완전한 top-level 키-값 쌍 이후로 잘린 경우 처리
-    # 1) 열린 문자열(따옴표)이 홀수면 닫기
-    in_string = False
-    escape    = False
-    fixed     = []
-    for ch in text:
-        if escape:
-            escape = False
-            fixed.append(ch)
-            continue
-        if ch == '\\':
-            escape = True
-            fixed.append(ch)
-            continue
-        if ch == '"':
-            in_string = not in_string
-        fixed.append(ch)
-    if in_string:
-        fixed.append('"')  # 열린 문자열 닫기
-    text = ''.join(fixed)
-
-    # 2) 불완전한 마지막 줄 제거 (쉼표나 콜론 뒤에서 잘린 경우)
-    lines = text.rstrip().split('\n')
-    while lines:
-        last = lines[-1].rstrip()
-        if last.endswith(',') or last.endswith(':') or last.endswith('"'):
-            # 마지막 줄이 불완전하면 제거하고 쉼표 후처리
-            lines.pop()
-        else:
-            break
-    text = '\n'.join(lines)
-
-    # 3) 열린 배열/객체 괄호 닫기
-    depth_brace  = 0
-    depth_bracket = 0
-    in_string    = False
-    escape       = False
-    for ch in text:
-        if escape:
-            escape = False
-            continue
-        if ch == '\\':
-            escape = True
-            continue
-        if ch == '"':
-            in_string = not in_string
-            continue
-        if in_string:
-            continue
-        if ch == '{':
-            depth_brace += 1
-        elif ch == '}':
-            depth_brace -= 1
-        elif ch == '[':
-            depth_bracket += 1
-        elif ch == ']':
-            depth_bracket -= 1
-
-    # 마지막에 열린 괄호 닫기 (깊은 것부터)
-    # 어떤 순서로 닫아야 하는지 모르므로 단순히 쌍을 맞춤
-    tail = ''
-    for _ in range(max(0, depth_bracket)):
-        tail += ']'
-    for _ in range(max(0, depth_brace)):
-        tail += '}'
-    return text + tail
-
-
 def _try_parse_json(text: str):
     if not text:
         return None
@@ -600,75 +457,29 @@ def _try_parse_json(text: str):
     else:
         start = text.find('{')
         end   = text.rfind('}')
-        if start == -1:
+        if start == -1 or end == -1:
             return None
-        # JSON이 잘렸을 수도 있으므로 끝에 } 가 없어도 시도
-        if end == -1:
-            candidate = text[start:]
-        else:
-            candidate = text[start:end + 1]
+        candidate = text[start:end + 1]
 
     candidate = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', candidate)
     candidate = re.sub(r',\s*([}\]])', r'\1', candidate)
 
-    # 1차: 직접 파싱
     try:
         return json.loads(candidate)
     except json.JSONDecodeError:
-        pass
-
-    # 2차: 빈 줄 제거 후 파싱
-    lines   = [ln for ln in candidate.split('\n') if ln.strip()]
-    cleaned = '\n'.join(lines)
-    try:
-        return json.loads(cleaned)
-    except Exception:
-        pass
-
-    # 3차: 잘린 JSON 복구 후 파싱 (FIX-PARSE)
-    try:
-        repaired = _repair_truncated_json(cleaned)
-        repaired = re.sub(r',\s*([}\]])', r'\1', repaired)
-        result   = json.loads(repaired)
-        print("  [JSON복구] 잘린 JSON 복구 성공")
-        return result
-    except Exception:
-        return None
+        lines   = [ln for ln in candidate.split('\n') if ln.strip()]
+        cleaned = '\n'.join(lines)
+        try:
+            return json.loads(cleaned)
+        except Exception:
+            return None
 
 
 # ── fallback HTML ─────────────────────────────────────────────────────────────
 
 def _fallback_html(channels_data, gh_repo, market_overview,
                    all_data, briefing_date, message):
-    """
-    FIX-FALLBACK: JSON 파싱 실패 시 기존 briefing_data.json이 있으면
-    그 데이터를 기반으로 HTML 생성 (데이터 손실 방지).
-    시장 요약 첫 단락에 오류 메시지를 포함해 운영자가 인지할 수 있도록 함.
-    """
     from .html_generator import generate_html
-
-    # 기존 저장 데이터 로드 시도
-    saved_data = {}
-    if os.path.exists(OUTPUT_FILE):
-        try:
-            with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
-                saved_data = json.load(f)
-            print(f"  [fallback] 기존 briefing_data.json 로드 성공 "
-                  f"(stocks={len(saved_data.get('stocks', []))})")
-        except Exception as e:
-            print(f"  [fallback] briefing_data.json 로드 실패: {e}")
-            saved_data = {}
-
-    if saved_data and saved_data.get("stocks"):
-        # 기존 데이터 사용 — market_summary에 경고 prefix 추가
-        prev_summary = saved_data.get("market_summary", "")
-        saved_data["market_summary"] = prev_summary  # 기존 요약 유지
-        return generate_html(
-            saved_data,
-            channels_data, gh_repo, "", market_overview, all_data,
-        )
-
-    # 기존 데이터 없음 → 최소 fallback
     return generate_html(
         {
             "briefing_date":  briefing_date,
@@ -807,31 +618,7 @@ def analyze_and_generate_html(
                 for m in cm
             ]
 
-    # ── 12. ai_strategy 정규화 (문자열 레거시 → 구조화 객체 변환) ─────────────
-    raw_strategy = result.get("ai_strategy")
-    if isinstance(raw_strategy, str):
-        # 레거시: 문자열 응답을 구조화 객체로 감싸 하위 호환 유지
-        result["ai_strategy"] = {
-            "core_scenario":    raw_strategy.strip(),
-            "allocation":       [],
-            "stock_plans":      [],
-            "cash_policy":      {"current_pct": 0, "deploy_trigger": "", "raise_trigger": ""},
-            "risk_scenarios":   [],
-            "theme_correlation": "",
-        }
-        print("  [ai_strategy] 문자열 레거시 → 구조화 객체로 변환")
-    elif not isinstance(raw_strategy, dict):
-        result["ai_strategy"] = {
-            "core_scenario":    "",
-            "allocation":       [],
-            "stock_plans":      [],
-            "cash_policy":      {"current_pct": 0, "deploy_trigger": "", "raise_trigger": ""},
-            "risk_scenarios":   [],
-            "theme_correlation": "",
-        }
-        print("  [ai_strategy] 누락 → 빈 구조 초기화")
-
-    # ── 13. 검증 ─────────────────────────────────────────────────────────────
+    # ── 12. 검증 ─────────────────────────────────────────────────────────────
     from .validation import validate_stocks
     result = validate_stocks(result, all_data, api_key, stock_map)
 
