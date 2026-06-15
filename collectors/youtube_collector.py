@@ -1,7 +1,12 @@
 # collectors/youtube_collector.py
+"""
+수정 이력:
+- BUG-1: collect_panelist_youtube()의 publishedAfter UTC 변환 오류 수정
+         KST 시각을 UTC 포맷으로 전달하던 문제 → UTC 기준으로 cutoff 계산
+"""
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from googleapiclient.discovery import build
@@ -22,6 +27,7 @@ from config import (
 )
 
 KST = ZoneInfo("Asia/Seoul")
+UTC = timezone.utc  # BUG-1: UTC 상수 추가
 
 STOCK_KEYWORDS = [
     "주식", "종목", "투자", "매수", "매도", "코스피", "코스닥",
@@ -303,7 +309,7 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
     return all_items
 
 
-# ── 섹션2: 패널리스트 이름 검색 수집 (신규) ────────────────────────────
+# ── 섹션2: 패널리스트 이름 검색 수집 ────────────────────────────────────
 
 def collect_panelist_youtube(youtube) -> list:
     """
@@ -312,15 +318,18 @@ def collect_panelist_youtube(youtube) -> list:
 
     - 수집 기간: _PANELIST_HOURS (48h)
     - 이름당 검색 suffix 중 첫 매칭 결과 사용 (quota 절약)
-    - source_type: "유튜브" (애널리스트/경제방송 채널 출신 인물이면 가중치 상향은
-      ai_analyzer의 channel_weight 로직에서 자동 처리됨)
+    - source_type: "유튜브"
     - 중복 제거: video_id 기준
+    - BUG-1: cutoff를 UTC 기준으로 계산 (publishedAfter는 UTC 기준 RFC3339 요구)
     """
     if not youtube:
         print("  [패널리스트 검색] YouTube 클라이언트 없음 → 스킵")
         return []
 
-    cutoff    = datetime.now(KST) - timedelta(hours=_PANELIST_HOURS)
+    # BUG-1 수정: KST → UTC 기준으로 변경
+    # publishedAfter 파라미터는 UTC 기준 RFC3339 포맷("Z" suffix)을 요구함
+    # 기존 코드는 KST 시각에 "Z"를 붙여 UTC인 척 전달 → 실제로 9시간 오차 발생
+    cutoff    = datetime.now(UTC) - timedelta(hours=_PANELIST_HOURS)
     all_items = []
     seen_ids  = set()
 
@@ -380,7 +389,7 @@ def collect_panelist_youtube(youtube) -> list:
                 if not is_stock_related(title, transcript):
                     continue
 
-                # 발행일 파싱
+                # 발행일 파싱 (API 응답은 항상 UTC "Z" 포맷)
                 try:
                     pub_dt = datetime.fromisoformat(
                         published_at.replace("Z", "+00:00")
@@ -397,8 +406,6 @@ def collect_panelist_youtube(youtube) -> list:
                     "summary":     summary or title,
                     "link":        f"https://www.youtube.com/watch?v={video_id}",
                     "published":   pub_str,
-                    # 패널리스트 이름을 메타로 저장해두면
-                    # ai_analyzer의 extract_mentions에서 snippet에 이름이 잡힘
                     "_panelist":   name,
                 })
                 collected += 1
@@ -410,7 +417,7 @@ def collect_panelist_youtube(youtube) -> list:
             time.sleep(0.1)
 
         print(f"    {name}: {collected}건")
-        time.sleep(0.3)   # 검색 API 호출 간격
+        time.sleep(0.3)
 
     print(f"  [패널리스트 검색] 총 {len(all_items)}건 (중복 제거 후)")
     return all_items
