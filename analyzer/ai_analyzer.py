@@ -56,6 +56,36 @@ def _is_valid_stock_name(name: str) -> bool:
     return True
 
 
+# ── 종목명 단어 경계 매칭 ─────────────────────────────────────────────────────
+# 한국어는 공백 기반 단어 경계(\\b)가 없어, "HD현대"가 "HD현대중공업" 안에서도
+# 단순 in 연산으로 매칭되는 오염 문제가 발생함.
+# → 매칭 위치의 바로 앞·뒤 문자가 한글/영문 숫자(즉, 종목명 구성 가능 문자)이면
+#   더 긴 이름의 일부이므로 무효 처리.
+_STOCK_CHAR = re.compile(r'[가-힣A-Za-z0-9&]')
+
+
+def _find_standalone(text: str, name: str) -> int:
+    """
+    text 내에서 name이 독립적인 의미 단위로 등장하는 첫 번째 인덱스를 반환.
+    더 긴 종목명의 부분 문자열로만 등장하면 -1 반환.
+
+    예) text="HD현대중공업 실적", name="HD현대"  → -1  (중공업이 뒤에 붙음)
+        text="HD현대 실적",    name="HD현대"  → 0   (뒤가 공백)
+    """
+    start = 0
+    nlen  = len(name)
+    while True:
+        idx = text.find(name, start)
+        if idx == -1:
+            return -1
+        before_ok = (idx == 0) or (not _STOCK_CHAR.match(text[idx - 1]))
+        after_ok  = (idx + nlen >= len(text)) or (not _STOCK_CHAR.match(text[idx + nlen]))
+        if before_ok and after_ok:
+            return idx
+        start = idx + 1
+    return -1
+
+
 # ── 채널 가중치 ───────────────────────────────────────────────────────────────
 
 def _channel_weight(subscribers: int) -> float:
@@ -192,7 +222,10 @@ def extract_mentions(all_data: list, stock_map: dict,
         for name, code in stock_map.items():
             if not _is_valid_stock_name(name):
                 continue
-            if name not in text:
+            # BUG-5: 단순 in 대신 의미 단위 매칭으로 교체
+            # "HD현대"가 "HD현대중공업" 텍스트에 오염 매칭되는 문제 방지
+            match_idx = _find_standalone(text, name)
+            if match_idx == -1:
                 continue
 
             content_id = f"{src_name}_{link}_{name}"
@@ -219,8 +252,7 @@ def extract_mentions(all_data: list, stock_map: dict,
             if ch_type not in entry["channels"]:
                 entry["channels"][ch_type] = []
 
-            idx     = text.find(name)
-            snippet = text[max(0, idx - 50): idx + 150].strip()
+            snippet = text[max(0, match_idx - 50): match_idx + 150].strip()
 
             entry["channels"][ch_type].append({
                 "source_name": src_name,
@@ -432,7 +464,8 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
 
     rules = (
         "[작성 규칙]\n"
-        "1. stocks: 관심종목 후보에서 가중치 점수 높은 순 최대 5개 선택\n"
+        "1. stocks: 관심종목 후보에서 가중치 점수 높은 순 최대 10개 선택\n"
+        "   (유의미한 언급이 있는 종목만 포함, 데이터가 충분치 않으면 10개 미만도 가능)\n"
         "2. signal: 언급 맥락 분석 — 긍정적=긍정, 부정적=부정, 단순언급=중립\n"
         "3. summary / catalyst / risk: 반드시 작성, 빈 문자열 절대 금지\n"
         "4. channel_mentions: 위 원문 데이터에서 해당 종목을 실제로 언급한 채널만 기재 (최대 4개)\n"

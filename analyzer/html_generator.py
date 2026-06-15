@@ -265,20 +265,35 @@ def _render_reasons(reasons: list) -> str:
     items = ""
     for r in reasons:
         if isinstance(r, str):
-            rd, rl = r.strip(), ""
+            rd, rl, rstype, rsname = r.strip(), "", "", ""
         elif isinstance(r, dict):
-            rd = (r.get("detail") or r.get("reason") or
-                  r.get("text") or r.get("summary", "")).strip()
-            rl = r.get("source_url") or r.get("link") or r.get("url", "")
+            rd     = (r.get("detail") or r.get("reason") or
+                      r.get("text") or r.get("summary", "")).strip()
+            rl     = r.get("source_url") or r.get("link") or r.get("url", "")
+            rstype = (r.get("source_type") or "").strip()
+            rsname = (r.get("source_name") or "").strip()
         else:
             continue
         if not rd:
             continue
+        # 출처 배지 생성
+        source_badge = ""
+        if rsname:
+            meta     = _TAG_META.get(rstype, {"bg": "#2d2d44", "color": "#adb5bd"})
+            source_badge = (
+                f'<span style="background:{meta["bg"]};color:{meta["color"]};'
+                f'font-size:.72rem;font-weight:600;border-radius:4px;'
+                f'padding:.1rem .45rem;margin-right:.4rem;white-space:nowrap;">'
+                f'{rsname}</span>'
+            )
         if rl:
-            items += (f'<li><a href="{rl}" target="_blank" rel="noopener" '
-                      f'style="color:#adb5bd;text-decoration:none;">{rd}</a></li>')
+            content_html = (
+                f'<a href="{rl}" target="_blank" rel="noopener" '
+                f'style="color:#adb5bd;text-decoration:none;">{rd}</a>'
+            )
         else:
-            items += f'<li>{rd}</li>'
+            content_html = f'<span style="color:#adb5bd;">{rd}</span>'
+        items += f'<li style="display:flex;align-items:baseline;gap:.2rem;flex-wrap:wrap;">{source_badge}{content_html}</li>'
     return f'<ul class="reasons-list">{items}</ul>' if items else ""
 
 
@@ -683,7 +698,7 @@ def generate_html(
         source_badge_html = _hidden_pick_source_badge(channel_type)
         score_str         = (f"{weighted_sc:.1f}" if isinstance(weighted_sc, (int, float))
                              else str(weighted_sc))
-        score_badge_html  = f'<span class="hp-score-badge">Pick #{idx} · {score_str}pt</span>'
+        score_badge_html  = f'<span class="hp-score-badge">Pick #{idx}</span>'
 
         if isinstance(price, int):
             price_html = f'<span class="price-value">{price:,}원</span>'
@@ -716,7 +731,6 @@ def generate_html(
   <div class="hp-card-header">
     <div class="hp-badges">{source_badge_html}{score_badge_html}</div>
     <a href="{naver_url}" target="_blank" rel="noopener" class="hp-stock-name">{name}</a>
-    <span class="hp-signal">{signal}</span>
   </div>
   <div class="hp-card-body">
     <div class="price-row">{price_html}{chart_btn_html}</div>

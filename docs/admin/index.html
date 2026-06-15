@@ -309,19 +309,14 @@
     </div>
 
     <div class="form-section" id="apiKeySection" style="display:none;">
-      <div class="form-section-title">🔧 API 키 등록 (최초 1회)</div>
+      <div class="form-section-title">🔧 GitHub Token 등록 (최초 1회)</div>
       <div class="form-group">
         <label>GitHub Token <span style="color:var(--down)">*필수</span></label>
         <input type="password" id="inputGhToken" placeholder="ghp_xxxxxxxxxxxx"
                onkeydown="if(event.key==='Enter')login()">
       </div>
-      <div class="form-group">
-        <label>YouTube API Key <span style="color:var(--text-muted)">(선택)</span></label>
-        <input type="password" id="inputYtKey" placeholder="AIzaSy..."
-               onkeydown="if(event.key==='Enter')login()">
-      </div>
       <p style="font-size:0.75rem;color:var(--text-muted);margin-top:8px;">
-        ⓘ 입력한 키는 이 브라우저에 암호화 저장됩니다.<br>
+        ⓘ 입력한 토큰은 이 브라우저에 저장됩니다.<br>
         다음 방문부터는 비밀번호만 입력하면 됩니다.
       </p>
     </div>
@@ -530,21 +525,20 @@ async function sha256(message) {
 //  페이지 로드 초기화
 // ================================================================
 window.addEventListener('DOMContentLoaded', () => {
-  const hasApiKeys = localStorage.getItem(LS_PW_SET) === 'true';
+  const hasToken = localStorage.getItem(LS_PW_SET) === 'true';
 
-  if (hasApiKeys) {
+  if (hasToken) {
     document.getElementById('apiKeySection').style.display = 'none';
     document.getElementById('loginSubtitle').textContent =
-      '비밀번호를 입력하면 저장된 API 키로 자동 연결됩니다.';
+      '비밀번호를 입력하면 자동으로 연결됩니다.';
   } else {
     document.getElementById('apiKeySection').style.display = 'block';
     document.getElementById('loginSubtitle').textContent =
-      '최초 로그인입니다. 비밀번호와 API 키를 등록해주세요.';
+      '최초 로그인입니다. 비밀번호와 GitHub Token을 입력하세요.';
   }
 
   if (sessionStorage.getItem(SS_AUTHED) === 'true') {
     ghToken = localStorage.getItem(LS_GH_TOKEN) || '';
-    ytKey   = localStorage.getItem(LS_YT_KEY)   || '';
     if (ghToken) {
       document.getElementById('loginOverlay').style.display = 'none';
       loadChannels();
@@ -576,24 +570,20 @@ async function login() {
     return;
   }
 
-  const hasApiKeys = localStorage.getItem(LS_PW_SET) === 'true';
+  const hasToken = localStorage.getItem(LS_PW_SET) === 'true';
 
-  if (!hasApiKeys) {
+  if (!hasToken) {
     const newGhToken = document.getElementById('inputGhToken').value.trim();
-    const newYtKey   = document.getElementById('inputYtKey').value.trim();
     if (!newGhToken) {
       document.getElementById('loginError').textContent = '❌ GitHub Token은 필수입니다.';
       return;
     }
     localStorage.setItem(LS_GH_TOKEN, newGhToken);
-    localStorage.setItem(LS_YT_KEY,   newYtKey);
     localStorage.setItem(LS_PW_SET,   'true');
     ghToken = newGhToken;
-    ytKey   = newYtKey;
-    showToast('✅ API 키가 저장되었습니다. 다음부터는 비밀번호만 입력하세요.', 'success');
+    showToast('✅ GitHub Token이 저장되었습니다. 다음부터는 비밀번호만 입력하세요.', 'success');
   } else {
     ghToken = localStorage.getItem(LS_GH_TOKEN) || '';
-    ytKey   = localStorage.getItem(LS_YT_KEY)   || '';
   }
 
   sessionStorage.setItem(SS_AUTHED, 'true');
@@ -612,9 +602,8 @@ function logout() {
 }
 
 function resetApiKeys() {
-  if (!confirm('저장된 API 키를 삭제하고 다시 등록하시겠습니까?')) return;
+  if (!confirm('저장된 GitHub Token을 삭제하고 다시 등록하시겠습니까?')) return;
   localStorage.removeItem(LS_GH_TOKEN);
-  localStorage.removeItem(LS_YT_KEY);
   localStorage.removeItem(LS_PW_SET);
   sessionStorage.removeItem(SS_AUTHED);
   location.reload();
