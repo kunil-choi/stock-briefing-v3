@@ -29,36 +29,15 @@ POPULAR_PANELISTS = [
     "이주열", "박종훈", "김현석", "신중호", "이창용",
 ]
 
-# ── 수집 시간 설정 ─────────────────────────────────────────────────────────────
-# 일반 유튜브(방송사/개인/증권사) : 모두 24시간
-BROADCAST_HOURS     = 24   # 방송사 유튜브 채널 (한국경제TV, SBS Biz 등)
-YOUTUBER_HOURS      = 24   # 개인 유튜버 채널 (슈카월드, 삼프로TV 등)
-SECURITIES_HOURS    = 24   # 증권사 유튜브 채널 (삼성증권, 키움증권 등)
-
-# 섹션2 전용: 경제방송 TV 다시보기 채널
-# → 오전 종목추천 프로그램 업로드가 늦는 관계로 전날 자료 포함을 위해 48시간 설정
-SECURITIES_TV_HOURS = 48
+# ── 수집 시간 설정 ──────────────────────────────────────────────
+BROADCAST_HOURS  = 24   # 방송사 유튜브 채널
+YOUTUBER_HOURS   = 24   # 개인 유튜버 채널
+SECURITIES_HOURS = 24   # 증권사 유튜브 채널
 
 REPORT_DAYS = 1
 
-# 섹션2 전용: 경제방송 TV 채널 (전문가 출연 오전 프로그램 위주)
-# ※ V2에서 검증된 채널 ID로 교체 (2026-06-15)
-#   이전 ID(UCp7vLUO... 등 5개)는 실제 채널과 불일치하여 플레이리스트 조회 0건이 발생했음
-SECURITIES_TV_CHANNELS = {
-    "한국경제TV":          "UCF8AeLlUbEpKju6v1H6p8Eg",  # V2 검증됨
-    "SBS Biz":            "UCbMjg2EvXs_RUGW-KrdM3pw",  # V2 검증됨
-    "머니투데이 방송(MTN)": "UClErHbdZKUnD1NyIUeQWvuQ",  # V2 검증됨
-    "매일경제TV":          "UCnMtEMnsGFjQgLJEEkMSHhQ",  # V2 검증됨
-    "KBS 1라디오":         "UCMLJc_D3jgFcS_48G7i4V0A",  # V2 검증됨
-}
-
 
 def load_channels():
-    """
-    channels.json 로드.
-    실제 키: "broadcast", "youtuber", "securities"
-    누락 키는 빈 리스트로 보완.
-    """
     try:
         with open(CHANNELS_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
