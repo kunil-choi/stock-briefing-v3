@@ -2,11 +2,20 @@
 """
 뉴스 RSS 수집기 - v3
 매일경제, 한국경제, 서울경제, 이데일리, 머니투데이 등 주요 경제신문사 RSS 수집
+
+수정 이력:
+- BUG-N-1: 날짜 파싱 실패 시 현재 시각 반환 (24시간 필터 통과)
+- BUG-N-2: feedparser bozo 오류 감지, CharacterEncodingOverride는 무해 처리
+- BUG-N-3: 피드별 독립 try/except
+- BUG-N-4: link 기준 중복 제거
+- BUG-7 FIX: link 없는 항목의 title 기반 중복 제거 추가
+             link URL 정규화(쿼리 파라미터 제거) 후 비교
 """
 import re
 import feedparser
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
+from urllib.parse import urlparse, urlunparse
 
 KST = timezone(timedelta(hours=9))
 
@@ -36,6 +45,47 @@ def _is_valid_feed(feed) -> bool:
             return True
         return False
     return True
+
+
+def _normalize_link(link: str) -> str:
+    """
+    BUG-7 FIX: URL 정규화 — 쿼리 파라미터·프래그먼트 제거 후 소문자 변환.
+    동일 기사가 트래킹 파라미터만 다르게 여러 피드에 배포되는 경우를 잡기 위함.
+
+    예) https://news.example.com/article/123?utm_source=rss&ref=main
+     → https://news.example.com/article/123
+    """
+    if not link:
+        return ""
+    try:
+        parsed = urlparse(link.strip())
+        # scheme + netloc + path만 유지, query·fragment 제거
+        normalized = urlunparse((
+            parsed.scheme.lower(),
+            parsed.netloc.lower(),
+            parsed.path,
+            "",   # params
+            "",   # query  ← 제거
+            "",   # fragment ← 제거
+        ))
+        return normalized
+    except Exception:
+        return link.strip().lower()
+
+
+def _normalize_title(title: str) -> str:
+    """
+    BUG-7 FIX: 제목 정규화 — 공백·특수문자 제거 후 소문자 변환.
+    링크가 없는 항목의 중복 감지에 사용.
+
+    예) "[속보] 삼성전자, 2분기 실적 발표"
+     → "속보삼성전자2분기실적발표"
+    """
+    if not title:
+        return ""
+    # 한글·영문·숫자만 남기고 나머지 제거
+    normalized = re.sub(r"[^\w가-힣]", "", title).lower()
+    return normalized
 
 
 def collect_news(rss_feeds: dict, hours: int = 24) -> list:
@@ -83,7 +133,6 @@ def collect_news(rss_feeds: dict, hours: int = 24) -> list:
                 if not title:
                     continue
 
-                # BUG-N-4: 중복 링크 방지 (같은 link가 여러 피드에 배포되는 경우)
                 results.append({
                     "source_type": "뉴스",
                     "source_name": source_name,
@@ -100,15 +149,37 @@ def collect_news(rss_feeds: dict, hours: int = 24) -> list:
             print(f"  [뉴스] {source_name} 수집 실패: {e}")
             failed_feeds.append(source_name)
 
-    # BUG-N-4: 전체 결과 중 link 기준 중복 제거
-    seen_links: set[str] = set()
-    deduped: list[dict]  = []
+    # ── BUG-7 FIX: 중복 제거 강화 ────────────────────────────────────────────
+    # 기존: link 있는 항목만 중복 제거, link 없는 항목은 모두 통과
+    # 수정: ① link가 있으면 정규화된 URL로 비교
+    #       ② link가 없으면 정규화된 title로 비교
+    #       → 두 기준 모두 적용해 중복 원천 차단
+    seen_links:  set[str] = set()   # 정규화된 link 추적
+    seen_titles: set[str] = set()   # 정규화된 title 추적 (link 없는 항목용)
+    deduped: list[dict]   = []
+
     for item in results:
-        link = item.get("link", "")
-        if link and link in seen_links:
-            continue
-        if link:
-            seen_links.add(link)
+        link  = item.get("link", "")
+        title = item.get("title", "")
+
+        norm_link  = _normalize_link(link)
+        norm_title = _normalize_title(title)
+
+        if norm_link:
+            # link가 있는 항목: 정규화된 link 기준으로 중복 판단
+            if norm_link in seen_links:
+                continue
+            seen_links.add(norm_link)
+        else:
+            # BUG-7 FIX: link가 없는 항목: 정규화된 title 기준으로 중복 판단
+            if norm_title and norm_title in seen_titles:
+                continue
+
+        # title은 link 유무와 관계없이 항상 seen_titles에 등록
+        # (link가 다르더라도 제목이 완전히 같으면 중복으로 볼 수 있음)
+        if norm_title:
+            seen_titles.add(norm_title)
+
         deduped.append(item)
 
     if failed_feeds:
