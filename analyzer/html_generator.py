@@ -19,6 +19,7 @@ AI 주식 브리핑 HTML 생성 엔진
 - FIX-SIG-1: _is_positive_signal에서 "상승" 키워드 제거
 - FIX-SIG-2: filtered_hidden signal 없을 때 오늘의 픽 전체 미표시 버그 수정
 - FIX-JS-1 : showChart 방어코드 추가 (key 없을 때 빈 이미지 방지)
+- FIX-ANA-2: analyst-card 제목 말줄임 제거, 웹에서 전체 표시
 """
 
 import os
@@ -199,6 +200,7 @@ def _build_tv_html(all_data: list) -> str:
 
 def _build_analyst_html(all_data: list) -> str:
     # FIX-ANA-1: _report_card를 함수 내부에 정의하여 들여쓰기 버그 수정
+    # FIX-ANA-2: 제목 말줄임 제거 — flex-wrap + 제목 별도 줄로 처리
     def _report_card(r: dict) -> str:
         stock  = r.get("stock_name", "")
         title  = r.get("report_title") or r.get("title", "")
@@ -212,15 +214,17 @@ def _build_analyst_html(all_data: list) -> str:
         new_badge = '<span class="new-coverage-badge">신규 커버리지</span>' if is_new else ""
         if link:
             title_html = (f'<a href="{link}" target="_blank" rel="noopener" '
-                          f'style="color:#74c0fc;text-decoration:none;">{title}</a>')
+                          f'class="analyst-title-link">{title}</a>')
         else:
-            title_html = f'<span style="color:#74c0fc;">{title}</span>'
+            title_html = f'<span class="analyst-title-text">{title}</span>'
         return (
             f'<div class="analyst-card">'
-            f'<span class="analyst-stock">{stock}</span> '
-            f'<span class="analyst-broker">{broker}</span> '
-            f'{new_badge} '
-            f'{title_html}'
+            f'<div class="analyst-card-meta">'
+            f'<span class="analyst-stock">{stock}</span>'
+            f'<span class="analyst-broker">{broker}</span>'
+            f'{new_badge}'
+            f'</div>'
+            f'<div class="analyst-card-title">{title_html}</div>'
             f'</div>'
         )
 
@@ -823,13 +827,30 @@ a:hover { text-decoration: underline; }
   padding: .6rem 1rem;
   margin-bottom: .5rem;
   display: flex;
+  flex-direction: column;
+  gap: .3rem;
+}
+.analyst-card-meta {
+  display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: .4rem;
 }
+.analyst-card-title {
+  font-size: .9rem;
+  line-height: 1.55;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+}
+.analyst-title-link {
+  color: #74c0fc;
+  text-decoration: none;
+  white-space: normal;
+}
+.analyst-title-link:hover { text-decoration: underline; }
+.analyst-title-text { color: #74c0fc; white-space: normal; }
 .analyst-stock  { font-weight: 700; }
 .analyst-broker { font-size: .8rem; color: var(--text-muted); }
-.analyst-title  { font-size: .9rem; }
 .new-coverage-badge {
   font-size: .7rem;
   background: #1a3a2d;
@@ -951,6 +972,7 @@ a:hover { text-decoration: underline; }
   .stock-name { font-size: .95rem; }
   .market-indicators { gap: .4rem; }
   .indicator-badge { min-width: 80px; padding: .4rem .6rem; }
+  .analyst-card-title { font-size: .85rem; }
 }
 """
 
