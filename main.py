@@ -9,10 +9,14 @@ from config import (
     ANTHROPIC_API_KEY, YOUTUBE_API_KEY, GH_TOKEN, GITHUB_REPO,
     NEWS_RSS_FEEDS, REPORT_DAYS, load_channels,
 )
-from collectors.news_collector import collect_news
-from collectors.youtube_collector import get_youtube_client, collect_section1_youtube
+from collectors.news_collector    import collect_news
+from collectors.youtube_collector import (
+    get_youtube_client,
+    collect_section1_youtube,
+    collect_panelist_youtube,       # ← 신규 추가
+)
 from collectors.analyst_collector import collect_analyst
-from analyzer.ai_analyzer import analyze_and_generate_html
+from analyzer.ai_analyzer         import analyze_and_generate_html
 
 KST = ZoneInfo("Asia/Seoul")
 
@@ -22,17 +26,17 @@ def safe_collect(fn, *args, label="", **kwargs):
         result = fn(*args, **kwargs)
         return result if result else []
     except Exception as e:
-        print(f"  [{label}] 수집 중 오류 발생: {e}")
+        print(f"  [{label}] 수집 중 오류: {e}")
         return []
 
 
 def main():
-    now_kst = datetime.now(KST)
-    print(f"=== AI 증시 모닝브리핑 시작: {now_kst.strftime('%Y-%m-%d %H:%M:%S KST')} ===")
+    now_kst    = datetime.now(KST)
+    print(f"=== AI 주식 브리핑 시작: {now_kst.strftime('%Y-%m-%d %H:%M:%S KST')} ===")
     start_time = now_kst.timestamp()
 
-    # API 키 점검
-    print("\n[API 키 점검]")
+    # API 키 확인
+    print("\n[API 키 확인]")
     keys = {
         "ANTHROPIC": ANTHROPIC_API_KEY,
         "YOUTUBE":   YOUTUBE_API_KEY,
@@ -45,7 +49,7 @@ def main():
         else:
             print(f"  {name}: ❌ 없음")
             all_ok = False
-    print(f"  {'전체 정상' if all_ok else '일부 키 누락'}")
+    print(f"  {'정상 동작' if all_ok else '일부 키 없음'}")
 
     # 채널 로드
     print("\n[채널 로드]")
@@ -63,18 +67,20 @@ def main():
         from collectors.market_collector import collect_market_overview
         market_overview = collect_market_overview()
     except Exception as e:
-        print(f"  [시장수집 오류] {e}")
+        print(f"  [시장데이터 수집 실패] {e}")
         market_overview = {}
 
-    # 2. 뉴스
-    print("\n[1/3] 뉴스 RSS 수집 중...")
+    # 2. 뉴스 RSS
+    print("\n[1/4] 뉴스 RSS 수집...")
     news_data = safe_collect(collect_news, NEWS_RSS_FEEDS, label="뉴스")
     all_data.extend(news_data)
     print(f"  → {len(news_data)}건")
 
-    # 3. 유튜브 (섹션1만)
-    print("\n[2/3] 유튜브 수집 중 (방송사/유튜버/증권사 24시간)...")
+    # YouTube 클라이언트 (섹션1·2 공용)
     youtube = get_youtube_client(YOUTUBE_API_KEY)
+
+    # 3. 등록 채널 플레이리스트 수집 (섹션1)
+    print("\n[2/4] 유튜브 수집 (경제방송/유튜버/증권사 24h)...")
     if youtube:
         yt_data = safe_collect(
             collect_section1_youtube, youtube, channels, label="유튜브"
@@ -82,32 +88,43 @@ def main():
         all_data.extend(yt_data)
         print(f"  → {len(yt_data)}건")
     else:
-        print("  → YouTube 클라이언트 생성 실패, 스킵")
+        print("  → YouTube 클라이언트 없음, 스킵")
 
-    # 4. 애널리스트
-    print("\n[3/3] 애널리스트 리포트 수집 중...")
+    # 4. 패널리스트 이름 검색 수집 (섹션2) ← 신규
+    print("\n[3/4] 패널리스트 이름 검색 수집 (48h)...")
+    if youtube:
+        panelist_data = safe_collect(
+            collect_panelist_youtube, youtube, label="패널리스트검색"
+        )
+        all_data.extend(panelist_data)
+        print(f"  → {len(panelist_data)}건")
+    else:
+        print("  → YouTube 클라이언트 없음, 스킵")
+
+    # 5. 애널리스트 리포트
+    print("\n[4/4] 애널리스트 리포트 수집...")
     analyst_data = safe_collect(collect_analyst, label="애널리스트")
     all_data.extend(analyst_data)
     print(f"  → {len(analyst_data)}건")
 
-    # 수집 결과 요약
+    # 수집 요약
     print("\n" + "=" * 50)
-    print(f"전체 수집: {len(all_data)}건")
+    print(f"총 수집: {len(all_data)}건")
     type_counts = {}
     for d in all_data:
         t = d.get("source_type", "기타")
         type_counts[t] = type_counts.get(t, 0) + 1
-    print("\n[수집 결과 요약]")
-    for t, c in type_counts.items():
+    print("\n[수집 유형 요약]")
+    for t, c in sorted(type_counts.items(), key=lambda x: -x[1]):
         warn = "⚠️ " if c == 0 else "  "
         print(f"  {warn}{t}: {c}건")
 
-    # 원본 백업
+    # 원본 저장
     os.makedirs("data", exist_ok=True)
     today_str = now_kst.strftime("%Y%m%d")
     with open(f"data/raw_{today_str}.json", "w", encoding="utf-8") as f:
         json.dump(all_data, f, ensure_ascii=False, indent=2, default=str)
-    print(f"\n[저장] data/raw_{today_str}.json 완료")
+    print(f"\n[저장] data/raw_{today_str}.json 저장")
 
     # 아카이브
     os.makedirs("docs/archive", exist_ok=True)
@@ -117,10 +134,10 @@ def main():
         archive_path = f"docs/archive/{archive_date}.html"
         if not os.path.exists(archive_path):
             shutil.copy2(existing_index, archive_path)
-            print(f"[아카이브] 저장 완료: {archive_path}")
+            print(f"[아카이브] 저장: {archive_path}")
 
     # AI 분석
-    print("\n[AI 분석] Claude API로 교차분석 중...")
+    print("\n[AI 분석] Claude API로 분석 시작...")
     try:
         html = analyze_and_generate_html(
             all_data,
@@ -130,8 +147,8 @@ def main():
             market_overview=market_overview,
         )
     except Exception as e:
-        print(f"[AI분석 오류] {e}")
-        html = f"<html><body><h1>분석 오류</h1><p>{e}</p></body></html>"
+        print(f"[AI 분석 실패] {e}")
+        html = f"<html><body><h1>분석 실패</h1><p>{e}</p></body></html>"
 
     # HTML 저장
     os.makedirs("docs", exist_ok=True)
@@ -139,7 +156,7 @@ def main():
         f.write(html)
 
     elapsed = datetime.now(KST).timestamp() - start_time
-    print(f"\n✅ 브리핑 페이지 생성 완료: docs/index.html")
+    print(f"\n✅ 브리핑 완성 → docs/index.html")
     print(f"=== 완료: {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S KST')} (소요: {elapsed:.0f}초) ===")
 
 
