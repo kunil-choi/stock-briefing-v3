@@ -381,7 +381,36 @@ def _render_ai_strategy(ai_strategy) -> str:
     # ── 레거시: 문자열 ────────────────────────────────────────────────────────
     if isinstance(ai_strategy, str):
         text = ai_strategy.strip()
-        return f'<div class="ai-strategy-box">{text}</div>' if text else ""
+        if not text:
+            return ""
+        # 【...】 단락 구분이 있으면 구조화 렌더링
+        paras = re.split(r'\n\n', text)
+        if len(paras) >= 2:
+            blocks = ""
+            for para in paras:
+                para = para.strip()
+                if not para:
+                    continue
+                # 【제목】 패턴 감지
+                m = re.match(r'^【([^】]+)】(.+)$', para, re.DOTALL)
+                if m:
+                    section_title = m.group(1).strip()
+                    section_body  = m.group(2).strip()
+                    blocks += (
+                        f'<div class="strat-text-block">'
+                        f'<div class="strat-text-label">【{section_title}】</div>'
+                        f'<p class="strat-text-body">{section_body}</p>'
+                        f'</div>'
+                    )
+                else:
+                    # 첫 단락 (핵심 시나리오)
+                    blocks += (
+                        f'<div class="strat-core">'
+                        f'<span class="strat-label">💡 핵심 시나리오</span>'
+                        f'{para}</div>'
+                    )
+            return f'<div class="ai-strategy-box" style="white-space:normal">{blocks}</div>'
+        return f'<div class="ai-strategy-box">{text}</div>'
 
     # ── 구조화 객체 ──────────────────────────────────────────────────────────
     core        = (ai_strategy.get("core_scenario") or "").strip()
@@ -1071,6 +1100,28 @@ a:hover { text-decoration: underline; }
   font-size: .95rem;
   line-height: 1.8;
   color: var(--text-muted);
+  white-space: pre-wrap;
+}
+/* 문자열 ai_strategy 구조화 렌더링 */
+.strat-text-block {
+  margin-bottom: 1rem;
+  padding: .85rem 1.1rem;
+  background: #0d1a0d;
+  border-left: 3px solid #2ecc71;
+  border-radius: 0 8px 8px 0;
+}
+.strat-text-label {
+  font-size: .78rem;
+  font-weight: 700;
+  color: #2ecc71;
+  letter-spacing: .04em;
+  margin-bottom: .4rem;
+}
+.strat-text-body {
+  margin: 0;
+  font-size: .92rem;
+  line-height: 1.75;
+  color: #c8d6c8;
   white-space: pre-wrap;
 }
 /* 구조화 전략 레이아웃 */

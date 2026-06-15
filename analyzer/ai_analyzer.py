@@ -12,6 +12,8 @@ AI 주식 브리핑 분석 엔진
 - V2-SYNC    : channel_mentions → reasons 동기화 블록 추가
 - FIX-ANA-2  : generate_market_summary 데드코드 제거
 - FIX-API-1  : Claude API 호출 실패 시 fallback HTML 반환 (try/except 추가)
+- FIX-PARSE  : _try_parse_json() 잘린 JSON 복구 로직 추가
+- FIX-FALLBACK: JSON 파싱 실패 시 기존 briefing_data.json 활용 fallback 개선
 """
 
 import json
@@ -516,6 +518,79 @@ def _restore_source_url(reason: dict, real_channel_data: list) -> dict:
 
 # ── JSON 파싱 ─────────────────────────────────────────────────────────────────
 
+def _repair_truncated_json(text: str) -> str:
+    """
+    max_tokens 초과로 잘린 JSON을 복구 시도.
+    열린 괄호/따옴표 수를 계산해 닫는 문자를 추가한다.
+    """
+    # 마지막 완전한 top-level 키-값 쌍 이후로 잘린 경우 처리
+    # 1) 열린 문자열(따옴표)이 홀수면 닫기
+    in_string = False
+    escape    = False
+    fixed     = []
+    for ch in text:
+        if escape:
+            escape = False
+            fixed.append(ch)
+            continue
+        if ch == '\\':
+            escape = True
+            fixed.append(ch)
+            continue
+        if ch == '"':
+            in_string = not in_string
+        fixed.append(ch)
+    if in_string:
+        fixed.append('"')  # 열린 문자열 닫기
+    text = ''.join(fixed)
+
+    # 2) 불완전한 마지막 줄 제거 (쉼표나 콜론 뒤에서 잘린 경우)
+    lines = text.rstrip().split('\n')
+    while lines:
+        last = lines[-1].rstrip()
+        if last.endswith(',') or last.endswith(':') or last.endswith('"'):
+            # 마지막 줄이 불완전하면 제거하고 쉼표 후처리
+            lines.pop()
+        else:
+            break
+    text = '\n'.join(lines)
+
+    # 3) 열린 배열/객체 괄호 닫기
+    depth_brace  = 0
+    depth_bracket = 0
+    in_string    = False
+    escape       = False
+    for ch in text:
+        if escape:
+            escape = False
+            continue
+        if ch == '\\':
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == '{':
+            depth_brace += 1
+        elif ch == '}':
+            depth_brace -= 1
+        elif ch == '[':
+            depth_bracket += 1
+        elif ch == ']':
+            depth_bracket -= 1
+
+    # 마지막에 열린 괄호 닫기 (깊은 것부터)
+    # 어떤 순서로 닫아야 하는지 모르므로 단순히 쌍을 맞춤
+    tail = ''
+    for _ in range(max(0, depth_bracket)):
+        tail += ']'
+    for _ in range(max(0, depth_brace)):
+        tail += '}'
+    return text + tail
+
+
 def _try_parse_json(text: str):
     if not text:
         return None
@@ -525,29 +600,75 @@ def _try_parse_json(text: str):
     else:
         start = text.find('{')
         end   = text.rfind('}')
-        if start == -1 or end == -1:
+        if start == -1:
             return None
-        candidate = text[start:end + 1]
+        # JSON이 잘렸을 수도 있으므로 끝에 } 가 없어도 시도
+        if end == -1:
+            candidate = text[start:]
+        else:
+            candidate = text[start:end + 1]
 
     candidate = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f]', '', candidate)
     candidate = re.sub(r',\s*([}\]])', r'\1', candidate)
 
+    # 1차: 직접 파싱
     try:
         return json.loads(candidate)
     except json.JSONDecodeError:
-        lines   = [ln for ln in candidate.split('\n') if ln.strip()]
-        cleaned = '\n'.join(lines)
-        try:
-            return json.loads(cleaned)
-        except Exception:
-            return None
+        pass
+
+    # 2차: 빈 줄 제거 후 파싱
+    lines   = [ln for ln in candidate.split('\n') if ln.strip()]
+    cleaned = '\n'.join(lines)
+    try:
+        return json.loads(cleaned)
+    except Exception:
+        pass
+
+    # 3차: 잘린 JSON 복구 후 파싱 (FIX-PARSE)
+    try:
+        repaired = _repair_truncated_json(cleaned)
+        repaired = re.sub(r',\s*([}\]])', r'\1', repaired)
+        result   = json.loads(repaired)
+        print("  [JSON복구] 잘린 JSON 복구 성공")
+        return result
+    except Exception:
+        return None
 
 
 # ── fallback HTML ─────────────────────────────────────────────────────────────
 
 def _fallback_html(channels_data, gh_repo, market_overview,
                    all_data, briefing_date, message):
+    """
+    FIX-FALLBACK: JSON 파싱 실패 시 기존 briefing_data.json이 있으면
+    그 데이터를 기반으로 HTML 생성 (데이터 손실 방지).
+    시장 요약 첫 단락에 오류 메시지를 포함해 운영자가 인지할 수 있도록 함.
+    """
     from .html_generator import generate_html
+
+    # 기존 저장 데이터 로드 시도
+    saved_data = {}
+    if os.path.exists(OUTPUT_FILE):
+        try:
+            with open(OUTPUT_FILE, "r", encoding="utf-8") as f:
+                saved_data = json.load(f)
+            print(f"  [fallback] 기존 briefing_data.json 로드 성공 "
+                  f"(stocks={len(saved_data.get('stocks', []))})")
+        except Exception as e:
+            print(f"  [fallback] briefing_data.json 로드 실패: {e}")
+            saved_data = {}
+
+    if saved_data and saved_data.get("stocks"):
+        # 기존 데이터 사용 — market_summary에 경고 prefix 추가
+        prev_summary = saved_data.get("market_summary", "")
+        saved_data["market_summary"] = prev_summary  # 기존 요약 유지
+        return generate_html(
+            saved_data,
+            channels_data, gh_repo, "", market_overview, all_data,
+        )
+
+    # 기존 데이터 없음 → 최소 fallback
     return generate_html(
         {
             "briefing_date":  briefing_date,
