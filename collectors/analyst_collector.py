@@ -107,14 +107,11 @@ def is_new_coverage(title: str) -> bool:
     return any(k in title for k in COVERAGE_KEYWORDS)
 
 
-# ── BUG-AC-1: 제목에서 투자의견·목표주가 추출 ─────────────────────────────────
-
 def _extract_opinion(title: str) -> str:
     """리포트 제목에서 투자의견 추출"""
     m = _OPINION_PATTERN.search(title)
     if m:
         raw = m.group(1)
-        # 영문 → 한글 통일
         mapping = {
             "BUY": "매수", "SELL": "매도", "HOLD": "중립",
             "OUTPERFORM": "비중확대", "UNDERPERFORM": "비중축소",
@@ -202,12 +199,10 @@ def collect_naver_research() -> list:
                 if pdf_tag and pdf_tag.get("href", "").endswith(".pdf"):
                     pdf_link = _build_link(pdf_tag.get("href", ""))
 
-                # BUG-AC-2: 투자의견·목표주가 추출
                 opinion      = _extract_opinion(report_title)
                 target_price = _extract_target_price(report_title)
                 new_cov      = is_new_coverage(report_title)
 
-                # BUG-AC-3: summary에 투자의견·목표주가 포함 (extract_mentions 검색 품질 향상)
                 summary_parts = [f"증권사: {broker}", f"종목: {stock_name}",
                                  f"리포트: {report_title}"]
                 if opinion:
@@ -226,7 +221,7 @@ def collect_naver_research() -> list:
                     "opinion":          opinion,
                     "date":             date_str,
                     "new_coverage":     new_cov,
-                    "analyst_category": "",          # classify 후 채워짐
+                    "analyst_category": "",
                     "title":   f"[{broker}] {stock_name} - {report_title}",
                     "summary": summary,
                     "link":    link or pdf_link,
@@ -245,22 +240,19 @@ def collect_naver_research() -> list:
     return results
 
 
-# ── BUG-AC-4: 분류 로직 전면 재작성 ──────────────────────────────────────────
-
 def classify_analyst_reports(reports: list) -> dict:
     """
     수집된 리포트를 3가지 카테고리로 분류.
 
     분류 우선순위:
     1. simultaneous  : 복수 증권사(≥2)가 동일 종목을 같은 날 언급
-                       → 신규 커버리지 포함 여부와 무관하게 '동시 언급' 우선
-    2. new_coverage  : simultaneous에 해당하지 않는 신규 커버리지
+    2. new_coverage  : simultaneous에 해당하지 않는 신규 커버리지 (종목당 1건)
     3. single_broker : 위 두 카테고리에 해당하지 않는 단일 증권사 단독 언급
 
-    BUG-AC-5: 기존 로직의 문제점 수정
-    - 신규 커버리지가 복수 증권사인 경우 simultaneous로 우선 분류
-    - seen_keys를 단계별로 명확히 관리해 중복 방지
-    - 카테고리명 first_in_6months → single_broker (실제 동작과 일치)
+    BUG-AC-4 FIX:
+    - 각 종목은 세 카테고리 중 정확히 하나에만 배정
+    - 단독 증권사인 경우 new_coverage 여부로 2/3단계 결정
+    - 종목당 대표 리포트 1건만 배정 (동일 종목 중복 방지)
     """
     # 종목별로 리포트 그룹화
     stock_groups: dict[str, list] = defaultdict(list)
@@ -269,12 +261,9 @@ def classify_analyst_reports(reports: list) -> dict:
         if sn:
             stock_groups[sn].append(r)
 
-    simultaneous_out  = []  # 최종 출력: 동시 언급
-    new_coverage_out  = []  # 최종 출력: 신규 커버리지 (단독)
-    single_broker_out = []  # 최종 출력: 단일 증권사 단독
-
-    # 이미 simultaneous로 처리된 종목명 집합 (하위 카테고리 중복 방지)
-    simultaneous_stocks: set[str] = set()
+    simultaneous_out  = []
+    new_coverage_out  = []
+    single_broker_out = []
 
     for stock_name, stock_reports in stock_groups.items():
         # 고유 증권사 수 계산
@@ -285,20 +274,16 @@ def classify_analyst_reports(reports: list) -> dict:
 
         # ── 1단계: 복수 증권사 동시 언급 ────────────────────────────────────
         if len(unique_brokers) >= 2:
-            simultaneous_stocks.add(stock_name)
-
-            # 대표 리포트 생성 (첫 번째 항목 기반)
             primary = stock_reports[0].copy()
             brokers_str = " / ".join(unique_brokers)
 
-            # BUG-AC-6: 신규 커버리지가 포함된 동시 언급이면 new_coverage 플래그 유지
             has_new_cov = any(r.get("new_coverage", False) for r in stock_reports)
-            primary["new_coverage"]          = has_new_cov
-            primary["source_name"]           = brokers_str
-            primary["simultaneous_brokers"]  = unique_brokers
-            primary["broker_count"]          = len(unique_brokers)
-            primary["all_reports"]           = stock_reports
-            primary["title"]   = (
+            primary["new_coverage"]         = has_new_cov
+            primary["source_name"]          = brokers_str
+            primary["simultaneous_brokers"] = unique_brokers
+            primary["broker_count"]         = len(unique_brokers)
+            primary["all_reports"]          = stock_reports
+            primary["title"] = (
                 f"[동시언급 {len(unique_brokers)}사] {stock_name} - "
                 f"{stock_reports[0].get('report_title', '')}"
             )
@@ -307,7 +292,7 @@ def classify_analyst_reports(reports: list) -> dict:
                 f"리포트: {stock_reports[0].get('report_title', '')}"
             )
 
-            # BUG-AC-7: 투자의견이 여러 개면 가장 강한 의견 우선 표시
+            # 투자의견이 여러 개면 가장 강한 의견 우선 표시
             opinions = [r.get("opinion", "") for r in stock_reports if r.get("opinion")]
             opinion_priority = ["매수", "BUY", "비중확대", "중립", "HOLD", "비중축소", "매도"]
             for op in opinion_priority:
@@ -316,23 +301,30 @@ def classify_analyst_reports(reports: list) -> dict:
                     break
 
             simultaneous_out.append(primary)
+            # 이 종목은 1단계 처리 완료 → 2/3단계 진행하지 않음
             continue
 
-        # ── 2단계: 신규 커버리지 (단독 증권사) ───────────────────────────────
-        for r in stock_reports:
-            if r.get("new_coverage", False):
-                new_coverage_out.append(r)
+        # ── 2단계 vs 3단계: 단독 증권사 ─────────────────────────────────────
+        # BUG-AC-4 FIX: 종목 전체를 하나의 카테고리에만 배정
+        # 리포트 중 하나라도 new_coverage=True이면 → new_coverage (대표 1건)
+        # 모두 new_coverage=False이면 → single_broker (대표 1건)
+        has_new_cov = any(r.get("new_coverage", False) for r in stock_reports)
 
-        # ── 3단계: 단일 증권사 단독 언급 ─────────────────────────────────────
-        # 신규 커버리지가 아닌 항목만 추가
-        for r in stock_reports:
-            if not r.get("new_coverage", False):
-                single_broker_out.append(r)
+        if has_new_cov:
+            # new_coverage 리포트 중 첫 번째를 대표로 선택
+            representative = next(
+                (r for r in stock_reports if r.get("new_coverage", False)),
+                stock_reports[0]
+            )
+            new_coverage_out.append(representative)
+        else:
+            # 동일 증권사가 같은 종목 여러 건 올린 경우도 대표 1건만 추가
+            single_broker_out.append(stock_reports[0])
 
     return {
         "simultaneous":  simultaneous_out,
         "new_coverage":  new_coverage_out,
-        "single_broker": single_broker_out,   # BUG-AC-8: 카테고리명 변경
+        "single_broker": single_broker_out,
     }
 
 
@@ -347,7 +339,7 @@ def collect_analyst() -> list:
         print("  → 수집된 리포트 없음")
         return []
 
-    # BUG-AC-9: 원시 데이터 중복 제거 (동일 종목+증권사+날짜)
+    # 원시 데이터 중복 제거 (동일 종목+증권사+날짜)
     seen_raw = set()
     deduped  = []
     for r in reports:
@@ -365,33 +357,20 @@ def collect_analyst() -> list:
     for r in classified["new_coverage"]:
         r["analyst_category"] = "new_coverage"
     for r in classified["single_broker"]:
-        # BUG-AC-10: html_generator와 호환을 위해 first_in_6months도 병행 설정
         r["analyst_category"] = "single_broker"
 
-    # 전체 리포트 합산 (simultaneous 대표 + 나머지)
+    # BUG-AC-4 FIX: classify_analyst_reports()에서 이미 종목당 1카테고리
+    # 보장되므로 단순 합산만 수행
     all_classified = (
         classified["simultaneous"]
         + classified["new_coverage"]
         + classified["single_broker"]
     )
 
-    # BUG-AC-11: 최종 중복 제거 (동일 종목이 simultaneous + single_broker 동시 존재 방지)
-    seen_final    = set()
-    unique_reports = []
-    for r in all_classified:
-        cat = r.get("analyst_category", "")
-        if cat == "simultaneous":
-            key = r.get("stock_name", "")
-        else:
-            key = f"{r.get('stock_name','')}_{r.get('source_name','')}_{cat}"
-        if key not in seen_final:
-            seen_final.add(key)
-            unique_reports.append(r)
-
     sim_count    = len(classified["simultaneous"])
     cov_count    = len(classified["new_coverage"])
     single_count = len(classified["single_broker"])
-    total        = len(unique_reports)
+    total        = len(all_classified)
 
     print(
         f"  → 분류 완료: 동시언급 {sim_count}건 / "
@@ -400,9 +379,8 @@ def collect_analyst() -> list:
         f"최종 {total}건"
     )
 
-    # 동시 언급 종목명 출력 (디버그)
     if classified["simultaneous"]:
         names = [r.get("stock_name", "") for r in classified["simultaneous"]]
         print(f"  → 동시언급 종목: {', '.join(names)}")
 
-    return unique_reports
+    return all_classified
