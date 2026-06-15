@@ -23,6 +23,7 @@ AI 주식 브리핑 HTML 생성 엔진
 - FIX-HP-1 : 오늘의 픽 가중치 점수를 별점 5개로 시각화, signal 텍스트 제거
 - FIX-RSN-1: reasons 목록에 source_name 표시 추가
 - BUG-3    : signal 매핑 버그 수정 — 매수/강력매수/관망/매도 등 실제 값 정상 표시
+- NIGHT-1  : 야간선물(KOSPI200/KOSDAQ150) 지표 추가 및 새벽시장 포인트 섹션 신규
 """
 
 import os
@@ -40,14 +41,16 @@ _HP_SOURCE_META = {
 }
 _HP_SOURCE_DEFAULT = {"color": "#adb5bd", "icon": "📌", "label": "단독 언급"}
 
+# NIGHT-1: 야간선물 키 추가
 _INDICATOR_DEFS = [
-    ("전일 코스피",  ["kospi",        "KOSPI"]),
-    ("전일 코스닥",  ["kosdaq",       "KOSDAQ"]),
-    ("나스닥",       ["nasdaq",       "NASDAQ"]),
-    ("S&P500",       ["sp500",        "SP500", "s&p500"]),
-    ("다우존스",     ["dow",          "DOW",   "dow_jones"]),
-    ("야간선물",     ["night_future", "night", "futures"]),
-    ("달러/원",      ["usd_krw",      "USD_KRW", "usd"]),
+    ("전일 코스피",       ["kospi",          "KOSPI"]),
+    ("전일 코스닥",       ["kosdaq",         "KOSDAQ"]),
+    ("나스닥",            ["nasdaq",         "NASDAQ"]),
+    ("S&P500",            ["sp500",          "SP500", "s&p500"]),
+    ("다우존스",          ["dow",            "DOW",   "dow_jones"]),
+    ("KOSPI200 야간선물", ["kospi200_night", "kospi200night"]),
+    ("KOSDAQ150 야간선물",["kosdaq150_night","kosdaq150night"]),
+    ("달러/원",           ["usd_krw",        "USD_KRW", "usd"]),
 ]
 
 _TAG_META = {
@@ -59,9 +62,7 @@ _TAG_META = {
 }
 
 # BUG-3: signal 표시 레이블 및 색상 매핑 테이블
-# Claude가 실제로 반환하는 값: 강력매수 / 매수 / 관망 / 매도 / 중립
 _SIGNAL_MAP = {
-    # (매칭 키워드 튜플): (css_class, color, 표시_레이블)
     ("강력매수",):                        ("signal-strong-buy",  "#ff4757", "강력매수"),
     ("매수", "buy", "긍정", "positive"):  ("signal-buy",         "#51cf66", "매수"),
     ("관망", "hold", "중립", "neutral"):  ("signal-neutral",     "#adb5bd", "관망"),
@@ -141,6 +142,119 @@ def _build_market_indicators(market_overview: dict) -> str:
     if not badges:
         return '<div class="market-indicators"><p style="color:#666;font-size:.85em;">시장 데이터 없음</p></div>'
     return f'<div class="market-indicators">{badges}</div>'
+
+
+# ── NIGHT-1: 새벽시장 포인트 섹션 ────────────────────────────────────────────
+
+def _build_dawn_market_html(market_overview: dict) -> str:
+    """
+    야간선물(KOSPI200/KOSDAQ150)과 역외환율을 기반으로
+    다음날 장 방향을 요약한 '새벽시장 포인트' 섹션을 생성한다.
+
+    - 야간선물 데이터가 없으면 (거래 시간 외) 빈 문자열 반환 → 섹션 미표시
+    - 등락률 기준으로 방향 판정: +0.3% 이상 → 콜 방향, -0.3% 이하 → 풋 방향, 그 외 → 중립
+    """
+    if not market_overview:
+        return ""
+
+    kospi_night  = market_overview.get("kospi200_night")
+    kosdaq_night = market_overview.get("kosdaq150_night")
+    usd_krw      = market_overview.get("usd_krw")
+
+    # 야간선물 데이터가 하나도 없으면 섹션 자체를 숨김
+    if not kospi_night and not kosdaq_night:
+        return ""
+
+    def _direction_label(pct: float) -> tuple:
+        """(방향_텍스트, 색상, 화살표) 반환"""
+        if pct >= 0.3:
+            return "상승 → 콜 방향",   "#ff6b6b", "▲"
+        elif pct <= -0.3:
+            return "하락 → 풋 방향",   "#74c0fc", "▼"
+        else:
+            return "보합 → 중립 방향", "#adb5bd", "━"
+
+    rows = ""
+
+    if kospi_night:
+        pct  = float(kospi_night.get("change_pct", 0))
+        val  = float(kospi_night.get("value", 0))
+        label, color, arrow = _direction_label(pct)
+        rows += (
+            f'<div class="dawn-row">'
+            f'<span class="dawn-icon">📈</span>'
+            f'<span class="dawn-name">K야간선물(코스피)</span>'
+            f'<span class="dawn-val" style="color:{color};">'
+            f'{arrow} {pct:+.2f}% {label}</span>'
+            f'</div>'
+        )
+
+    if kosdaq_night:
+        pct  = float(kosdaq_night.get("change_pct", 0))
+        val  = float(kosdaq_night.get("value", 0))
+        label, color, arrow = _direction_label(pct)
+        rows += (
+            f'<div class="dawn-row">'
+            f'<span class="dawn-icon">📈</span>'
+            f'<span class="dawn-name">K야간선물(코스닥)</span>'
+            f'<span class="dawn-val" style="color:{color};">'
+            f'{arrow} {pct:+.2f}% {label}</span>'
+            f'</div>'
+        )
+
+    if usd_krw:
+        usd_val = float(usd_krw.get("value", 0))
+        usd_pct = float(usd_krw.get("change_pct", 0))
+        # 역외환율은 방향이 반대: 달러 강세(환율 상승)는 주식 약세 요인
+        if usd_pct >= 0.1:
+            usd_label = "원화 약세 (소폭 풋 방향)"
+            usd_color = "#74c0fc"
+            usd_arrow = "▲"
+        elif usd_pct <= -0.1:
+            usd_label = "원화 강세 (소폭 콜 방향)"
+            usd_color = "#ff6b6b"
+            usd_arrow = "▼"
+        else:
+            usd_label = "환율 안정"
+            usd_color = "#adb5bd"
+            usd_arrow = "━"
+        rows += (
+            f'<div class="dawn-row">'
+            f'<span class="dawn-icon">💱</span>'
+            f'<span class="dawn-name">역외환율</span>'
+            f'<span class="dawn-val" style="color:{usd_color};">'
+            f'{usd_arrow} {usd_val:,.2f} / {usd_val + 0.4:,.2f}원 {usd_pct:+.2f}↓ {usd_label}</span>'
+            f'</div>'
+        )
+
+    # 종합 판단 한 줄 요약
+    summary_color  = "#adb5bd"
+    summary_text   = "방향 판단 유보"
+    kospi_pct = float(kospi_night.get("change_pct", 0)) if kospi_night else 0.0
+    kosdaq_pct = float(kosdaq_night.get("change_pct", 0)) if kosdaq_night else 0.0
+    avg_pct = (kospi_pct + kosdaq_pct) / max(
+        sum([1 for x in [kospi_night, kosdaq_night] if x]), 1
+    )
+    if avg_pct >= 0.3:
+        summary_color = "#ff6b6b"
+        summary_text  = "콜 방향이며, 갭 상승 출발 예상됩니다."
+    elif avg_pct <= -0.3:
+        summary_color = "#74c0fc"
+        summary_text  = "풋 방향이며, 갭 하락 출발 예상됩니다."
+    else:
+        summary_color = "#adb5bd"
+        summary_text  = "보합권으로, 방향성 불분명합니다."
+
+    return f"""
+<div class="dawn-market-box">
+  <div class="dawn-header">🌙 새벽시장 포인트!</div>
+  {rows}
+  <div class="dawn-summary">
+    <span class="dawn-star">✦</span>
+    내용대로라면
+    <strong style="color:{summary_color};">{summary_text}</strong>
+  </div>
+</div>"""
 
 
 def _render_market_summary(market_summary: str) -> str:
@@ -449,6 +563,9 @@ def generate_html(
     market_indicators_html = _build_market_indicators(market_overview)
     market_summary_html    = _render_market_summary(market_sum)
 
+    # NIGHT-1: 새벽시장 포인트 섹션
+    dawn_market_html = _build_dawn_market_html(market_overview)
+
     sector_badges_html = ""
     for sector in hot_sectors:
         if isinstance(sector, dict):
@@ -481,9 +598,6 @@ def generate_html(
                 naver_url = (f"https://finance.naver.com/search/searchResult.naver"
                              f"?query={name.replace(' ', '+')}")
 
-        # BUG-3 수정: _resolve_signal() 함수로 통일 처리
-        # 기존: "긍정"/"부정"/"중립" 외 나머지는 무조건 "중립"으로 덮어썼음
-        # 수정: "강력매수"/"매수"/"관망"/"매도"/"중립" 모두 정상 매핑
         sig_class, sig_color, signal_label = _resolve_signal(signal)
 
         source_tags_html = ""
@@ -684,6 +798,49 @@ a:hover { text-decoration: underline; }
 .ind-label { font-size: .75rem; color: var(--text-muted); margin-bottom: .15rem; }
 .ind-value { font-size: .95rem; font-weight: 600; }
 .ind-pct   { font-size: .8rem;  margin-top: .1rem; }
+
+/* ── NIGHT-1: 새벽시장 포인트 박스 ── */
+.dawn-market-box {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border: 1px solid #2d4a6e;
+  border-radius: 12px;
+  padding: 1.2rem 1.4rem;
+  margin-bottom: 1.5rem;
+}
+.dawn-header {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #74c0fc;
+  margin-bottom: .85rem;
+  letter-spacing: .02em;
+}
+.dawn-row {
+  display: flex;
+  align-items: baseline;
+  gap: .6rem;
+  margin-bottom: .5rem;
+  flex-wrap: wrap;
+}
+.dawn-icon { font-size: .9rem; flex-shrink: 0; }
+.dawn-name {
+  font-size: .9rem;
+  color: var(--text-muted);
+  min-width: 160px;
+  flex-shrink: 0;
+}
+.dawn-val  { font-size: .9rem; font-weight: 600; }
+.dawn-summary {
+  margin-top: .85rem;
+  padding-top: .75rem;
+  border-top: 1px solid #2d4a6e;
+  font-size: .88rem;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  flex-wrap: wrap;
+}
+.dawn-star { color: #ffd43b; font-size: .9rem; }
 
 /* ── 시장 요약 ── */
 .summary-block {
@@ -1019,6 +1176,7 @@ a:hover { text-decoration: underline; }
   .indicator-badge { min-width: 80px; padding: .4rem .6rem; }
   .analyst-card-title { font-size: .85rem; }
   .star-rating { font-size: .95rem; }
+  .dawn-name { min-width: 120px; }
 }
 """
 
@@ -1032,8 +1190,10 @@ a:hover { text-decoration: underline; }
             f'{content}</section>\n'
         )
 
+    # NIGHT-1: 새벽시장 포인트를 시장 지표 바로 아래 삽입
     html_body = (
-        _section("📊 시장 지표",   market_indicators_html)
+        _section("📊 시장 지표", market_indicators_html)
+        + (dawn_market_html if dawn_market_html else "")
         + _section("📰 시장 요약", market_summary_html,
                    show=bool(market_sum.strip()))
         + _section("🔥 주목 섹터",
