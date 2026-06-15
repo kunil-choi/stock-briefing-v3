@@ -12,6 +12,7 @@ AI 주식 브리핑 분석 엔진
 - V2-SYNC    : channel_mentions → reasons 동기화 블록 추가
 - FIX-ANA-2  : generate_market_summary 데드코드 제거
 - FIX-API-1  : Claude API 호출 실패 시 fallback HTML 반환 (try/except 추가)
+- FIX-STRAT  : ai_strategy 구조화 JSON 객체로 전환 (core_scenario/allocation/stock_plans 등)
 """
 
 import json
@@ -277,7 +278,7 @@ def extract_hidden_picks(mentions: dict, filtered_names: set,
     return result
 
 
-# ── Claude 프롬프트 생성 (V2 수준) ───────────────────────────────────────────
+# ── Claude 프롬프트 생성 (V2 수준 + ai_strategy 구조화) ──────────────────────
 
 def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
                            all_data: list, today_date: str,
@@ -398,7 +399,35 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         '      ]\n'
         '    }\n'
         '  ],\n'
-        '  "ai_strategy": "오늘의 AI 투자 전략 (300자 이상, 구체적 매수/비중/리스크관리 액션 포함)"\n'
+        '  "ai_strategy": {\n'
+        '    "core_scenario": "핵심 시나리오 1문장 (오늘 시장을 움직이는 핵심 변수 + 방향성)",\n'
+        '    "allocation": [\n'
+        '      {"sector": "섹터명", "weight_pct": 30, "note": "편입 근거 1문장"}\n'
+        '    ],\n'
+        '    "stock_plans": [\n'
+        '      {\n'
+        '        "name": "종목명",\n'
+        '        "trigger": "매수 트리거 조건 (예: FOMC 비둘기파 확인 + 코스피 2일 연속 양봉)",\n'
+        '        "initial_weight_pct": 10,\n'
+        '        "target_price": "1차 목표: +8~10% / 2차 목표: 실적 가이던스 상향 시 추가 보유",\n'
+        '        "stop_loss": "52주 고점 대비 -12~15% 또는 구체적 가격"\n'
+        '      }\n'
+        '    ],\n'
+        '    "cash_policy": {\n'
+        '      "current_pct": 15,\n'
+        '      "deploy_trigger": "현금 투입 조건 (예: FOMC 비둘기파 확정 후 당일 종가 매수)",\n'
+        '      "raise_trigger": "현금 비중 확대 조건 (예: 코스피 -3% 이상 급락 시 20%→30%)"\n'
+        '    },\n'
+        '    "risk_scenarios": [\n'
+        '      {\n'
+        '        "scenario": "리스크 시나리오명",\n'
+        '        "probability": "높음|보통|낮음",\n'
+        '        "impact": "포트폴리오 영향",\n'
+        '        "response": "대응 방안"\n'
+        '      }\n'
+        '    ],\n'
+        '    "theme_correlation": "테마 간 상관관계 및 섹터 로테이션 방향 (역상관 시나리오 포함)"\n'
+        '  }\n'
         '}'
     )
 
@@ -411,7 +440,14 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         "5. hidden_picks: 반드시 위 [히든픽 후보] 목록에서만 선택, 임의 추가 절대 금지\n"
         "6. hidden_picks 후보가 없으면 빈 배열 [] 반환\n"
         "7. market_summary: 5단락, \\n\\n으로 구분, 각 단락 3~4문장, 400자 이상\n"
-        "8. ai_strategy: 구체적 종목/비중/매수전략/리스크 관리 포함, 300자 이상\n"
+        "8. ai_strategy: 반드시 위 JSON 구조(core_scenario/allocation/stock_plans/cash_policy/risk_scenarios/theme_correlation) 그대로 출력\n"
+        "   - stock_plans: stocks 배열의 종목 + 비주류/중소형 수혜주 1~2개 추가 포함\n"
+        "   - stock_plans.trigger: '이벤트 조건 + 차트 조건' 형식으로 명확하게 작성\n"
+        "   - stock_plans.target_price: '1차 +N% / 2차 조건부 추가 보유' 형식\n"
+        "   - stock_plans.stop_loss: '52주 고점 대비 -12~15%' 또는 절대 가격 명시\n"
+        "   - allocation 비중 합계 = stock_plans 비중 합 + cash_policy.current_pct = 100%\n"
+        "   - risk_scenarios: 최소 2개, 테마 간 역상관 시나리오 반드시 1개 포함\n"
+        "   - theme_correlation: 동시 강세 불가 시나리오와 섹터 로테이션 방향 명시\n"
         "9. channel_counts / total_count / weighted_score / overlap_count: 위 데이터 값 그대로\n"
         "10. reasons의 텍스트 키는 반드시 \"detail\" 사용 (\"reason\" 사용 금지)\n"
         "11. URL은 원문 데이터에 있는 것만 사용, 없으면 빈 문자열\n"
