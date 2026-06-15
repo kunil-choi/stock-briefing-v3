@@ -736,9 +736,8 @@ def generate_html(
     else:
         chart_data_js = "const chartDataMap = {};"
 
-    # ── 애널리스트 / TV ───────────────────────────────────────────────────────
+    # ── 애널리스트 ────────────────────────────────────────────────────────────
     analyst_html = _build_analyst_html(all_data)
-    tv_html      = _build_tv_html(all_data)
 
     # ── CSS ───────────────────────────────────────────────────────────────────
     css = """
@@ -1272,8 +1271,6 @@ a:hover { text-decoration: underline; }
                    show=bool(filtered_hidden))
         + _section("📋 애널리스트 리포트 분석", analyst_html,
                    show="데이터 없음" not in analyst_html)
-        + _section("📺 경제방송TV 추천", tv_html,
-                   show="데이터 없음" not in tv_html)
         + _section("🤖 AI 투자 전략",
                    _render_ai_strategy(ai_strategy) or '<div class="ai-strategy-box">분석 데이터 없음</div>',
                    show=bool(ai_strategy))
