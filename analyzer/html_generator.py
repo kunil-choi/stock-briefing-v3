@@ -22,6 +22,7 @@ AI 주식 브리핑 HTML 생성 엔진
 - FIX-ANA-2: analyst-card 제목 말줄임 제거, 웹에서 전체 표시
 - FIX-HP-1 : 오늘의 픽 가중치 점수를 별점 5개로 시각화, signal 텍스트 제거
 - FIX-RSN-1: reasons 목록에 source_name 표시 추가
+- BUG-3    : signal 매핑 버그 수정 — 매수/강력매수/관망/매도 등 실제 값 정상 표시
 """
 
 import os
@@ -56,6 +57,28 @@ _TAG_META = {
     "유튜브":     {"bg": "#2d1a3a", "color": "#cc5de8"},
     "애널리스트": {"bg": "#1a3a2d", "color": "#51cf66"},
 }
+
+# BUG-3: signal 표시 레이블 및 색상 매핑 테이블
+# Claude가 실제로 반환하는 값: 강력매수 / 매수 / 관망 / 매도 / 중립
+_SIGNAL_MAP = {
+    # (매칭 키워드 튜플): (css_class, color, 표시_레이블)
+    ("강력매수",):                        ("signal-strong-buy",  "#ff4757", "강력매수"),
+    ("매수", "buy", "긍정", "positive"):  ("signal-buy",         "#51cf66", "매수"),
+    ("관망", "hold", "중립", "neutral"):  ("signal-neutral",     "#adb5bd", "관망"),
+    ("매도", "sell", "부정", "negative"): ("signal-sell",        "#74c0fc", "매도"),
+}
+_SIGNAL_DEFAULT = ("signal-neutral", "#adb5bd", "중립")
+
+
+def _resolve_signal(signal: str):
+    """signal 문자열을 (css_class, color, label) 로 변환. BUG-3 수정."""
+    if not signal:
+        return _SIGNAL_DEFAULT
+    sig_l = signal.strip().lower()
+    for keywords, meta in _SIGNAL_MAP.items():
+        if any(k in sig_l for k in keywords):
+            return meta
+    return _SIGNAL_DEFAULT
 
 
 # ── 헬퍼 함수 ────────────────────────────────────────────────────────────────
@@ -264,12 +287,10 @@ def _hidden_pick_source_badge(channel_type: str) -> str:
 
 
 def _render_star_rating(weighted_score, max_score: float = 5.0) -> str:
-    """가중치 점수를 별 5개 기준으로 시각화. 채워진 별★ / 빈 별☆"""
     try:
         score = float(weighted_score)
     except (TypeError, ValueError):
         score = 0.0
-    # 0~max_score 범위를 0~5 별점으로 변환, 최소 1개 보장
     filled = max(1, round((score / max_score) * 5)) if score > 0 else 0
     filled = min(filled, 5)
     empty  = 5 - filled
@@ -281,9 +302,6 @@ def _render_star_rating(weighted_score, max_score: float = 5.0) -> str:
 
 
 def _render_reasons(reasons: list) -> str:
-    """
-    FIX-RSN-1: source_name 있으면 굵게 앞에 표시, 링크도 적용
-    """
     if not reasons:
         return ""
     items = ""
@@ -301,7 +319,6 @@ def _render_reasons(reasons: list) -> str:
         if not rd:
             continue
 
-        # 출처명 배지
         source_html = ""
         if rn:
             meta = _TAG_META.get(rt, {"bg": "#2d2d44", "color": "#adb5bd"})
@@ -311,7 +328,6 @@ def _render_reasons(reasons: list) -> str:
                 f'{rn}</span> '
             )
 
-        # 본문 (링크 있으면 감싸기)
         if rl:
             text_html = (
                 f'<a href="{rl}" target="_blank" rel="noopener" '
@@ -465,19 +481,10 @@ def generate_html(
                 naver_url = (f"https://finance.naver.com/search/searchResult.naver"
                              f"?query={name.replace(' ', '+')}")
 
-        sig_l = (signal or "").lower()
-        if "긍정" in sig_l or "positive" in sig_l:
-            sig_class, sig_color = "signal-positive", "#ffa94d"
-            signal = "긍정"
-        elif "부정" in sig_l or "negative" in sig_l:
-            sig_class, sig_color = "signal-negative", "#ff6b6b"
-            signal = "부정"
-        elif "중립" in sig_l or "neutral" in sig_l:
-            sig_class, sig_color = "signal-neutral", "#adb5bd"
-            signal = "중립"
-        else:
-            sig_class, sig_color = "signal-default", "#74c0fc"
-            signal = "중립"
+        # BUG-3 수정: _resolve_signal() 함수로 통일 처리
+        # 기존: "긍정"/"부정"/"중립" 외 나머지는 무조건 "중립"으로 덮어썼음
+        # 수정: "강력매수"/"매수"/"관망"/"매도"/"중립" 모두 정상 매핑
+        sig_class, sig_color, signal_label = _resolve_signal(signal)
 
         source_tags_html = ""
         for src_type, cnt in channel_cnts.items():
@@ -521,7 +528,7 @@ def generate_html(
     <div class="stock-rank">#{rank}</div>
     <div class="stock-name-block">
       <a href="{naver_url}" target="_blank" rel="noopener" class="stock-name">{name}</a>
-      <span class="signal-badge {sig_class}" style="border-color:{sig_color};color:{sig_color};">{signal}</span>
+      <span class="signal-badge {sig_class}" style="border-color:{sig_color};color:{sig_color};">{signal_label}</span>
     </div>
     <div class="overlap-badge" title="채널 중복 언급 수">🔥 {overlap}개</div>
   </div>
@@ -804,7 +811,7 @@ a:hover { text-decoration: underline; }
 .stock-card-body { padding-top: .25rem; }
 .hp-card-body    { padding-top: .25rem; }
 
-/* ── 이유 목록 (FIX-RSN-1: source_name 배지 포함) ── */
+/* ── 이유 목록 ── */
 .reasons-list { list-style: none; padding-left: 0; margin-top: .4rem; }
 .reasons-list li {
   font-size: .88rem;
@@ -825,7 +832,7 @@ a:hover { text-decoration: underline; }
   flex-shrink: 0;
 }
 
-/* ── 별점 (FIX-HP-1) ── */
+/* ── 별점 ── */
 .star-rating {
   display: inline-flex;
   align-items: center;
