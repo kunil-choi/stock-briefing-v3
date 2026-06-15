@@ -351,6 +351,165 @@ def _render_stock_detail(stock: dict) -> str:
     return html
 
 
+# ── AI 전략 렌더링 ────────────────────────────────────────────────────────────
+
+def _render_ai_strategy(ai_strategy) -> str:
+    """
+    ai_strategy 값을 HTML로 렌더링.
+    - dict 형태(구조화): 핵심시나리오 / 비중 배분 / 종목별 플랜 / 현금 정책 / 리스크 / 테마 상관관계 섹션
+    - str 형태(레거시): 기존 white-space:pre-wrap 박스로 그대로 표시
+    - 비어 있으면 빈 문자열 반환
+    """
+    if not ai_strategy:
+        return ""
+
+    # ── 레거시: 문자열 ────────────────────────────────────────────────────────
+    if isinstance(ai_strategy, str):
+        text = ai_strategy.strip()
+        return f'<div class="ai-strategy-box">{text}</div>' if text else ""
+
+    # ── 구조화 객체 ──────────────────────────────────────────────────────────
+    core        = (ai_strategy.get("core_scenario") or "").strip()
+    allocation  = ai_strategy.get("allocation") or []
+    stock_plans = ai_strategy.get("stock_plans") or []
+    cash_policy = ai_strategy.get("cash_policy") or {}
+    risk_scens  = ai_strategy.get("risk_scenarios") or []
+    theme_corr  = (ai_strategy.get("theme_correlation") or "").strip()
+
+    parts = []
+
+    # 1) 핵심 시나리오
+    if core:
+        parts.append(
+            f'<div class="strat-core">'
+            f'<span class="strat-label">💡 핵심 시나리오</span>'
+            f'{core}</div>'
+        )
+
+    # 2) 비중 배분 + 현금 정책 (2열 그리드)
+    grid_items = []
+
+    if allocation:
+        bars = ""
+        # 비중 합계 기준으로 bar 너비 계산 (최대 100%)
+        total_pct = sum(int(a.get("weight_pct") or 0) for a in allocation)
+        denom = max(total_pct, 100)
+        for a in allocation:
+            label = a.get("sector", "")
+            pct   = int(a.get("weight_pct") or 0)
+            note  = (a.get("note") or "").strip()
+            width = round(pct / denom * 100)
+            bars += (
+                f'<div class="alloc-row" title="{note}">'
+                f'  <span class="alloc-label">{label}</span>'
+                f'  <div class="alloc-bar-bg"><div class="alloc-bar-fill" style="width:{width}%"></div></div>'
+                f'  <span class="alloc-pct">{pct}%</span>'
+                f'</div>'
+            )
+        grid_items.append(
+            f'<div class="strat-block">'
+            f'  <div class="strat-block-title">📊 섹터 비중 배분</div>'
+            f'  <div class="alloc-bar-wrap">{bars}</div>'
+            f'</div>'
+        )
+
+    if cash_policy:
+        c_pct     = int(cash_policy.get("current_pct") or 0)
+        c_deploy  = (cash_policy.get("deploy_trigger")  or "").strip()
+        c_raise   = (cash_policy.get("raise_trigger")   or "").strip()
+        cash_html = (
+            f'<div class="cash-policy-wrap">'
+            f'  <div class="cash-pct-badge">현금 {c_pct}%</div>'
+        )
+        if c_deploy:
+            cash_html += f'<div class="cash-row">💰 투입 조건 <span>{c_deploy}</span></div>'
+        if c_raise:
+            cash_html += f'<div class="cash-row">🛡 확대 조건 <span>{c_raise}</span></div>'
+        cash_html += '</div>'
+        grid_items.append(
+            f'<div class="strat-block">'
+            f'  <div class="strat-block-title">💵 현금 정책</div>'
+            f'  {cash_html}'
+            f'</div>'
+        )
+
+    if grid_items:
+        parts.append(f'<div class="strat-grid">{"".join(grid_items)}</div>')
+
+    # 3) 종목별 매수 플랜 테이블
+    if stock_plans:
+        rows = ""
+        for p in stock_plans:
+            name    = p.get("name", "")
+            trigger = (p.get("trigger") or "").strip()
+            weight  = p.get("initial_weight_pct", "")
+            target  = (p.get("target_price") or "").strip()
+            stop    = (p.get("stop_loss") or "").strip()
+            rows += (
+                f'<tr>'
+                f'  <td><span class="plan-name">{name}</span></td>'
+                f'  <td><span class="plan-trigger">{trigger}</span></td>'
+                f'  <td class="plan-weight">{weight}%</td>'
+                f'  <td><span class="plan-target">{target}</span></td>'
+                f'  <td><span class="plan-stop">{stop}</span></td>'
+                f'</tr>'
+            )
+        plan_html = (
+            '<div class="strat-plans">'
+            '  <div class="strat-block-title">📋 종목별 매수 플랜</div>'
+            '  <table class="plan-table">'
+            '    <thead><tr>'
+            '      <th>종목</th><th>매수 트리거</th>'
+            '      <th style="text-align:center">비중</th>'
+            '      <th>1차 목표가</th><th>손절 기준</th>'
+            '    </tr></thead>'
+            f'    <tbody>{rows}</tbody>'
+            '  </table>'
+            '</div>'
+        )
+        parts.append(plan_html)
+
+    # 4) 리스크 시나리오
+    if risk_scens:
+        items_html = ""
+        prob_map = {"낮음": "low", "보통": "mid", "높음": "high"}
+        for r in risk_scens:
+            scenario = (r.get("scenario") or "").strip()
+            prob_kor = (r.get("probability") or "보통").strip()
+            prob_cls = prob_map.get(prob_kor, "mid")
+            impact   = (r.get("impact")   or "").strip()
+            response = (r.get("response") or "").strip()
+            items_html += (
+                f'<div class="risk-item prob-{prob_cls}">'
+                f'  <div class="risk-badge">'
+                f'    {scenario}'
+                f'    <span class="risk-prob-tag">{prob_kor}</span>'
+                f'  </div>'
+                f'  <div class="risk-impact">{impact}</div>'
+                f'  <div class="risk-response">{response}</div>'
+                f'</div>'
+            )
+        parts.append(
+            f'<div class="strat-risks">'
+            f'  <div class="strat-block-title">⚠️ 리스크 시나리오</div>'
+            f'  {items_html}'
+            f'</div>'
+        )
+
+    # 5) 테마 상관관계
+    if theme_corr:
+        parts.append(
+            f'<div class="strat-correlation">'
+            f'<span class="strat-label">🔗 테마 상관관계</span>'
+            f'{theme_corr}</div>'
+        )
+
+    if not parts:
+        return ""
+
+    return '<div class="ai-strategy-box" style="white-space:normal">' + "".join(parts) + '</div>'
+
+
 # ── 메인 함수 ─────────────────────────────────────────────────────────────────
 
 def generate_html(
@@ -901,6 +1060,143 @@ a:hover { text-decoration: underline; }
   color: var(--text-muted);
   white-space: pre-wrap;
 }
+/* 구조화 전략 레이아웃 */
+.strat-core {
+  background: linear-gradient(135deg, #0d2a1a 0%, #0a1f14 100%);
+  border: 1px solid #2ecc71;
+  border-radius: 10px;
+  padding: 1rem 1.3rem;
+  margin-bottom: 1.2rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2ecc71;
+  line-height: 1.6;
+}
+.strat-core::before { content: ""; }
+.strat-label {
+  display: block;
+  opacity: .7;
+  font-weight: 400;
+  font-size: .8rem;
+  margin-bottom: .3rem;
+  letter-spacing: .04em;
+}
+.strat-core .strat-label { color: #a8e6c3; }
+.strat-correlation::before { content: ""; }
+.strat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .9rem;
+  margin-bottom: 1.2rem;
+}
+@media (max-width: 640px) { .strat-grid { grid-template-columns: 1fr; } }
+.strat-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: .9rem 1rem;
+}
+.strat-block-title {
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: .6rem;
+  opacity: .75;
+}
+.alloc-bar-wrap { display: flex; flex-direction: column; gap: .4rem; }
+.alloc-row { display: flex; align-items: center; gap: .6rem; font-size: .82rem; }
+.alloc-label { width: 90px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+.alloc-bar-bg { flex: 1; background: var(--border); border-radius: 4px; height: 8px; overflow: hidden; }
+.alloc-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, #27ae60, #2ecc71); transition: width .4s; }
+.alloc-pct { width: 34px; text-align: right; color: #2ecc71; font-weight: 600; font-size: .8rem; flex-shrink: 0; }
+.cash-policy-wrap { font-size: .85rem; line-height: 1.7; }
+.cash-pct-badge {
+  display: inline-block;
+  background: #1a3a2a;
+  border: 1px solid #2ecc71;
+  color: #2ecc71;
+  border-radius: 20px;
+  padding: .15rem .7rem;
+  font-weight: 700;
+  font-size: .9rem;
+  margin-bottom: .5rem;
+}
+.cash-row { color: var(--text-muted); margin-top: .25rem; }
+.cash-row span { color: var(--text); font-weight: 500; }
+.strat-plans { margin-bottom: 1.2rem; }
+.plan-table { width: 100%; border-collapse: collapse; font-size: .83rem; }
+.plan-table th {
+  background: #0d1a12;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-align: left;
+  padding: .45rem .6rem;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.plan-table td {
+  padding: .45rem .6rem;
+  border-bottom: 1px solid #1a2a1e;
+  vertical-align: top;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.plan-table tr:hover td { background: #0d1f14; }
+.plan-name { color: var(--accent); font-weight: 600; white-space: nowrap; }
+.plan-trigger { color: #f0c040; }
+.plan-target { color: #2ecc71; }
+.plan-stop { color: #e74c3c; }
+.plan-weight { color: var(--text); text-align: center; font-weight: 600; }
+.strat-risks { margin-bottom: 1.2rem; }
+.risk-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: .4rem .8rem;
+  padding: .7rem .9rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid #c0392b;
+  border-radius: 6px;
+  margin-bottom: .6rem;
+  font-size: .85rem;
+  line-height: 1.55;
+}
+.risk-item.prob-low  { border-left-color: #27ae60; }
+.risk-item.prob-mid  { border-left-color: #f39c12; }
+.risk-item.prob-high { border-left-color: #c0392b; }
+.risk-badge {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-weight: 700;
+  color: var(--text);
+  font-size: .88rem;
+}
+.risk-prob-tag {
+  font-size: .72rem;
+  border-radius: 10px;
+  padding: .1rem .5rem;
+  font-weight: 600;
+}
+.prob-low  .risk-prob-tag { background: #0d2a1a; color: #2ecc71; border: 1px solid #27ae60; }
+.prob-mid  .risk-prob-tag { background: #2a1e00; color: #f39c12; border: 1px solid #e67e22; }
+.prob-high .risk-prob-tag { background: #2a0d0d; color: #e74c3c; border: 1px solid #c0392b; }
+.risk-impact  { color: var(--text-muted); }
+.risk-response { color: #f0c040; }
+.risk-response::before { content: "▶ "; opacity: .6; }
+.strat-correlation {
+  background: #0a1520;
+  border: 1px solid #1a3050;
+  border-radius: 8px;
+  padding: .85rem 1rem;
+  font-size: .85rem;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+.strat-correlation .strat-label { color: #5b9bd5; }
 
 /* ── 면책 ── */
 .disclaimer {
@@ -979,8 +1275,8 @@ a:hover { text-decoration: underline; }
         + _section("📺 경제방송TV 추천", tv_html,
                    show="데이터 없음" not in tv_html)
         + _section("🤖 AI 투자 전략",
-                   f'<div class="ai-strategy-box">{ai_strategy or "분석 데이터 없음"}</div>',
-                   show=bool((ai_strategy or "").strip()))
+                   _render_ai_strategy(ai_strategy) or '<div class="ai-strategy-box">분석 데이터 없음</div>',
+                   show=bool(ai_strategy))
     )
 
     # ── JS ────────────────────────────────────────────────────────────────────

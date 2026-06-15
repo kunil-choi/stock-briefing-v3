@@ -398,7 +398,35 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         '      ]\n'
         '    }\n'
         '  ],\n'
-        '  "ai_strategy": "오늘의 AI 투자 전략 (300자 이상, 구체적 매수/비중/리스크관리 액션 포함)"\n'
+        '  "ai_strategy": {\n'
+        '    "core_scenario": "오늘 시장을 관통하는 핵심 시나리오 1문장 (예: FOMC 비둘기파 확인 시 반도체 중심 단기 반등 유효)",\n'
+        '    "allocation": [\n'
+        '      {"sector": "섹터명", "weight_pct": 50, "note": "배분 근거 1문장"}\n'
+        '    ],\n'
+        '    "stock_plans": [\n'
+        '      {\n'
+        '        "name": "종목명",\n'
+        '        "trigger": "매수 트리거 조건 (이벤트+지표 조합, 예: FOMC 동결 확인 + 코스피 2일 연속 양봉)",\n'
+        '        "initial_weight_pct": 5,\n'
+        '        "target_price": "1차 목표가 (수치 또는 조건, 예: +8~10% / 7월 실적 가이던스 전)",\n'
+        '        "stop_loss": "손절 기준 (수치 또는 조건, 예: 매수가 대비 -7% 또는 52주 고점 대비 -15%)"\n'
+        '      }\n'
+        '    ],\n'
+        '    "cash_policy": {\n'
+        '      "current_pct": 15,\n'
+        '      "deploy_trigger": "현금 투입 조건 (예: FOMC 동결 확인 후 다음 거래일 시가)",\n'
+        '      "raise_trigger": "현금 비중 확대 조건 (예: 코스피 2일 연속 음봉 + 외국인 순매도 1조 초과)"\n'
+        '    },\n'
+        '    "risk_scenarios": [\n'
+        '      {\n'
+        '        "scenario": "리스크 시나리오명 (예: FOMC 매파 서프라이즈)",\n'
+        '        "probability": "낮음|보통|높음 중 하나",\n'
+        '        "impact": "포트폴리오 영향 1문장",\n'
+        '        "response": "대응 방법 1문장 (예: 반도체 비중 즉시 절반 축소, 현금 30%로 확대)"\n'
+        '      }\n'
+        '    ],\n'
+        '    "theme_correlation": "테마 간 상관관계 및 동시 강세 불가 시나리오 설명 (예: 중동 분쟁 재발 시 유가 급등 → 인플레 우려 → 반도체 성장주 하락 역상관)"\n'
+        '  }\n'
         '}'
     )
 
@@ -411,7 +439,14 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         "5. hidden_picks: 반드시 위 [히든픽 후보] 목록에서만 선택, 임의 추가 절대 금지\n"
         "6. hidden_picks 후보가 없으면 빈 배열 [] 반환\n"
         "7. market_summary: 5단락, \\n\\n으로 구분, 각 단락 3~4문장, 400자 이상\n"
-        "8. ai_strategy: 구체적 종목/비중/매수전략/리스크 관리 포함, 300자 이상\n"
+        "8. ai_strategy: 반드시 위 JSON 객체 구조로 작성, 문자열로 대체 절대 금지\n"
+        "   - core_scenario: 오늘 시장 핵심 시나리오 1문장, 구체적 트리거 포함\n"
+        "   - allocation: 섹터별 비중 합계 = 100% (현금 포함), 수치로 명시\n"
+        "   - stock_plans: stocks 섹션에 등장한 종목 위주로 2~5개, 각 항목마다\n"
+        "     trigger(이벤트+지표 조건문), initial_weight_pct(숫자), target_price, stop_loss 모두 필수\n"
+        "   - cash_policy: current_pct 숫자 필수, deploy_trigger/raise_trigger 조건문 형태로\n"
+        "   - risk_scenarios: 2~3개, probability는 낮음|보통|높음 중 하나, response는 구체적 대응 액션\n"
+        "   - theme_correlation: 주요 테마 간 역상관 관계 및 동시 약세 시나리오 반드시 포함\n"
         "9. channel_counts / total_count / weighted_score / overlap_count: 위 데이터 값 그대로\n"
         "10. reasons의 텍스트 키는 반드시 \"detail\" 사용 (\"reason\" 사용 금지)\n"
         "11. URL은 원문 데이터에 있는 것만 사용, 없으면 빈 문자열\n"
@@ -618,7 +653,31 @@ def analyze_and_generate_html(
                 for m in cm
             ]
 
-    # ── 12. 검증 ─────────────────────────────────────────────────────────────
+    # ── 12. ai_strategy 정규화 (문자열 레거시 → 구조화 객체 변환) ─────────────
+    raw_strategy = result.get("ai_strategy")
+    if isinstance(raw_strategy, str):
+        # 레거시: 문자열 응답을 구조화 객체로 감싸 하위 호환 유지
+        result["ai_strategy"] = {
+            "core_scenario":    raw_strategy.strip(),
+            "allocation":       [],
+            "stock_plans":      [],
+            "cash_policy":      {"current_pct": 0, "deploy_trigger": "", "raise_trigger": ""},
+            "risk_scenarios":   [],
+            "theme_correlation": "",
+        }
+        print("  [ai_strategy] 문자열 레거시 → 구조화 객체로 변환")
+    elif not isinstance(raw_strategy, dict):
+        result["ai_strategy"] = {
+            "core_scenario":    "",
+            "allocation":       [],
+            "stock_plans":      [],
+            "cash_policy":      {"current_pct": 0, "deploy_trigger": "", "raise_trigger": ""},
+            "risk_scenarios":   [],
+            "theme_correlation": "",
+        }
+        print("  [ai_strategy] 누락 → 빈 구조 초기화")
+
+    # ── 13. 검증 ─────────────────────────────────────────────────────────────
     from .validation import validate_stocks
     result = validate_stocks(result, all_data, api_key, stock_map)
 
