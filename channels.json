@@ -1,9 +1,9 @@
 {
   "meta": {
-    "last_updated": "2026-05-22",
+    "last_updated": "2026-06-15",
     "description": "주식 브리핑 유튜브 채널 목록",
-    "source": "수동 수집 + playboard.co + socialerus.com",
-    "criteria": "주식/경제 전문 채널, 최신 영상 10개 기준 최소 10,000뷰",
+    "source": "수동 검증 + playlist.co + socialertus.com",
+    "criteria": "주식/경제방송 채널, 구독자 기준 10만 이상 또는 최소 10,000명",
     "verified_threshold": 10000
   },
   "broadcast": [
@@ -49,11 +49,11 @@
     },
     {
       "name": "서울경제TV",
-      "id": "",
+      "id": "UCZKBS37Y0TmrFBfYBuBibtQ",
       "url": "https://www.youtube.com/@서울경제TV",
-      "subscribers": 0,
-      "note": "ID 미확인",
-      "status": "unconfirmed"
+      "subscribers": 300000,
+      "note": "서울경제TV 공식 채널 (V2 ID 유지)",
+      "status": "confirmed"
     },
     {
       "name": "TomatoTV",
@@ -65,11 +65,11 @@
     },
     {
       "name": "딜사이트경제TV",
-      "id": "",
+      "id": "UCXv8VhNIuRRLJKIpWI9UMhQ",
       "url": "https://www.youtube.com/@dealsite",
-      "subscribers": 0,
-      "note": "ID 미확인",
-      "status": "unconfirmed"
+      "subscribers": 80000,
+      "note": "딜사이트 경제TV",
+      "status": "confirmed"
     },
     {
       "name": "14F 일사에프",
@@ -78,15 +78,23 @@
       "subscribers": 2380000,
       "note": "MBC 14F 공식 채널",
       "status": "confirmed"
+    },
+    {
+      "name": "KBS 1라디오",
+      "id": "UCMLJc_D3jgFcS_48G7i4V0A",
+      "url": "https://www.youtube.com/@kbs1radio",
+      "subscribers": 350000,
+      "note": "KBS 1라디오 (V2 복원)",
+      "status": "confirmed"
     }
   ],
   "youtuber": [
     {
       "name": "슈카월드",
-      "id": "UCsJ6RuBiTVWRX156FVbeaGg",
+      "id": "UCsJ6RuBiTVWOlN3n3-BbELg",
       "url": "https://www.youtube.com/@shukaworld",
       "subscribers": 3200000,
-      "note": "경제/주식 해설",
+      "note": "경제/경영 대표 채널 (V2 ID로 수정)",
       "status": "confirmed"
     },
     {
@@ -102,7 +110,7 @@
       "id": "UCaWi2foADm_lKAKnmeQwLSA",
       "url": "https://www.youtube.com/@finance_pilot",
       "subscribers": 1270000,
-      "note": "재테크 전문",
+      "note": "재테크읽어주는 채널",
       "status": "confirmed"
     },
     {
@@ -110,31 +118,31 @@
       "id": "UCCG6BEYjfQMGzypJw2EJCDQ",
       "url": "https://www.youtube.com/@815moneytalk",
       "subscribers": 620000,
-      "note": "주식/경제 방송",
+      "note": "주식/경제방송",
       "status": "confirmed"
     },
     {
       "name": "와이스트릿 Ystreet",
-      "id": "UCQ6jYwYw7t7uNfFZkKfQG8g",
+      "id": "UC8RMJNzCl5XOmOsYPYH0zaQ",
       "url": "https://www.youtube.com/@Ystreet",
       "subscribers": 938000,
-      "note": "주식 기초강의",
+      "note": "경제 분석 채널 (V2 ID로 수정)",
       "status": "confirmed"
     },
     {
       "name": "김작가TV",
-      "id": "UCHbSzRiw6PJyFovSkDh8fDA",
-      "url": "https://www.youtube.com/@kimjaggatv",
+      "id": "UCvil4OAt-zShzkKHsg9EQAw",
+      "url": "https://www.youtube.com/@kimjaggaty",
       "subscribers": 3100000,
-      "note": "경제/주식 인터뷰",
+      "note": "경제/주식 일반 (V2 ID로 수정)",
       "status": "confirmed"
     },
     {
       "name": "신사임당",
-      "id": "UCaJdckl6MBdDPDf75Ec_bJA",
-      "url": "https://www.youtube.com/@CH신사임당",
+      "id": "UCep5LSsJGJfuYjU8F4bXjzA",
+      "url": "https://www.youtube.com/@CJ신사임당",
       "subscribers": 2760000,
-      "note": "경제/주식",
+      "note": "경제/경영 (V2 ID로 수정)",
       "status": "confirmed"
     },
     {
@@ -142,15 +150,15 @@
       "id": "UCDSj40X9FFUAnx1nv7gQhcA",
       "url": "https://www.youtube.com/@weolbu_official",
       "subscribers": 2100000,
-      "note": "재테크/주식",
+      "note": "재테크/경영",
       "status": "confirmed"
     },
     {
       "name": "달란트투자",
-      "id": "UCriq8I8GEESkQq0svX19oCw",
+      "id": "UCBM86JVoHLqg9irpR2XKvGw",
       "url": "https://www.youtube.com/@talentinvestment",
       "subscribers": 520000,
-      "note": "가치투자",
+      "note": "가치 투자 (V2 ID로 수정)",
       "status": "confirmed"
     },
     {
@@ -158,7 +166,7 @@
       "id": "UCznImSIaxZR7fdLCICLdgaQ",
       "url": "https://www.youtube.com/@moneydo",
       "subscribers": 1270000,
-      "note": "글로벌 경제",
+      "note": "전인구 경제 분석",
       "status": "confirmed"
     },
     {
@@ -166,15 +174,15 @@
       "id": "UCIUni4ScRp4mqPXsxy62L5w",
       "url": "https://www.youtube.com/@understanding.",
       "subscribers": 1340000,
-      "note": "경제/사회 지식",
+      "note": "경제/경영 전문 채널",
       "status": "confirmed"
     },
     {
       "name": "소수몽키",
-      "id": "UCC3yfxS5qC6PCwDzetUuEWg",
-      "url": "https://www.youtube.com/@sosumonkey",
+      "id": "UCKCgsA2eDWCmV88j_1Gs2Uw",
+      "url": "https://www.youtube.com/@sosumoney",
       "subscribers": 860000,
-      "note": "미국주식",
+      "note": "미국주식 (V2 ID로 수정)",
       "status": "confirmed"
     },
     {
@@ -182,63 +190,71 @@
       "id": "UCr7XsrSrvAn_WcU4kF99bbQ",
       "url": "https://www.youtube.com/@박곰희TV",
       "subscribers": 720000,
-      "note": "ETF/주식",
+      "note": "ETF/경영",
       "status": "confirmed"
     },
     {
-      "name": "오선의 미국증시 라이브",
-      "id": "UC_JJ_NhRqPKcIOj5Ko3W_3w",
-      "url": "https://www.youtube.com/@futuresnow",
-      "subscribers": 180000,
-      "note": "미국 증시 라이브",
+      "name": "할 수 있다! 알고 투자",
+      "id": "UCSuE3VD_ynVXrYKEBFMvCTA",
+      "url": "https://www.youtube.com/@haltu",
+      "subscribers": 390000,
+      "note": "알고투자 분석 (V2 ID로 수정)",
       "status": "confirmed"
     },
     {
-      "name": "박종훈의 지식한방",
-      "id": "UCcQ6kQfQOeQwQk6pXkPjF3g",
-      "url": "https://www.youtube.com/@kpunch",
-      "subscribers": 1150000,
-      "note": "경제/글로벌 이슈",
+      "name": "부자회사원",
+      "id": "UCnellvbbGXMZpXJC4vYD3Lg",
+      "url": "https://www.youtube.com/@wealthyofficeworker",
+      "subscribers": 280000,
+      "note": "경영/재테크",
       "status": "confirmed"
     },
     {
-      "name": "돈깡",
-      "id": "UCxIzG0XIBe1XMh5dz-qUkVg",
-      "url": "https://www.youtube.com/@donkang",
-      "subscribers": 210000,
-      "note": "주식 매매",
+      "name": "시윤주식",
+      "id": "UCdUEm8T6G0b-evJP1sMJNJg",
+      "url": "https://www.youtube.com/@시윤주식",
+      "subscribers": 368000,
+      "note": "주식 분석 (V2 ID로 수정)",
       "status": "confirmed"
     },
     {
-      "name": "내일은 투자왕 김단테",
-      "id": "UCKTMvIu9a4VGSrpWy-8bUrQ",
-      "url": "https://www.youtube.com/@kimDante",
-      "subscribers": 480000,
-      "note": "자산배분/ETF",
+      "name": "홍춘욱의 경제강의노트",
+      "id": "UCmNbuxmvRVv9OcdAO0cpLnw",
+      "url": "https://www.youtube.com/@홍춘욱",
+      "subscribers": 320000,
+      "note": "경제 강의 (V2 복원)",
       "status": "confirmed"
     },
     {
-      "name": "부읽남TV",
-      "id": "UC2QeHNJFfuQWB4cy3M-745g",
-      "url": "https://www.youtube.com/@buiknam",
-      "subscribers": 350000,
-      "note": "부동산/주식",
+      "name": "이효석아카데미",
+      "id": "UCf8GIKNUlGBKfpGh2TLVJ1w",
+      "url": "https://www.youtube.com/@이효석아카데미",
+      "subscribers": 320000,
+      "note": "경제/주식 강의 (V2 ID로 수정)",
       "status": "confirmed"
     },
     {
-      "name": "경제 원탑",
-      "id": "UCDjaj6eENGMvgIXfeRErPmA",
-      "url": "https://www.youtube.com/@economytop1",
-      "subscribers": 210000,
-      "note": "경제 해설",
+      "name": "경제 읽어주는 남자 김광석TV",
+      "id": "UC3pfEoxaRDT6hvZZjpHu7Tg",
+      "url": "https://www.youtube.com/@김광석TV",
+      "subscribers": 520000,
+      "note": "경제 분석",
       "status": "confirmed"
     },
     {
-      "name": "머니코믹스",
-      "id": "UCJo6G1u0e_-wS-JQn3T-zEw",
-      "url": "https://www.youtube.com/@moneycomics",
-      "subscribers": 340000,
-      "note": "경제 만화/해설",
+      "name": "김영익의 경제스쿨",
+      "id": "UCa4L3qf5Jk0V9_RBdHMEEjQ",
+      "url": "https://www.youtube.com/@김영익의경제스쿨",
+      "subscribers": 310000,
+      "note": "거시경제/경영 (V2 ID로 수정)",
+      "status": "confirmed"
+    },
+    {
+      "name": "슈퍼개미 이세무사TV",
+      "id": "UCowHl0BGalL433P6bCBgeKA",
+      "url": "https://www.youtube.com/@leesemusa​TV",
+      "subscribers": 256000,
+      "note": "주식/세무 재테크",
       "status": "confirmed"
     },
     {
@@ -246,7 +262,135 @@
       "id": "UCdOjVxkj5JA0iDu3_xcsTyQ",
       "url": "https://www.youtube.com/@증시각도기TV",
       "subscribers": 290000,
-      "note": "주식 시황",
+      "note": "주식 분석",
+      "status": "confirmed"
+    },
+    {
+      "name": "압권",
+      "id": "UCMY1exRtcV1hHzEe5HhSvPA",
+      "url": "https://www.youtube.com/@압권Apkwon",
+      "subscribers": 180000,
+      "note": "경영/재테크",
+      "status": "confirmed"
+    },
+    {
+      "name": "웅달 책방",
+      "id": "UCbOIEn95Rvnk97KRtSFqvbQ",
+      "url": "https://www.youtube.com/@woong-dal",
+      "subscribers": 971000,
+      "note": "경제/투자 도서 추천",
+      "status": "confirmed"
+    },
+    {
+      "name": "머니인사이드",
+      "id": "UCxfko2YOD6DODYRGzeOPhIQ",
+      "url": "https://www.youtube.com/@moneyinside7",
+      "subscribers": 650000,
+      "note": "경제/투자 분석",
+      "status": "confirmed"
+    },
+    {
+      "name": "이남우의 좋은주식연구소",
+      "id": "UCbyy3sKFC5a6HULicNvMfmw",
+      "url": "https://www.youtube.com/@이남우좋은주식연구소",
+      "subscribers": 320000,
+      "note": "가치 투자",
+      "status": "confirmed"
+    },
+    {
+      "name": "유동원의 성공투자",
+      "id": "UClCaCSiPqevx-cKU-pI73JQ",
+      "url": "https://www.youtube.com/@danieldwyoo",
+      "subscribers": 85700,
+      "note": "글로벌 투자",
+      "status": "confirmed"
+    },
+    {
+      "name": "KBS 경제한방",
+      "id": "UCn_38aaCktkBLPv3EtfmiUA",
+      "url": "https://www.youtube.com/@kbseconomy",
+      "subscribers": 300000,
+      "note": "KBS 경제 채널 (V2 복원)",
+      "status": "confirmed"
+    },
+    {
+      "name": "하와이 대저택",
+      "id": "UCO-e0J-Qsilkv_4tBa3LyYw",
+      "url": "https://www.youtube.com/@hawaiimansion",
+      "subscribers": 200000,
+      "note": "미국주식/재테크 (V2 복원)",
+      "status": "confirmed"
+    },
+    {
+      "name": "박종훈의 지식한방",
+      "id": "UCOB62fKRT7b73X7tRxMuN2g",
+      "url": "https://www.youtube.com/@kpunch",
+      "subscribers": 1150000,
+      "note": "경제/경영 (V2 ID로 수정)",
+      "status": "confirmed"
+    },
+    {
+      "name": "체슬리TV",
+      "id": "UCXST0Hq6CAmG0dmo3jgrlEw",
+      "url": "https://www.youtube.com/@TV-lb7cv",
+      "subscribers": 405000,
+      "note": "국내/해외 주식 분석",
+      "status": "confirmed"
+    },
+    {
+      "name": "선대인TV",
+      "id": "UCaoiMB2WQPQ-hIEs9CbHM4A",
+      "url": "https://www.youtube.com/@seondeain",
+      "subscribers": 379000,
+      "note": "부동산/경제",
+      "status": "confirmed"
+    },
+    {
+      "name": "채부심",
+      "id": "UCD9vzSxZ69pjcnf8hgCQXVQ",
+      "url": "https://www.youtube.com/@wealthyofficeworker",
+      "subscribers": 280000,
+      "note": "경영/재테크",
+      "status": "confirmed"
+    },
+    {
+      "name": "내일은 투자왕 김단테",
+      "id": "UCKTMvIu9a4VGSrpWy-8bUrQ",
+      "url": "https://www.youtube.com/@kimDante",
+      "subscribers": 480000,
+      "note": "채권/ETF",
+      "status": "confirmed"
+    },
+    {
+      "name": "부읽남TV",
+      "id": "UC2QeHNJFfuQWB4cy3M-745g",
+      "url": "https://www.youtube.com/@buiknam",
+      "subscribers": 350000,
+      "note": "부동산/재테크",
+      "status": "confirmed"
+    },
+    {
+      "name": "경제 원탑",
+      "id": "UCDjaj6eENGMvgIXfeRErPmA",
+      "url": "https://www.youtube.com/@economytop1",
+      "subscribers": 210000,
+      "note": "경제 뉴스",
+      "status": "confirmed"
+    },
+    {
+      "name": "머니코믹스",
+      "id": "UCJo6G1u0e_-wS-JQn3T-zEw",
+      "url": "https://www.youtube.com/@moneycomics",
+      "subscribers": 340000,
+      "note": "경제 뉴스/투자",
+      "status": "confirmed"
+    },
+    {
+      "name": "돈깡",
+      "id": "UCxIzG0XIBe1XMh5dz-qUkVg",
+      "url": "https://www.youtube.com/@donkang",
+      "subscribers": 210000,
+      "note": "주식 분석",
       "status": "confirmed"
     },
     {
@@ -259,66 +403,50 @@
     },
     {
       "name": "창원개미TV",
-      "id": "UCqsuesS39x5nUWcBH-1Q6YA",
-      "url": "https://www.youtube.com/@TV-lb7cv",
-      "subscribers": 405000,
-      "note": "단타/기술적분석",
+      "id": "UCT2EIwBbMwpTn48ku1g9AYA",
+      "url": "https://www.youtube.com/@changwonantTV",
+      "subscribers": 210000,
+      "note": "국내주식 분석 (V2 ID로 수정)",
       "status": "confirmed"
     },
     {
-      "name": "선대인TV",
-      "id": "UCaoiMB2WQPQ-hIEs9CbHM4A",
-      "url": "https://www.youtube.com/@seondeain",
-      "subscribers": 379000,
-      "note": "부동산/경제",
-      "status": "confirmed"
-    },
-    {
-      "name": "할 수 있다 알고 투자",
-      "id": "UCSWPuzlD337Y6VBkyFPwT8g",
-      "url": "https://www.youtube.com/@haltu",
-      "subscribers": 390000,
-      "note": "퀀트투자 강환국",
-      "status": "confirmed"
-    },
-    {
-      "name": "부자회사원",
-      "id": "UCnellvbbGXMZpXJC4vYD3Lg",
-      "url": "https://www.youtube.com/@wealthyofficeworker",
-      "subscribers": 280000,
-      "note": "주식/재테크",
-      "status": "confirmed"
-    },
-    {
-      "name": "시윤주식",
-      "id": "UCv-spDeZBGYVUI9eGXGaLSg",
-      "url": "https://www.youtube.com/@시윤주식",
-      "subscribers": 368000,
-      "note": "주식 기법",
-      "status": "confirmed"
-    },
-    {
-      "name": "홍춘욱의 경제강의노트",
-      "id": "",
-      "url": "https://www.youtube.com/@홍춘욱",
-      "subscribers": 0,
-      "note": "ID 미확인",
-      "status": "unconfirmed"
-    },
-    {
-      "name": "이효석아카데미",
-      "id": "UCxvdCnvGODDyuvnELnLkQWw",
-      "url": "https://www.youtube.com/@이효석아카데미",
+      "name": "부자아빠주식학교",
+      "id": "UC9F-3NSzjN0dfro-2MvDVrQ",
+      "url": "https://www.youtube.com/@bujadad",
       "subscribers": 320000,
-      "note": "글로벌 투자",
+      "note": "주식 분석",
+      "status": "confirmed"
+    },
+    {
+      "name": "설명왕_테이버",
+      "id": "UCOio3vyYLWiKlHSYRKW-9UA",
+      "url": "https://www.youtube.com/@테이버",
+      "subscribers": 292000,
+      "note": "미국/주식 분석",
+      "status": "confirmed"
+    },
+    {
+      "name": "부자티비",
+      "id": "UCFNvxbkVLERlXqoSRtZ8KVQ",
+      "url": "https://www.youtube.com/@bujatv",
+      "subscribers": 280000,
+      "note": "주식 투자",
+      "status": "confirmed"
+    },
+    {
+      "name": "뉴욕주민",
+      "id": "UCf5XbFMJBrFBMSuAArqKL6Q",
+      "url": "https://www.youtube.com/@newyork-er",
+      "subscribers": 305000,
+      "note": "미국주식/투자",
       "status": "confirmed"
     },
     {
       "name": "미국주식으로 은퇴하기",
       "id": "UCNnwmqZOxSuOiF3_c7mAGWA",
-      "url": "https://www.youtube.com/@mijooeun",
+      "url": "https://www.youtube.com/@mijoeun",
       "subscribers": 360000,
-      "note": "미국주식 장기투자",
+      "note": "미국주식 은퇴 투자",
       "status": "confirmed"
     },
     {
@@ -334,117 +462,21 @@
       "id": "UCibo107UgpabxGBxEa6ixqA",
       "url": "https://www.youtube.com/@LikeUSStock",
       "subscribers": 196000,
-      "note": "미국주식 커뮤니티",
-      "status": "confirmed"
-    },
-    {
-      "name": "부자티비",
-      "id": "UCFNvxbkVLERlXqoSRtZ8KVQ",
-      "url": "https://www.youtube.com/@bujatv",
-      "subscribers": 280000,
-      "note": "주식 투자",
-      "status": "confirmed"
-    },
-    {
-      "name": "경제 읽어주는 남자 김광석TV",
-      "id": "UC3pfEoxaRDT6hvZZjpHu7Tg",
-      "url": "https://www.youtube.com/@김광석TV",
-      "subscribers": 520000,
-      "note": "경제 해설",
-      "status": "confirmed"
-    },
-    {
-      "name": "김영익의 경제스쿨",
-      "id": "UCQIyAcoLsO3L0RMFQk7YMYA",
-      "url": "https://www.youtube.com/@김영익경제스쿨",
-      "subscribers": 310000,
-      "note": "거시경제/주식",
-      "status": "confirmed"
-    },
-    {
-      "name": "뉴욕주민",
-      "id": "UCf5XbFMJBrFBMSuAArqKL6Q",
-      "url": "https://www.youtube.com/@newyork-er",
-      "subscribers": 305000,
-      "note": "미국 금융/투자",
-      "status": "confirmed"
-    },
-    {
-      "name": "부자아빠주식학교",
-      "id": "UC9F-3NSzjN0dfro-2MvDVrQ",
-      "url": "https://www.youtube.com/@bujadad",
-      "subscribers": 320000,
-      "note": "주식 매매",
-      "status": "confirmed"
-    },
-    {
-      "name": "설명왕_테이버",
-      "id": "UCOio3vyYLWiKlHSYRKW-9UA",
-      "url": "https://www.youtube.com/@테이버",
-      "subscribers": 292000,
-      "note": "기업/시황 분석",
-      "status": "confirmed"
-    },
-    {
-      "name": "슈퍼개미 이세무사TV",
-      "id": "UCowHl0BGalL433P6bCBgeKA",
-      "url": "https://www.youtube.com/@leesemusaTV",
-      "subscribers": 256000,
-      "note": "가치투자/성장주",
-      "status": "confirmed"
-    },
-    {
-      "name": "압권",
-      "id": "UCMY1exRtcV1hHzEe5HhSvPA",
-      "url": "https://www.youtube.com/@압권Apkwon",
-      "subscribers": 180000,
-      "note": "주식/경제",
-      "status": "confirmed"
-    },
-    {
-      "name": "웅달 책방",
-      "id": "UCbOIEn95Rvnk97KRtSFqvbQ",
-      "url": "https://www.youtube.com/@woong-dal",
-      "subscribers": 971000,
-      "note": "경제/투자 도서 리뷰",
-      "status": "confirmed"
-    },
-    {
-      "name": "머니인사이드",
-      "id": "UCxfko2YOD6DODYRGzeOPhIQ",
-      "url": "https://www.youtube.com/@moneyinside7",
-      "subscribers": 650000,
-      "note": "경제/투자 인터뷰",
-      "status": "confirmed"
-    },
-    {
-      "name": "이남우의 좋은주식연구소",
-      "id": "UCbyy3sKFC5a6HULicNvMfmw",
-      "url": "https://www.youtube.com/@이남우좋은주식",
-      "subscribers": 320000,
-      "note": "가치투자",
-      "status": "confirmed"
-    },
-    {
-      "name": "유동원의 성공투자",
-      "id": "UClCaCSiPqevx-cKU-pI73JQ",
-      "url": "https://www.youtube.com/@danieldwyoo",
-      "subscribers": 85700,
-      "note": "글로벌 자산배분",
+      "note": "미국주식 분석",
       "status": "confirmed"
     }
   ],
   "securities": [
     {
       "name": "삼성증권 Samsung POP",
-      "id": "UCq7h8qFlHN5FL_T6waKZllw",
+      "id": "UCG1OBih5oOW8PbHTY811ebQ",
       "url": "https://www.youtube.com/@samsungsecurities",
       "subscribers": 420000,
-      "note": "삼성증권 공식",
+      "note": "삼성증권 공식 (V2 ID로 수정)",
       "status": "confirmed"
     },
     {
-      "name": "채널K by 키움증권",
+      "name": "채널K 키움증권",
       "id": "UCZW1d7B2nYqQUiTiOnkirrQ",
       "url": "https://www.youtube.com/@channelk_kiwoom",
       "subscribers": 380000,
@@ -453,10 +485,10 @@
     },
     {
       "name": "미래에셋 스마트머니",
-      "id": "UCZS9wEZ4itPbBZk_sqccXfw",
+      "id": "UC1ilBxWP5sIka51VHDmR3Kw",
       "url": "https://www.youtube.com/@SmartMoney0",
       "subscribers": 590000,
-      "note": "미래에셋 공식",
+      "note": "미래에셋 공식 (V2 ID로 수정)",
       "status": "confirmed"
     },
     {
