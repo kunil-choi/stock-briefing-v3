@@ -2,306 +2,145 @@
 import os
 import json
 import shutil
-import traceback
-from collections import Counter
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from config import (
     ANTHROPIC_API_KEY, YOUTUBE_API_KEY, GH_TOKEN, GITHUB_REPO,
-    NEWS_RSS_FEEDS, BROADCAST_HOURS, YOUTUBER_HOURS, SECURITIES_TV_HOURS,
-    load_channels,
+    NEWS_RSS_FEEDS, REPORT_DAYS, load_channels,
 )
-from collectors.news_collector     import collect_news
-from collectors.youtube_collector  import (
-    get_youtube_client,
-    collect_section1_youtube,
-    collect_section2_securities_tv,
-)
-from collectors.analyst_collector  import collect_analyst
-from collectors.market_collector   import collect_market_overview
-from analyzer.ai_analyzer          import analyze_and_generate_html
+from collectors.news_collector import collect_news
+from collectors.youtube_collector import get_youtube_client, collect_section1_youtube
+from collectors.analyst_collector import collect_analyst
+from analyzer.ai_analyzer import analyze_and_generate_html
 
-# BUG-M-1: KST 상수 정의 — 모든 날짜 처리는 KST 기준
-KST = timezone(timedelta(hours=9))
+KST = ZoneInfo("Asia/Seoul")
 
 
-def _now_kst() -> datetime:
-    return datetime.now(KST)
-
-
-def _collect_safe(label: str, func, *args, **kwargs) -> list:
-    """
-    BUG-M-2: 수집기 개별 에러 격리 헬퍼.
-    예외 발생 시 빈 리스트 반환 + 스택트레이스 출력으로
-    한 수집기 실패가 전체 파이프라인을 중단하지 않도록 보장.
-    dict 반환 함수에는 사용 불가 — collect_market_overview는 별도 처리.
-    """
+def safe_collect(fn, *args, label="", **kwargs):
     try:
-        result = func(*args, **kwargs)
-        if not isinstance(result, list):
-            print(f"  [{label}] 반환값이 list가 아님 ({type(result).__name__}) → 빈 리스트 처리")
-            return []
-        return result
+        result = fn(*args, **kwargs)
+        return result if result else []
     except Exception as e:
-        print(f"  [{label}] 수집 실패: {e}")
-        traceback.print_exc()
+        print(f"  [{label}] 수집 중 오류 발생: {e}")
         return []
 
 
-def _warn_empty_sources(all_data: list):
-    """
-    BUG-M-3: source_type 별 건수 출력 + 0건 소스 경고.
-    수집 결과를 명확히 인식하고 다음 실행에서 원인을 파악하기 위함.
-    """
-    counter  = Counter(d.get("source_type", "기타") for d in all_data)
-    expected = ["뉴스", "경제방송", "경제방송TV", "유튜브", "애널리스트"]
-
-    print("\n[수집 결과 요약]")
-    for stype in expected:
-        cnt  = counter.get(stype, 0)
-        flag = "⚠️  0건" if cnt == 0 else f"{cnt}건"
-        print(f"  {stype}: {flag}")
-
-    for stype, cnt in counter.items():
-        if stype not in expected:
-            print(f"  {stype} (기타): {cnt}건")
-
-    zero_types = [s for s in expected if counter.get(s, 0) == 0]
-    if zero_types:
-        print(f"\n  ⚠️  경고: 다음 소스 수집 0건 → [{', '.join(zero_types)}]")
-        print("     GitHub Actions 로그에서 해당 수집기 오류를 확인하세요.")
-
-
-def _check_api_keys() -> bool:
-    """
-    BUG-M-4: API 키 사전 검증 — 키 누락 시 조기 경고.
-    실행은 계속하되 어떤 기능이 제한되는지 명확히 로깅.
-    반환값: ANTHROPIC_API_KEY 존재 여부 (AI 분석 가능 여부)
-    """
-    issues = []
-    if not ANTHROPIC_API_KEY:
-        issues.append("ANTHROPIC_API_KEY 누락 → AI 분석 불가")
-    if not YOUTUBE_API_KEY:
-        issues.append("YOUTUBE_API_KEY 누락 → 유튜브 수집 스킵")
-    if not GH_TOKEN:
-        issues.append("GH_TOKEN 누락 → GitHub 커밋 불가 (로컬 실행은 무관)")
-
-    print("\n[API 키 점검]")
-    if issues:
-        for issue in issues:
-            print(f"  ⚠️  {issue}")
-    else:
-        print("  전체 정상")
-
-    return bool(ANTHROPIC_API_KEY)
-
-
 def main():
-    start_time = _now_kst()
-    print(f"=== AI 증시 모닝브리핑 시작: {start_time.strftime('%Y-%m-%d %H:%M:%S KST')} ===")
+    now_kst = datetime.now(KST)
+    print(f"=== AI 증시 모닝브리핑 시작: {now_kst.strftime('%Y-%m-%d %H:%M:%S KST')} ===")
+    start_time = now_kst.timestamp()
 
-    # BUG-M-1-EXT: 워크플로우 수동 실행 시 스킵 옵션 반영
-    # .github/workflows 에서 SKIP_YOUTUBE / SKIP_ANALYST 환경변수로 주입
-    SKIP_YOUTUBE = os.environ.get("SKIP_YOUTUBE", "false").lower() == "true"
-    SKIP_ANALYST = os.environ.get("SKIP_ANALYST", "false").lower() == "true"
-    if SKIP_YOUTUBE:
-        print("  ℹ️  SKIP_YOUTUBE=true → 유튜브 수집 전체 스킵")
-    if SKIP_ANALYST:
-        print("  ℹ️  SKIP_ANALYST=true → 애널리스트 수집 스킵")
+    # API 키 점검
+    print("\n[API 키 점검]")
+    keys = {
+        "ANTHROPIC": ANTHROPIC_API_KEY,
+        "YOUTUBE":   YOUTUBE_API_KEY,
+        "GH_TOKEN":  GH_TOKEN,
+    }
+    all_ok = True
+    for name, val in keys.items():
+        if val:
+            print(f"  {name}: ✅")
+        else:
+            print(f"  {name}: ❌ 없음")
+            all_ok = False
+    print(f"  {'전체 정상' if all_ok else '일부 키 누락'}")
 
-    # BUG-M-4: API 키 사전 검증
-    can_analyze = _check_api_keys()
-
-    # ── 채널 목록 로드 ────────────────────────────────────────────────────────
+    # 채널 로드
     print("\n[채널 로드]")
     channels = load_channels()
-    for cat, lst in channels.items():
-        if isinstance(lst, list):
-            confirmed = [c for c in lst if isinstance(c, dict) and c.get("id")]
-            print(f"  {cat}: 전체 {len(lst)}개 / 유효 ID {len(confirmed)}개")
+    for cat in ["broadcast", "youtuber", "securities"]:
+        items = channels.get(cat, [])
+        valid = [c for c in items if isinstance(c, dict) and c.get("id")]
+        print(f"  {cat}: 전체 {len(items)}개 / 유효 ID {len(valid)}개")
 
-    # ── 시장 데이터 수집 ──────────────────────────────────────────────────────
+    all_data = []
+
+    # 1. 시장 데이터
     print("\n[시장 데이터 수집]")
-    # BUG-CR-4: collect_market_overview는 dict 반환 → _collect_safe 사용 불가
-    market_overview = {}
     try:
-        result = collect_market_overview()
-        if isinstance(result, dict):
-            market_overview = result
-            print(f"  → 시장 데이터 수집 완료 ({len(market_overview)}개 항목)")
-        else:
-            print(f"  ⚠️  시장 데이터가 dict 형식이 아님 ({type(result).__name__}) → 빈 dict 사용")
+        from collectors.market_collector import collect_market_overview
+        market_overview = collect_market_overview()
     except Exception as e:
-        print(f"  ⚠️  시장 데이터 수집 실패: {e}")
-        traceback.print_exc()
+        print(f"  [시장수집 오류] {e}")
+        market_overview = {}
 
-    all_data: list = []
-
-    # ── 1. 뉴스 RSS ───────────────────────────────────────────────────────────
-    print(f"\n[1/4] 뉴스 RSS 수집 중...")
-    news_data = _collect_safe("뉴스", collect_news, NEWS_RSS_FEEDS)
+    # 2. 뉴스
+    print("\n[1/3] 뉴스 RSS 수집 중...")
+    news_data = safe_collect(collect_news, NEWS_RSS_FEEDS, label="뉴스")
     all_data.extend(news_data)
     print(f"  → {len(news_data)}건")
 
-    # ── 2. 유튜브 섹션1 ───────────────────────────────────────────────────────
-    print(f"\n[2/4] 유튜브 수집 중 (섹션1: 방송사/유튜버/증권사 {BROADCAST_HOURS}시간)...")
-    youtube_client = None
-
-    if SKIP_YOUTUBE:
-        print("  ℹ️  스킵")
-    elif not YOUTUBE_API_KEY:
-        print("  ⚠️  YOUTUBE_API_KEY 없음 → 스킵")
-    else:
-        try:
-            youtube_client = get_youtube_client(YOUTUBE_API_KEY)
-        except Exception as e:
-            print(f"  ⚠️  YouTube 클라이언트 생성 실패: {e}")
-            traceback.print_exc()
-
-        if youtube_client:
-            section1_data = _collect_safe(
-                "유튜브섹션1", collect_section1_youtube, youtube_client, channels
-            )
-            all_data.extend(section1_data)
-            print(f"  → {len(section1_data)}건")
-        else:
-            print("  ⚠️  YouTube 클라이언트 없음 → 섹션1 스킵")
-
-    # ── 3. 유튜브 섹션2 (경제방송TV) ──────────────────────────────────────────
-    print(f"\n[3/4] 경제방송TV 수집 중 (섹션2: {SECURITIES_TV_HOURS}시간)...")
-
-    if SKIP_YOUTUBE:
-        print("  ℹ️  스킵")
-    elif youtube_client:
-        section2_data = _collect_safe(
-            "유튜브섹션2", collect_section2_securities_tv, youtube_client
+    # 3. 유튜브 (섹션1만)
+    print("\n[2/3] 유튜브 수집 중 (방송사/유튜버/증권사 24시간)...")
+    youtube = get_youtube_client(YOUTUBE_API_KEY)
+    if youtube:
+        yt_data = safe_collect(
+            collect_section1_youtube, youtube, channels, label="유튜브"
         )
-        all_data.extend(section2_data)
-        print(f"  → {len(section2_data)}건")
+        all_data.extend(yt_data)
+        print(f"  → {len(yt_data)}건")
     else:
-        print("  ⚠️  YouTube 클라이언트 없음 → 섹션2 스킵")
+        print("  → YouTube 클라이언트 생성 실패, 스킵")
 
-    # ── 4. 애널리스트 리포트 ──────────────────────────────────────────────────
-    print("\n[4/4] 애널리스트 리포트 수집 중...")
+    # 4. 애널리스트
+    print("\n[3/3] 애널리스트 리포트 수집 중...")
+    analyst_data = safe_collect(collect_analyst, label="애널리스트")
+    all_data.extend(analyst_data)
+    print(f"  → {len(analyst_data)}건")
 
-    if SKIP_ANALYST:
-        print("  ℹ️  스킵")
-        analyst_data = []
-    else:
-        analyst_data = _collect_safe("애널리스트", collect_analyst)
-        all_data.extend(analyst_data)
-        print(f"  → {len(analyst_data)}건")
-
-    # ── 수집 결과 요약 ────────────────────────────────────────────────────────
-    print(f"\n{'='*50}")
+    # 수집 결과 요약
+    print("\n" + "=" * 50)
     print(f"전체 수집: {len(all_data)}건")
-    _warn_empty_sources(all_data)
+    type_counts = {}
+    for d in all_data:
+        t = d.get("source_type", "기타")
+        type_counts[t] = type_counts.get(t, 0) + 1
+    print("\n[수집 결과 요약]")
+    for t, c in type_counts.items():
+        warn = "⚠️ " if c == 0 else "  "
+        print(f"  {warn}{t}: {c}건")
 
-    # BUG-M-5: 수집 데이터가 전혀 없어도 최소 브리핑은 생성 (파이프라인 중단 방지)
-    if len(all_data) == 0:
-        print("\n  ⚠️  수집 데이터 0건 → 최소 브리핑만 생성합니다.")
-
-    # ── 원본 데이터 백업 ──────────────────────────────────────────────────────
+    # 원본 백업
     os.makedirs("data", exist_ok=True)
-    # BUG-M-1: KST 기준 날짜 사용
-    today_str    = _now_kst().strftime("%Y%m%d")
-    save_payload = {
-        "collected_at":    _now_kst().strftime("%Y-%m-%d %H:%M:%S KST"),
-        "market_overview": market_overview,
-        "items":           all_data,
-        "source_counts":   dict(Counter(
-            d.get("source_type", "기타") for d in all_data
-        )),
-    }
-    raw_path = f"data/raw_{today_str}.json"
-    try:
-        with open(raw_path, "w", encoding="utf-8") as f:
-            json.dump(save_payload, f, ensure_ascii=False, indent=2, default=str)
-        print(f"\n[저장] {raw_path} 완료")
-    except Exception as e:
-        print(f"\n[저장] {raw_path} 실패: {e}")
-        traceback.print_exc()
+    today_str = now_kst.strftime("%Y%m%d")
+    with open(f"data/raw_{today_str}.json", "w", encoding="utf-8") as f:
+        json.dump(all_data, f, ensure_ascii=False, indent=2, default=str)
+    print(f"\n[저장] data/raw_{today_str}.json 완료")
 
-    # ── 디렉토리 준비 ─────────────────────────────────────────────────────────
-    os.makedirs("docs",         exist_ok=True)
+    # 아카이브
     os.makedirs("docs/archive", exist_ok=True)
-
-    # ── 아카이브 백업 (HTML 생성 전) ──────────────────────────────────────────
     existing_index = "docs/index.html"
-    # BUG-M-1: KST 기준 날짜 사용
-    archive_date = _now_kst().strftime("%Y-%m-%d")
-    archive_path = f"docs/archive/{archive_date}.html"
-
     if os.path.exists(existing_index):
+        archive_date = now_kst.strftime("%Y-%m-%d")
+        archive_path = f"docs/archive/{archive_date}.html"
         if not os.path.exists(archive_path):
-            try:
-                shutil.copy2(existing_index, archive_path)
-                print(f"[아카이브] 저장 완료: {archive_path}")
-            except Exception as e:
-                print(f"[아카이브] 저장 실패: {e}")
-                traceback.print_exc()
-        else:
-            print(f"[아카이브] 이미 존재: {archive_path} → 스킵")
-    else:
-        print("[아카이브] 기존 index.html 없음 → 스킵")
+            shutil.copy2(existing_index, archive_path)
+            print(f"[아카이브] 저장 완료: {archive_path}")
 
-    # ── AI 분석 + HTML 생성 ───────────────────────────────────────────────────
+    # AI 분석
     print("\n[AI 분석] Claude API로 교차분석 중...")
-
-    html = None
-
-    if can_analyze:
-        try:
-            html = analyze_and_generate_html(
-                all_data,
-                ANTHROPIC_API_KEY,
-                channels_data=channels,
-                gh_repo=GITHUB_REPO,
-                market_overview=market_overview,
-            )
-        except Exception as e:
-            print(f"  ⚠️  AI 분석 실패: {e}")
-            traceback.print_exc()
-    else:
-        print("  ⚠️  ANTHROPIC_API_KEY 없음 → AI 분석 스킵")
-
-    # BUG-M-6: AI 분석 실패 시 에러 페이지 생성 (빈 파일 방지)
-    if not html:
-        now_str = _now_kst().strftime("%Y-%m-%d %H:%M")
-        html = (
-            '<!DOCTYPE html><html lang="ko"><head>'
-            '<meta charset="UTF-8">'
-            '<title>AI 주식 브리핑 - 생성 실패</title>'
-            '<style>'
-            'body{font-family:sans-serif;background:#0a0a14;color:#e0e0e0;'
-            'display:flex;justify-content:center;align-items:center;'
-            'height:100vh;flex-direction:column;gap:16px;}'
-            'h2{color:#ff6b6b;}p{color:#888;font-size:.9em;}'
-            '</style></head><body>'
-            f'<h2>⚠️ 브리핑 생성 실패</h2>'
-            f'<p>{now_str} KST 기준 데이터 수집 또는 AI 분석 중 오류가 발생했습니다.</p>'
-            '<p>GitHub Actions 로그를 확인하세요.</p>'
-            '</body></html>'
-        )
-        print("  ⚠️  에러 페이지로 대체합니다.")
-
-    # ── HTML 저장 ─────────────────────────────────────────────────────────────
     try:
-        with open("docs/index.html", "w", encoding="utf-8") as f:
-            f.write(html)
-        print(f"\n✅ 브리핑 페이지 생성 완료: docs/index.html")
+        html = analyze_and_generate_html(
+            all_data,
+            ANTHROPIC_API_KEY,
+            channels_data=channels,
+            gh_repo=GITHUB_REPO,
+            market_overview=market_overview,
+        )
     except Exception as e:
-        print(f"\n❌ docs/index.html 저장 실패: {e}")
-        traceback.print_exc()
-        raise  # 저장 실패는 치명적 오류 — GitHub Actions에서 실패로 감지되어야 함
+        print(f"[AI분석 오류] {e}")
+        html = f"<html><body><h1>분석 오류</h1><p>{e}</p></body></html>"
 
-    # ── 실행 시간 출력 ────────────────────────────────────────────────────────
-    end_time    = _now_kst()
-    elapsed_sec = (end_time - start_time).total_seconds()
-    print(
-        f"\n=== 완료: {end_time.strftime('%Y-%m-%d %H:%M:%S KST')} "
-        f"(소요: {elapsed_sec:.0f}초) ==="
-    )
+    # HTML 저장
+    os.makedirs("docs", exist_ok=True)
+    with open("docs/index.html", "w", encoding="utf-8") as f:
+        f.write(html)
+
+    elapsed = datetime.now(KST).timestamp() - start_time
+    print(f"\n✅ 브리핑 페이지 생성 완료: docs/index.html")
+    print(f"=== 완료: {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S KST')} (소요: {elapsed:.0f}초) ===")
 
 
 if __name__ == "__main__":
