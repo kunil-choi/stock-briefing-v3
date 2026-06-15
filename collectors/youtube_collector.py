@@ -25,28 +25,38 @@ KST = ZoneInfo("Asia/Seoul")
 
 STOCK_KEYWORDS = [
     "주식", "종목", "투자", "매수", "매도", "코스피", "코스닥",
-    "증권", "펀드", "ETF", "포트폴리오", "수익률", "배당",
-    "반도체", "2차전지", "배터리", "바이오", "AI", "인공지능", "로봇",
-    "삼성전자", "SK하이닉스", "카카오", "네이버", "현대차",
-    "목표주가", "상향", "하향", "리포트", "실적", "시황", "전망",
-    "상승", "하락", "브리핑", "분석", "추천", "경제", "금융",
+    "증권", "ETF", "수익률 전망", "실적발표", "어닝", "리포트",
+    "급등", "급락", "섹터", "포트폴리오", "코멘트",
+    "삼성전자", "SK하이닉스", "LG에너지솔루션", "현대차",
+    "금리인상", "환율", "달러", "AI반도체", "배터리",
 ]
 
 EXPERT_KEYWORDS = [
-    "전문가", "애널리스트", "증권사", "리서치", "투자의견",
-    "목표가", "매수추천", "강력매수", "시황", "전망",
+    "매수전략", "애널리스트", "증권사", "리포트", "전망",
+    "목표주가", "투자의견", "매수추천", "시장분석",
+    "섹터분석", "포트폴리오", "리스크", "코멘트",
 ]
 
 SECURITIES_ANALYSIS_KEYWORDS = [
-    "분석", "리포트", "전망", "시황", "전략", "목표주가", "추천종목",
-    "포트폴리오", "섹터", "실적", "투자의견", "매수", "매도", "중립",
-    "강력매수", "상향", "하향", "신규", "커버리지",
+    "분석", "리포트", "전망", "시황", "코멘트",
+    "목표주가", "투자의견", "매수추천", "종목분석",
+    "수익률 전망", "섹터분석", "포트폴리오", "리스크",
+    "매수전략", "수익률", "실적발표", "이슈", "스탁",
+    "신규 커버리지",
 ]
 
 AD_KEYWORDS = [
-    "광고", "협찬", "이벤트", "강의", "클래스", "수강", "모집", "세미나",
-    "할인", "프로모션", "가입", "혜택", "신청",
+    "광고비", "협찬", "홍보영상", "신청하기", "무료강의",
+    "유료과정", "강의모집", "수강생", "연락처", "카카오링크",
 ]
+
+# ── 패널리스트 검색 전용 설정 ──────────────────────────────────────────
+# 이름 검색 시 함께 붙이는 주식/경제 맥락 키워드
+_PANELIST_SEARCH_SUFFIXES = ["주식", "경제", "투자", "증시", "전망"]
+# 검색 결과에서 수집할 최대 영상 수 (이름당)
+_PANELIST_MAX_RESULTS = 10
+# 검색 대상 기간 (시간)
+_PANELIST_HOURS = 48
 
 
 def get_youtube_client(api_key: str = None):
@@ -57,10 +67,10 @@ def get_youtube_client(api_key: str = None):
         return None
     try:
         client = build("youtube", "v3", developerKey=api_key)
-        print("  [YouTube] 클라이언트 생성 완료")
+        print("  [YouTube] 클라이언트 초기화 성공")
         return client
     except Exception as e:
-        print(f"  [YouTube] 클라이언트 생성 실패: {e}")
+        print(f"  [YouTube] 클라이언트 초기화 실패: {e}")
         return None
 
 
@@ -146,7 +156,7 @@ def get_recent_videos_via_playlist(youtube, channel_id: str, hours: int) -> list
         else:
             print(f"  [플레이리스트 오류] {channel_id}: {e}")
     except Exception as e:
-        print(f"  [영상 조회 오류] {channel_id}: {e}")
+        print(f"  [일반 오류 발생] {channel_id}: {e}")
 
     return videos
 
@@ -221,11 +231,13 @@ def _normalize_channel_list(raw) -> list:
     return result
 
 
+# ── 섹션1: 등록 채널 플레이리스트 수집 ─────────────────────────────────
+
 def collect_section1_youtube(youtube, channels: dict) -> list:
     all_items  = []
     categories = [
         ("broadcast",  BROADCAST_HOURS,  "경제방송", False),
-        ("youtuber",   YOUTUBER_HOURS,   "유튜버",   False),
+        ("youtuber",   YOUTUBER_HOURS,   "유튜브",   False),
         ("securities", SECURITIES_HOURS, "증권사",   True),
     ]
 
@@ -285,7 +297,120 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
 
             time.sleep(0.2)
 
-        print(f"    → {collected}건 수집")
+        print(f"   → {collected}건 수집")
 
     print(f"  [섹션1] 총 {len(all_items)}건")
+    return all_items
+
+
+# ── 섹션2: 패널리스트 이름 검색 수집 (신규) ────────────────────────────
+
+def collect_panelist_youtube(youtube) -> list:
+    """
+    POPULAR_PANELISTS 이름으로 YouTube를 검색해서,
+    등록 채널 외부 영상까지 포함해 주식·경제 관련 콘텐츠를 수집한다.
+
+    - 수집 기간: _PANELIST_HOURS (48h)
+    - 이름당 검색 suffix 중 첫 매칭 결과 사용 (quota 절약)
+    - source_type: "유튜브" (애널리스트/경제방송 채널 출신 인물이면 가중치 상향은
+      ai_analyzer의 channel_weight 로직에서 자동 처리됨)
+    - 중복 제거: video_id 기준
+    """
+    if not youtube:
+        print("  [패널리스트 검색] YouTube 클라이언트 없음 → 스킵")
+        return []
+
+    cutoff    = datetime.now(KST) - timedelta(hours=_PANELIST_HOURS)
+    all_items = []
+    seen_ids  = set()
+
+    print(f"  [패널리스트 검색] {len(POPULAR_PANELISTS)}명, 최근 {_PANELIST_HOURS}h")
+
+    for name in POPULAR_PANELISTS:
+        collected = 0
+
+        for suffix in _PANELIST_SEARCH_SUFFIXES:
+            query = f"{name} {suffix}"
+            try:
+                resp = youtube.search().list(
+                    part="snippet",
+                    q=query,
+                    type="video",
+                    order="date",
+                    publishedAfter=cutoff.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    maxResults=_PANELIST_MAX_RESULTS,
+                    relevanceLanguage="ko",
+                    regionCode="KR",
+                ).execute()
+            except HttpError as e:
+                print(f"    [검색 오류] {query}: {e}")
+                break
+            except Exception as e:
+                print(f"    [검색 오류] {query}: {e}")
+                break
+
+            items = resp.get("items", [])
+            if not items:
+                continue
+
+            for item in items:
+                snippet  = item.get("snippet", {})
+                video_id = item.get("id", {}).get("videoId", "")
+                if not video_id or video_id in seen_ids:
+                    continue
+
+                title        = snippet.get("title", "").strip()
+                channel_name = snippet.get("channelTitle", "").strip()
+                published_at = snippet.get("publishedAt", "")
+
+                if not title or is_ad_content(title):
+                    continue
+
+                # 제목에 이름이 없으면 자막까지 확인
+                if name not in title:
+                    transcript = get_transcript(video_id)
+                    if name not in transcript:
+                        continue
+                    summary = transcript[:500]
+                else:
+                    transcript = get_transcript(video_id)
+                    summary    = transcript[:500] if transcript else title
+
+                # 주식/경제 관련성 최종 확인
+                if not is_stock_related(title, transcript):
+                    continue
+
+                # 발행일 파싱
+                try:
+                    pub_dt = datetime.fromisoformat(
+                        published_at.replace("Z", "+00:00")
+                    ).astimezone(KST)
+                    pub_str = pub_dt.strftime("%Y-%m-%d %H:%M")
+                except Exception:
+                    pub_str = published_at
+
+                seen_ids.add(video_id)
+                all_items.append({
+                    "source_type": "유튜브",
+                    "source_name": channel_name,
+                    "title":       title,
+                    "summary":     summary or title,
+                    "link":        f"https://www.youtube.com/watch?v={video_id}",
+                    "published":   pub_str,
+                    # 패널리스트 이름을 메타로 저장해두면
+                    # ai_analyzer의 extract_mentions에서 snippet에 이름이 잡힘
+                    "_panelist":   name,
+                })
+                collected += 1
+
+            # 첫 suffix에서 결과를 찾았으면 나머지 suffix는 생략 (quota 절약)
+            if collected > 0:
+                break
+
+            time.sleep(0.1)
+
+        print(f"    {name}: {collected}건")
+        time.sleep(0.3)   # 검색 API 호출 간격
+
+    print(f"  [패널리스트 검색] 총 {len(all_items)}건 (중복 제거 후)")
     return all_items
