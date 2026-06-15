@@ -42,12 +42,14 @@ SECURITIES_TV_HOURS = 48
 REPORT_DAYS = 1
 
 # 섹션2 전용: 경제방송 TV 채널 (전문가 출연 오전 프로그램 위주)
+# ※ V2에서 검증된 채널 ID로 교체 (2026-06-15)
+#   이전 ID(UCp7vLUO... 등 5개)는 실제 채널과 불일치하여 플레이리스트 조회 0건이 발생했음
 SECURITIES_TV_CHANNELS = {
-    "한국경제TV":   "UCp7vLUO-BI9UkVFJWFSJ-ig",
-    "매일경제TV":   "UCbSSCqKMmBOCR5KxFsVzmvA",
-    "머니투데이TV": "UCjyp-3MIBaVxFkOhC0HY2mg",
-    "이데일리TV":   "UCuBrUcZjMnAk4vl91cHJcVg",
-    "연합인포맥스":  "UCuC2nQZ3nzK4cVT8j8ZXdZg",
+    "한국경제TV":          "UCF8AeLlUbEpKju6v1H6p8Eg",  # V2 검증됨
+    "SBS Biz":            "UCbMjg2EvXs_RUGW-KrdM3pw",  # V2 검증됨
+    "머니투데이 방송(MTN)": "UClErHbdZKUnD1NyIUeQWvuQ",  # V2 검증됨
+    "매일경제TV":          "UCnMtEMnsGFjQgLJEEkMSHhQ",  # V2 검증됨
+    "KBS 1라디오":         "UCMLJc_D3jgFcS_48G7i4V0A",  # V2 검증됨
 }
 
 
