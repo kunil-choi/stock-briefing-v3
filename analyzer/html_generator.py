@@ -20,6 +20,8 @@ AI 주식 브리핑 HTML 생성 엔진
 - FIX-SIG-2: filtered_hidden signal 없을 때 오늘의 픽 전체 미표시 버그 수정
 - FIX-JS-1 : showChart 방어코드 추가 (key 없을 때 빈 이미지 방지)
 - FIX-ANA-2: analyst-card 제목 말줄임 제거, 웹에서 전체 표시
+- FIX-HP-1 : 오늘의 픽 가중치 점수를 별점 5개로 시각화, signal 텍스트 제거
+- FIX-RSN-1: reasons 목록에 source_name 표시 추가
 """
 
 import os
@@ -199,8 +201,6 @@ def _build_tv_html(all_data: list) -> str:
 
 
 def _build_analyst_html(all_data: list) -> str:
-    # FIX-ANA-1: _report_card를 함수 내부에 정의하여 들여쓰기 버그 수정
-    # FIX-ANA-2: 제목 말줄임 제거 — flex-wrap + 제목 별도 줄로 처리
     def _report_card(r: dict) -> str:
         stock  = r.get("stock_name", "")
         title  = r.get("report_title") or r.get("title", "")
@@ -263,31 +263,69 @@ def _hidden_pick_source_badge(channel_type: str) -> str:
     )
 
 
+def _render_star_rating(weighted_score, max_score: float = 5.0) -> str:
+    """가중치 점수를 별 5개 기준으로 시각화. 채워진 별★ / 빈 별☆"""
+    try:
+        score = float(weighted_score)
+    except (TypeError, ValueError):
+        score = 0.0
+    # 0~max_score 범위를 0~5 별점으로 변환, 최소 1개 보장
+    filled = max(1, round((score / max_score) * 5)) if score > 0 else 0
+    filled = min(filled, 5)
+    empty  = 5 - filled
+    stars  = (
+        f'<span class="star filled">{"★" * filled}</span>'
+        f'<span class="star empty">{"☆" * empty}</span>'
+    )
+    return f'<span class="star-rating">{stars}</span>'
+
+
 def _render_reasons(reasons: list) -> str:
+    """
+    FIX-RSN-1: source_name 있으면 굵게 앞에 표시, 링크도 적용
+    """
     if not reasons:
         return ""
     items = ""
     for r in reasons:
         if isinstance(r, str):
-            rd, rl = r.strip(), ""
+            rd, rl, rn, rt = r.strip(), "", "", ""
         elif isinstance(r, dict):
             rd = (r.get("detail") or r.get("reason") or
                   r.get("text") or r.get("summary", "")).strip()
             rl = r.get("source_url") or r.get("link") or r.get("url", "")
+            rn = (r.get("source_name") or "").strip()
+            rt = (r.get("source_type") or "").strip()
         else:
             continue
         if not rd:
             continue
+
+        # 출처명 배지
+        source_html = ""
+        if rn:
+            meta = _TAG_META.get(rt, {"bg": "#2d2d44", "color": "#adb5bd"})
+            source_html = (
+                f'<span class="reason-source" '
+                f'style="background:{meta["bg"]};color:{meta["color"]};">'
+                f'{rn}</span> '
+            )
+
+        # 본문 (링크 있으면 감싸기)
         if rl:
-            items += (f'<li><a href="{rl}" target="_blank" rel="noopener" '
-                      f'style="color:#adb5bd;text-decoration:none;">{rd}</a></li>')
+            text_html = (
+                f'<a href="{rl}" target="_blank" rel="noopener" '
+                f'style="color:#adb5bd;text-decoration:none;">{rd}</a>'
+            )
         else:
-            items += f'<li>{rd}</li>'
+            text_html = f'<span style="color:#adb5bd;">{rd}</span>'
+
+        items += f'<li>{source_html}{text_html}</li>'
+
     return f'<ul class="reasons-list">{items}</ul>' if items else ""
 
 
 def _is_positive_signal(sig) -> bool:
-    # FIX-SIG-1: "상승" 제거 → 중립 맥락 문장이 긍정으로 오판되는 문제 방지
     if not sig:
         return False
     sig_l = str(sig).lower()
@@ -295,9 +333,6 @@ def _is_positive_signal(sig) -> bool:
 
 
 def _render_stock_detail(stock: dict) -> str:
-    """
-    V2-CARD: summary / catalyst / risk / channel_mentions 렌더링.
-    """
     html = ""
 
     summary = (stock.get("summary") or stock.get("description") or "").strip()
@@ -381,7 +416,6 @@ def generate_html(
         briefing_date = now_kst.strftime("%Y년 %m월 %d일")
     briefing_time = now_kst.strftime("%H:%M")
 
-    # BUG-NEW-6: overlap_count 재산출
     for stock in stocks:
         cc = stock.get("channel_counts", {})
         if cc:
@@ -389,7 +423,6 @@ def generate_html(
 
     filtered_stocks = [s for s in stocks if s.get("overlap_count", 0) >= 2]
 
-    # FIX-SIG-2: signal 없는 경우도 포함, 긍정/positive/빈값 모두 허용
     filtered_hidden = [
         h for h in hidden_picks
         if (not h.get("signal"))
@@ -397,7 +430,6 @@ def generate_html(
         or str(h.get("signal", "")).strip().lower() in ("positive", "긍정", "")
     ]
 
-    # ── 지표 / 요약 / 섹터 ───────────────────────────────────────────────────
     market_indicators_html = _build_market_indicators(market_overview)
     market_summary_html    = _render_market_summary(market_sum)
 
@@ -509,7 +541,6 @@ def generate_html(
     hidden_html = ""
     for idx, hp in enumerate(filtered_hidden, 1):
         name         = hp.get("name", "")
-        signal       = hp.get("signal", "")
         channel_type = hp.get("channel_type", "")
         weighted_sc  = hp.get("weighted_score", 0)
         price        = hp.get("verified_price")
@@ -526,9 +557,8 @@ def generate_html(
                              f"?query={name.replace(' ', '+')}")
 
         source_badge_html = _hidden_pick_source_badge(channel_type)
-        score_str         = (f"{weighted_sc:.1f}" if isinstance(weighted_sc, (int, float))
-                             else str(weighted_sc))
-        score_badge_html  = f'<span class="hp-score-badge">Pick #{idx} · {score_str}pt</span>'
+        star_html         = _render_star_rating(weighted_sc)
+        pick_badge_html   = f'<span class="hp-score-badge">Pick #{idx}</span>'
 
         if isinstance(price, int):
             price_html = f'<span class="price-value">{price:,}원</span>'
@@ -559,9 +589,9 @@ def generate_html(
         hidden_html += f"""
 <div class="hidden-pick-card">
   <div class="hp-card-header">
-    <div class="hp-badges">{source_badge_html}{score_badge_html}</div>
+    <div class="hp-badges">{source_badge_html}{pick_badge_html}</div>
     <a href="{naver_url}" target="_blank" rel="noopener" class="hp-stock-name">{name}</a>
-    <span class="hp-signal">{signal}</span>
+    {star_html}
   </div>
   <div class="hp-card-body">
     <div class="price-row">{price_html}{chart_btn_html}</div>
@@ -581,7 +611,6 @@ def generate_html(
     else:
         chart_data_js = "const chartDataMap = {};"
 
-    # ── 애널리스트 / TV ───────────────────────────────────────────────────────
     analyst_html = _build_analyst_html(all_data)
     tv_html      = _build_tv_html(all_data)
 
@@ -775,14 +804,38 @@ a:hover { text-decoration: underline; }
 .stock-card-body { padding-top: .25rem; }
 .hp-card-body    { padding-top: .25rem; }
 
-/* ── 이유 목록 ── */
-.reasons-list { list-style: disc; padding-left: 1.2rem; margin-top: .4rem; }
+/* ── 이유 목록 (FIX-RSN-1: source_name 배지 포함) ── */
+.reasons-list { list-style: none; padding-left: 0; margin-top: .4rem; }
 .reasons-list li {
   font-size: .88rem;
   color: var(--text-muted);
-  margin-bottom: .3rem;
-  line-height: 1.5;
+  margin-bottom: .4rem;
+  line-height: 1.55;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: .35rem;
 }
+.reason-source {
+  font-size: .72rem;
+  font-weight: 700;
+  border-radius: 6px;
+  padding: .1rem .4rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── 별점 (FIX-HP-1) ── */
+.star-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 1.05rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.star.filled { color: #ffd43b; }
+.star.empty  { color: #3a3a4a; }
 
 /* ── 오늘의 픽 카드 ── */
 .hidden-pick-card {
@@ -811,7 +864,6 @@ a:hover { text-decoration: underline; }
   border: 1px solid #1e4a6e;
 }
 .hp-stock-name { font-size: 1.05rem; font-weight: 700; flex: 1 1 auto; }
-.hp-signal     { font-size: .8rem; color: #51cf66; }
 
 /* ── 애널리스트 ── */
 .analyst-category-title {
@@ -876,15 +928,8 @@ a:hover { text-decoration: underline; }
   flex-wrap: wrap;
   gap: .4rem;
 }
-.tv-channel-name {
-  font-size: .9rem;
-  font-weight: 700;
-  color: #ffa94d;
-}
-.tv-date {
-  font-size: .75rem;
-  color: var(--text-muted);
-}
+.tv-channel-name { font-size: .9rem; font-weight: 700; color: #ffa94d; }
+.tv-date         { font-size: .75rem; color: var(--text-muted); }
 .tv-stock-list {
   list-style: none;
   padding: 0;
@@ -901,15 +946,8 @@ a:hover { text-decoration: underline; }
   gap: .4rem;
   flex-wrap: wrap;
 }
-.tv-stock-name {
-  font-weight: 700;
-  color: var(--text);
-  white-space: nowrap;
-}
-.tv-item-sep {
-  color: var(--border);
-  font-size: .8rem;
-}
+.tv-stock-name { font-weight: 700; color: var(--text); white-space: nowrap; }
+.tv-item-sep   { color: var(--border); font-size: .8rem; }
 
 /* ── AI 전략 ── */
 .ai-strategy-box {
@@ -973,6 +1011,7 @@ a:hover { text-decoration: underline; }
   .market-indicators { gap: .4rem; }
   .indicator-badge { min-width: 80px; padding: .4rem .6rem; }
   .analyst-card-title { font-size: .85rem; }
+  .star-rating { font-size: .95rem; }
 }
 """
 
@@ -1009,7 +1048,6 @@ a:hover { text-decoration: underline; }
     js = f"""
 {chart_data_js}
 
-// FIX-JS-1: key 없거나 데이터 없을 때 모달 열지 않음
 function showChart(key, name) {{
   const src = chartDataMap[key];
   if (!src) {{
