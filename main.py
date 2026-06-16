@@ -2,6 +2,7 @@
 import os
 import json
 import shutil
+import traceback                          # ← 추가
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -147,6 +148,7 @@ def main():
         )
     except Exception as e:
         print(f"[AI 분석 실패] {e}")
+        print(traceback.format_exc())    # ← 추가: 정확한 오류 위치 출력
         html = f"<html><body><h1>분석 실패</h1><p>{e}</p></body></html>"
 
     # HTML 저장
