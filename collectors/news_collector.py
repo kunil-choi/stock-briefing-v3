@@ -4,12 +4,14 @@
 매일경제, 한국경제, 서울경제, 이데일리, 머니투데이 등 주요 경제신문사 RSS 수집
 
 수정 이력:
-- BUG-N-1: 날짜 파싱 실패 시 현재 시각 반환 (24시간 필터 통과)
-- BUG-N-2: feedparser bozo 오류 감지, CharacterEncodingOverride는 무해 처리
-- BUG-N-3: 피드별 독립 try/except
-- BUG-N-4: link 기준 중복 제거
+- BUG-N-1  : 날짜 파싱 실패 시 현재 시각 반환 (24시간 필터 통과)
+- BUG-N-2  : feedparser bozo 오류 감지, CharacterEncodingOverride는 무해 처리
+- BUG-N-3  : 피드별 독립 try/except
+- BUG-N-4  : link 기준 중복 제거
 - BUG-7 FIX: link 없는 항목의 title 기반 중복 제거 추가
              link URL 정규화(쿼리 파라미터 제거) 후 비교
+- BUG-7B FIX: link가 있는 항목은 seen_titles에 등록하지 않도록 수정
+              (서로 다른 언론사의 동일 제목 기사가 과도하게 제거되는 문제 해결)
 """
 import re
 import feedparser
@@ -59,14 +61,13 @@ def _normalize_link(link: str) -> str:
         return ""
     try:
         parsed = urlparse(link.strip())
-        # scheme + netloc + path만 유지, query·fragment 제거
         normalized = urlunparse((
             parsed.scheme.lower(),
             parsed.netloc.lower(),
             parsed.path,
             "",   # params
-            "",   # query  ← 제거
-            "",   # fragment ← 제거
+            "",   # query     ← 제거
+            "",   # fragment  ← 제거
         ))
         return normalized
     except Exception:
@@ -83,7 +84,6 @@ def _normalize_title(title: str) -> str:
     """
     if not title:
         return ""
-    # 한글·영문·숫자만 남기고 나머지 제거
     normalized = re.sub(r"[^\w가-힣]", "", title).lower()
     return normalized
 
@@ -97,15 +97,14 @@ def collect_news(rss_feeds: dict, hours: int = 24) -> list:
 
     BUG-N-3: 피드별 독립 try/except — 한 피드 실패가 전체 수집을 중단하지 않음
     """
-    cutoff  = datetime.now(KST) - timedelta(hours=hours)
-    results = []
+    cutoff       = datetime.now(KST) - timedelta(hours=hours)
+    results      = []
     failed_feeds: list[str] = []
 
     for source_name, feed_url in rss_feeds.items():
         try:
             feed = feedparser.parse(feed_url)
 
-            # BUG-N-2: 피드 유효성 검사
             if not _is_valid_feed(feed):
                 print(f"  [뉴스] {source_name} 피드 파싱 오류 → 스킵")
                 failed_feeds.append(source_name)
@@ -127,7 +126,6 @@ def collect_news(rss_feeds: dict, hours: int = 24) -> list:
                            getattr(entry, "description", "") or "").strip()
                 link    = (getattr(entry, "link", "") or "").strip()
 
-                # HTML 태그 제거 및 길이 제한
                 summary = re.sub(r"<[^>]+>", "", summary)[:800]
 
                 if not title:
@@ -149,13 +147,18 @@ def collect_news(rss_feeds: dict, hours: int = 24) -> list:
             print(f"  [뉴스] {source_name} 수집 실패: {e}")
             failed_feeds.append(source_name)
 
-    # ── BUG-7 FIX: 중복 제거 강화 ────────────────────────────────────────────
-    # 기존: link 있는 항목만 중복 제거, link 없는 항목은 모두 통과
-    # 수정: ① link가 있으면 정규화된 URL로 비교
-    #       ② link가 없으면 정규화된 title로 비교
-    #       → 두 기준 모두 적용해 중복 원천 차단
-    seen_links:  set[str] = set()   # 정규화된 link 추적
-    seen_titles: set[str] = set()   # 정규화된 title 추적 (link 없는 항목용)
+    # ── 중복 제거 ─────────────────────────────────────────────────────────────
+    # ① link가 있는 항목  → 정규화된 URL로만 중복 판단
+    #                       seen_titles에 등록하지 않음
+    #                       (다른 언론사가 같은 제목으로 독립 보도한 기사는 각각 유효)
+    # ② link가 없는 항목  → 정규화된 title로 중복 판단 후 seen_titles에 등록
+    #
+    # BUG-7B FIX: 기존에는 link 유무와 관계없이 seen_titles에 항상 등록했으나,
+    #             이로 인해 서로 다른 URL을 가진 동일 제목 기사가 모두 제거됨.
+    #             link가 있는 항목은 URL로 이미 중복이 걸러지므로
+    #             seen_titles 등록에서 제외한다.
+    seen_links:  set[str] = set()
+    seen_titles: set[str] = set()
     deduped: list[dict]   = []
 
     for item in results:
@@ -166,19 +169,17 @@ def collect_news(rss_feeds: dict, hours: int = 24) -> list:
         norm_title = _normalize_title(title)
 
         if norm_link:
-            # link가 있는 항목: 정규화된 link 기준으로 중복 판단
+            # link 있는 항목: URL 기준 중복 판단만 수행
             if norm_link in seen_links:
                 continue
             seen_links.add(norm_link)
+            # seen_titles에는 등록하지 않음 (BUG-7B FIX)
         else:
-            # BUG-7 FIX: link가 없는 항목: 정규화된 title 기준으로 중복 판단
+            # link 없는 항목: title 기준 중복 판단
             if norm_title and norm_title in seen_titles:
                 continue
-
-        # title은 link 유무와 관계없이 항상 seen_titles에 등록
-        # (link가 다르더라도 제목이 완전히 같으면 중복으로 볼 수 있음)
-        if norm_title:
-            seen_titles.add(norm_title)
+            if norm_title:
+                seen_titles.add(norm_title)
 
         deduped.append(item)
 
