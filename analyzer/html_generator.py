@@ -25,6 +25,7 @@ AI 주식 브리핑 HTML 생성 엔진
 - BUG-3    : signal 매핑 버그 수정 — 매수/강력매수/관망/매도 등 실제 값 정상 표시
 - NIGHT-1  : 야간선물(KOSPI200/KOSDAQ150) 지표 추가 및 새벽시장 포인트 섹션 신규
 - NIGHT-1B : 역외환율 표시 버그 수정 — 하드코딩 +0.4 제거, 등락 화살표 방향 동적 처리
+- REM-TV-1 : 경제방송TV 섹션 제거 — 08:00 실행 기준 당일 데이터 수집 불가로 삭제
 """
 
 import os
@@ -198,7 +199,6 @@ def _build_dawn_market_html(market_overview: dict) -> str:
     if usd_krw:
         usd_val = float(usd_krw.get("value", 0))
         usd_pct = float(usd_krw.get("change_pct", 0))
-        # NIGHT-1B: 달러 강세(환율 상승) = 주식 약세 요인 → 방향 해석 반전
         if usd_pct >= 0.1:
             usd_label = "원화 약세 (소폭 풋 방향)"
             usd_color = "#74c0fc"
@@ -220,7 +220,6 @@ def _build_dawn_market_html(market_overview: dict) -> str:
             f'</div>'
         )
 
-    # 종합 판단 요약
     kospi_pct  = float(kospi_night.get("change_pct",  0)) if kospi_night  else 0.0
     kosdaq_pct = float(kosdaq_night.get("change_pct", 0)) if kosdaq_night else 0.0
     avg_pct = (kospi_pct + kosdaq_pct) / max(
@@ -262,70 +261,6 @@ def _render_market_summary(market_summary: str) -> str:
             f'<p class="summary-text">{clean}</p></div>'
         )
     return html or f'<p style="color:#ccc;">{market_summary.strip()}</p>'
-
-
-def _build_tv_html(all_data: list) -> str:
-    tv_types = {"경제방송tv", "경제방송", "broadcast", "tv"}
-    items    = [d for d in all_data
-                if str(d.get("source_type", "")).lower().replace(" ", "") in tv_types]
-    if not items:
-        return '<p style="color:#666;">경제방송 데이터 없음</p>'
-
-    channel_map = OrderedDict()
-    seen_titles = set()
-
-    for item in items:
-        channel  = item.get("source_name", "알 수 없음").strip()
-        title    = item.get("title", "").strip()
-        stock    = item.get("stock_name", "").strip()
-        link     = item.get("link") or item.get("url", "")
-        date_str = item.get("date", "")
-
-        if not title or title in seen_titles:
-            continue
-        seen_titles.add(title)
-
-        if channel not in channel_map:
-            channel_map[channel] = {"date": date_str, "stocks": []}
-
-        channel_map[channel]["stocks"].append((stock, title, link))
-
-    if not channel_map:
-        return '<p style="color:#666;">경제방송 데이터 없음</p>'
-
-    html = ""
-    for channel, info in channel_map.items():
-        date_str   = info["date"]
-        items_html = ""
-        for (stock, title, link) in info["stocks"]:
-            stock_html = f'<span class="tv-stock-name">{stock}</span>' if stock else ""
-            if link:
-                title_html = (
-                    f'<a href="{link}" target="_blank" rel="noopener" '
-                    f'style="color:#adb5bd;text-decoration:none;">{title}</a>'
-                )
-            else:
-                title_html = f'<span style="color:#adb5bd;">{title}</span>'
-
-            if stock_html:
-                items_html += (
-                    f'<li>{stock_html}'
-                    f'<span class="tv-item-sep">·</span>'
-                    f'{title_html}</li>'
-                )
-            else:
-                items_html += f'<li>{title_html}</li>'
-
-        html += f"""
-<div class="tv-channel-card">
-  <div class="tv-channel-header">
-    <span class="tv-channel-name">📺 {channel}</span>
-    <span class="tv-date">{date_str}</span>
-  </div>
-  <ul class="tv-stock-list">{items_html}</ul>
-</div>"""
-
-    return html
 
 
 def _build_analyst_html(all_data: list) -> str:
@@ -717,9 +652,8 @@ def generate_html(
         chart_data_js = "const chartDataMap = {};"
 
     analyst_html = _build_analyst_html(all_data)
-    tv_html      = _build_tv_html(all_data)
+    # REM-TV-1: tv_html 제거
 
-    # ── CSS + HTML 템플릿 (이하 원본과 동일, 변경 없음) ─────────────────────
     css = """
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -1017,27 +951,6 @@ a:hover { text-decoration: underline; }
 .analyst-title-link { color: var(--text-muted); }
 .analyst-title-link:hover { color: var(--accent); }
 .analyst-title-text { color: var(--text-muted); }
-.tv-channel-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: .75rem 1rem;
-  margin-bottom: .75rem;
-}
-.tv-channel-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: .5rem;
-  flex-wrap: wrap;
-  gap: .4rem;
-}
-.tv-channel-name { font-weight: 700; font-size: .9rem; }
-.tv-date { font-size: .75rem; color: var(--text-muted); }
-.tv-stock-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
-.tv-stock-list li { font-size: .85rem; }
-.tv-stock-name { font-weight: 600; color: var(--text); margin-right: .3rem; }
-.tv-item-sep { color: var(--text-muted); margin: 0 .2rem; }
 .modal-overlay {
   display: none;
   position: fixed;
@@ -1127,12 +1040,6 @@ a:hover { text-decoration: underline; }
   <section class="section">
     <div class="section-title">📑 애널리스트 리포트</div>
     {analyst_html}
-  </section>
-
-  <!-- 경제방송 TV -->
-  <section class="section">
-    <div class="section-title">📺 경제방송 TV</div>
-    {tv_html}
   </section>
 
   <!-- AI 전략 -->
