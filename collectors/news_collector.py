@@ -11,15 +11,85 @@
 - BUG-7 FIX: link 없는 항목의 title 기반 중복 제거 추가
              link URL 정규화(쿼리 파라미터 제거) 후 비교
 - BUG-7B FIX: link가 있는 항목은 seen_titles에 등록하지 않도록 수정
-              (서로 다른 언론사의 동일 제목 기사가 과도하게 제거되는 문제 해결)
+- V3-NEWS-1: 기사 본문 크롤링 추가 (V2 이식) — RSS 요약보다 본문이 길면 본문 사용
+             날짜 확인된 기사만 크롤링 슬롯 사용 (피드당 최대 15건)
 """
 import re
+import requests
 import feedparser
+from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from urllib.parse import urlparse, urlunparse
 
 KST = timezone(timedelta(hours=9))
+
+
+def fetch_article_body(url: str, max_chars: int = 1500) -> str:
+    """
+    V3-NEWS-1: 기사 URL에서 본문 텍스트를 추출합니다 (최대 max_chars자).
+    주요 경제신문사 본문 선택자를 순서대로 시도하며,
+    실패 시 <p> 태그 집합으로 폴백합니다.
+    """
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
+        }
+        resp = requests.get(url, headers=headers, timeout=10)
+        resp.encoding = resp.apparent_encoding or "utf-8"
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        # 광고·네비게이션 등 노이즈 제거
+        for tag in soup.select(
+            "script, style, nav, header, footer, aside, "
+            ".ad, .banner, .comment, .relate, .copyright"
+        ):
+            tag.decompose()
+
+        # 언론사별 본문 선택자 (우선순위 순)
+        selectors = [
+            "div#newsct_article",          # 네이버 뉴스 뷰어
+            "div.article_body",
+            "div#article_body",
+            "div.article-body",
+            "article#article-view-content-div",
+            "div#textBody",
+            "div#news_body_area",
+            "div.news_cnt_detail_wrap",
+            "article",
+            "div.article_txt",
+            "div.article_content",
+            "div.news_body",
+            "div#articleBodyContents",     # 한국경제
+            "div.article-text",            # 매일경제
+            "div#article-view-content-div",# 이데일리
+        ]
+
+        body_text = ""
+        for selector in selectors:
+            el = soup.select_one(selector)
+            if el:
+                body_text = el.get_text(separator=" ", strip=True)
+                if len(body_text) > 100:
+                    break
+
+        # 폴백: <p> 태그 집합
+        if len(body_text) < 100:
+            paragraphs = soup.select("p")
+            texts = [
+                p.get_text(strip=True)
+                for p in paragraphs
+                if len(p.get_text(strip=True)) > 30
+            ]
+            body_text = " ".join(texts)
+
+        body_text = re.sub(r"\s+", " ", body_text).strip()
+        return body_text[:max_chars] if body_text else ""
+
+    except Exception as e:
+        print(f"  [본문크롤링] {url[:60]}... 실패: {e}")
+        return ""
 
 
 def _parse_published(entry) -> datetime:
@@ -31,18 +101,14 @@ def _parse_published(entry) -> datetime:
                 return parsedate_to_datetime(val).astimezone(KST)
             except Exception:
                 pass
-    # BUG-N-1: 날짜 파싱 실패 시 현재 시각 반환 (24시간 필터 통과)
+    # BUG-N-1: 날짜 파싱 실패 시 현재 시각 반환
     return datetime.now(KST)
 
 
 def _is_valid_feed(feed) -> bool:
-    """
-    BUG-N-2: feedparser가 에러 없이 빈 결과를 반환하는 경우 감지.
-    bozo=1 은 피드 파싱 오류(잘못된 XML 등)를 의미.
-    """
+    """BUG-N-2: feedparser bozo 오류 감지"""
     if getattr(feed, "bozo", False):
         exc = getattr(feed, "bozo_exception", None)
-        # CharacterEncodingOverride는 무해한 경고 — 정상 처리
         if exc and "CharacterEncodingOverride" in type(exc).__name__:
             return True
         return False
@@ -50,13 +116,7 @@ def _is_valid_feed(feed) -> bool:
 
 
 def _normalize_link(link: str) -> str:
-    """
-    BUG-7 FIX: URL 정규화 — 쿼리 파라미터·프래그먼트 제거 후 소문자 변환.
-    동일 기사가 트래킹 파라미터만 다르게 여러 피드에 배포되는 경우를 잡기 위함.
-
-    예) https://news.example.com/article/123?utm_source=rss&ref=main
-     → https://news.example.com/article/123
-    """
+    """BUG-7 FIX: URL 정규화 — 쿼리 파라미터·프래그먼트 제거 후 소문자 변환"""
     if not link:
         return ""
     try:
@@ -65,9 +125,7 @@ def _normalize_link(link: str) -> str:
             parsed.scheme.lower(),
             parsed.netloc.lower(),
             parsed.path,
-            "",   # params
-            "",   # query     ← 제거
-            "",   # fragment  ← 제거
+            "", "", "",
         ))
         return normalized
     except Exception:
@@ -75,30 +133,22 @@ def _normalize_link(link: str) -> str:
 
 
 def _normalize_title(title: str) -> str:
-    """
-    BUG-7 FIX: 제목 정규화 — 공백·특수문자 제거 후 소문자 변환.
-    링크가 없는 항목의 중복 감지에 사용.
-
-    예) "[속보] 삼성전자, 2분기 실적 발표"
-     → "속보삼성전자2분기실적발표"
-    """
+    """BUG-7 FIX: 제목 정규화 — 공백·특수문자 제거 후 소문자 변환"""
     if not title:
         return ""
-    normalized = re.sub(r"[^\w가-힣]", "", title).lower()
-    return normalized
+    return re.sub(r"[^\w가-힣]", "", title).lower()
 
 
 def collect_news(rss_feeds: dict, hours: int = 24) -> list:
     """
-    RSS 피드에서 최근 N시간 이내 뉴스를 수집합니다.
+    RSS 피드에서 최근 N시간 이내 뉴스를 수집하고,
+    날짜가 확인된 기사는 본문을 직접 크롤링하여 요약을 보강합니다.
 
-    반환: [{"source_type":"뉴스", "source_name":str, "title":str,
-            "summary":str, "link":str, "published":str}]
-
-    BUG-N-3: 피드별 독립 try/except — 한 피드 실패가 전체 수집을 중단하지 않음
+    V3-NEWS-1: 피드당 최대 15건 본문 크롤링
+               본문이 RSS 요약보다 길 경우에만 본문으로 교체
     """
-    cutoff       = datetime.now(KST) - timedelta(hours=hours)
-    results      = []
+    cutoff        = datetime.now(KST) - timedelta(hours=hours)
+    results       = []
     failed_feeds: list[str] = []
 
     for source_name, feed_url in rss_feeds.items():
@@ -115,21 +165,34 @@ def collect_news(rss_feeds: dict, hours: int = 24) -> list:
                 failed_feeds.append(source_name)
                 continue
 
-            count = 0
-            for entry in feed.entries:
+            count       = 0
+            crawl_count = 0  # V3-NEWS-1: 피드당 크롤링 슬롯 카운터
+
+            for entry in feed.entries[:30]:
                 published_dt = _parse_published(entry)
                 if published_dt < cutoff:
                     continue
 
-                title   = (getattr(entry, "title",   "") or "").strip()
-                summary = (getattr(entry, "summary", "") or
-                           getattr(entry, "description", "") or "").strip()
-                link    = (getattr(entry, "link", "") or "").strip()
+                title       = (getattr(entry, "title",   "") or "").strip()
+                rss_summary = (getattr(entry, "summary", "") or
+                               getattr(entry, "description", "") or "").strip()
+                link        = (getattr(entry, "link", "") or "").strip()
 
-                summary = re.sub(r"<[^>]+>", "", summary)[:800]
+                rss_summary = re.sub(r"<[^>]+>", "", rss_summary)[:800]
 
                 if not title:
                     continue
+
+                # ── V3-NEWS-1: 본문 크롤링 ──────────────────────────────────
+                # 조건: link 있음 + 날짜 확인됨 + 크롤링 슬롯 남음 (피드당 15건)
+                body = ""
+                if link and crawl_count < 15:
+                    body = fetch_article_body(link, max_chars=1500)
+                    crawl_count += 1
+
+                # 본문이 RSS 요약보다 길면 본문 사용, 아니면 RSS 요약 유지
+                summary = body if len(body) > len(rss_summary) else rss_summary
+                # ─────────────────────────────────────────────────────────────
 
                 results.append({
                     "source_type": "뉴스",
@@ -141,22 +204,13 @@ def collect_news(rss_feeds: dict, hours: int = 24) -> list:
                 })
                 count += 1
 
-            print(f"  [뉴스] {source_name}: {count}건")
+            print(f"  [뉴스] {source_name}: {count}건 (본문크롤링 {crawl_count}건)")
 
         except Exception as e:
             print(f"  [뉴스] {source_name} 수집 실패: {e}")
             failed_feeds.append(source_name)
 
-    # ── 중복 제거 ─────────────────────────────────────────────────────────────
-    # ① link가 있는 항목  → 정규화된 URL로만 중복 판단
-    #                       seen_titles에 등록하지 않음
-    #                       (다른 언론사가 같은 제목으로 독립 보도한 기사는 각각 유효)
-    # ② link가 없는 항목  → 정규화된 title로 중복 판단 후 seen_titles에 등록
-    #
-    # BUG-7B FIX: 기존에는 link 유무와 관계없이 seen_titles에 항상 등록했으나,
-    #             이로 인해 서로 다른 URL을 가진 동일 제목 기사가 모두 제거됨.
-    #             link가 있는 항목은 URL로 이미 중복이 걸러지므로
-    #             seen_titles 등록에서 제외한다.
+    # ── 중복 제거 (BUG-7, BUG-7B 로직 유지) ─────────────────────────────────
     seen_links:  set[str] = set()
     seen_titles: set[str] = set()
     deduped: list[dict]   = []
@@ -169,13 +223,10 @@ def collect_news(rss_feeds: dict, hours: int = 24) -> list:
         norm_title = _normalize_title(title)
 
         if norm_link:
-            # link 있는 항목: URL 기준 중복 판단만 수행
             if norm_link in seen_links:
                 continue
             seen_links.add(norm_link)
-            # seen_titles에는 등록하지 않음 (BUG-7B FIX)
         else:
-            # link 없는 항목: title 기준 중복 판단
             if norm_title and norm_title in seen_titles:
                 continue
             if norm_title:
@@ -186,5 +237,5 @@ def collect_news(rss_feeds: dict, hours: int = 24) -> list:
     if failed_feeds:
         print(f"\n  [뉴스] 실패 피드: {', '.join(failed_feeds)}")
 
-    print(f"\n[뉴스 합계] {len(deduped)}건 (중복 제거 전: {len(results)}건)")
+    print(f"\n[뉴스 합계] {deduped}건 (중복 제거 전: {len(results)}건, 본문크롤링 포함)")
     return deduped
