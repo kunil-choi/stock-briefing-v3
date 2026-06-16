@@ -330,7 +330,6 @@
 <div class="admin-header">
   <h1>📊 Stock Briefing Admin</h1>
   <div class="header-actions">
-    <button class="btn" onclick="runMonthlyUpdate()">월간 업데이트</button>
     <button class="btn btn-save" onclick="saveToGitHub()">💾 GitHub 저장</button>
     <button class="btn btn-danger" onclick="logout()">로그아웃</button>
   </div>
@@ -467,24 +466,6 @@
   </div>
 </div>
 
-<!-- ===== 월간 업데이트 모달 ===== -->
-<div id="updateModal" class="modal-overlay hidden">
-  <div class="modal">
-    <h3>📋 월간 채널 업데이트</h3>
-    <p style="color:var(--text-muted);font-size:0.88rem;margin-bottom:16px">
-      candidates.json에서 새 채널을 검증하고 추가합니다.
-    </p>
-    <div id="updateProgress"></div>
-    <div id="updateLog"
-         style="background:var(--surface2);border-radius:8px;padding:14px;
-                font-family:monospace;font-size:0.8rem;max-height:300px;overflow-y:auto;
-                color:var(--text-muted);margin-top:12px;"></div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeUpdateModal()">닫기</button>
-    </div>
-  </div>
-</div>
-
 <!-- ===== 토스트 컨테이너 ===== -->
 <div id="toastContainer"></div>
 
@@ -497,7 +478,7 @@ const CHANNELS_FILE   = 'channels.json';
 const CANDIDATES_FILE = 'candidates.json';
 const MIN_VIEWS       = 10000;
 
-const PW_HASH   = 'd3245607e1c80030349094f0ea642bc3c9e28714640e528f22671b50bc2f15f4';
+const PW_HASH     = 'd3245607e1c80030349094f0ea642bc3c9e28714640e528f22671b50bc2f15f4';
 const LS_GH_TOKEN = 'sbv3_gh_token';
 const LS_YT_KEY   = 'sbv3_yt_key';
 const LS_PW_SET   = 'sbv3_pw_verified';
@@ -509,7 +490,7 @@ const SS_AUTHED   = 'sbv3_authed';
 let ghToken      = '';
 let ytKey        = '';
 let channelsData = { broadcast: [], youtuber: [], securities: [], meta: {} };
-let archiveLoaded = false;  // 중복 로드 방지
+let archiveLoaded = false;
 
 // ================================================================
 //  SHA-256
@@ -662,7 +643,7 @@ async function loadChannels() {
 }
 
 // ================================================================
-//  지난 브리핑 로드 (GitHub API로 docs/archive 폴더 조회)
+//  지난 브리핑 로드
 // ================================================================
 async function loadArchive() {
   const grid = document.getElementById('archiveGrid');
@@ -670,10 +651,8 @@ async function loadArchive() {
   archiveLoaded = false;
 
   try {
-    // docs/archive 폴더 내 파일 목록 조회
     const files = await ghGet('docs/archive');
 
-    // .html 파일만 필터링 후 최신순 정렬
     const htmlFiles = files
       .filter(f => f.name.endsWith('.html'))
       .sort((a, b) => b.name.localeCompare(a.name));
@@ -685,7 +664,6 @@ async function loadArchive() {
 
     const [owner, repo] = REPO.split('/');
     grid.innerHTML = htmlFiles.map(f => {
-      // 파일명에서 날짜 파싱 (예: briefing_20260610.html → 2026-06-10)
       const dateMatch = f.name.match(/(\d{4})(\d{2})(\d{2})/);
       const dateLabel = dateMatch
         ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`
@@ -1009,110 +987,6 @@ async function saveToGitHub() {
     showToast(`저장 실패: ${e.message}`, 'error');
     console.error(e);
   }
-}
-
-// ================================================================
-//  월간 업데이트
-// ================================================================
-async function runMonthlyUpdate() {
-  document.getElementById('updateModal').classList.remove('hidden');
-  const logEl = document.getElementById('updateLog');
-  logEl.innerHTML = '';
-
-  function log(msg) { logEl.innerHTML += msg + '\n'; logEl.scrollTop = logEl.scrollHeight; }
-
-  log('월간 업데이트 시작...');
-  try {
-    log('candidates.json 로드 중...');
-    let candidates = [];
-    try {
-      const file = await ghGet(CANDIDATES_FILE);
-      const raw  = decodeURIComponent(escape(atob(file.content)));
-      candidates = JSON.parse(raw);
-      log(`후보 채널 ${candidates.length}개 발견`);
-    } catch (e) {
-      log(`candidates.json 로드 실패: ${e.message}`);
-      return;
-    }
-
-    const existingIds = new Set([
-      ...(channelsData.broadcast  || []).map(c => c.id),
-      ...(channelsData.youtuber   || []).map(c => c.id),
-      ...(channelsData.securities || []).map(c => c.id),
-    ].filter(Boolean));
-
-    const newCandidates = candidates.filter(c => c.id && !existingIds.has(c.id));
-    log(`신규 후보: ${newCandidates.length}개`);
-    if (!newCandidates.length) { log('추가할 채널 없음.'); return; }
-
-    let added = 0;
-    for (const candidate of newCandidates) {
-      log(`\n검증: ${candidate.name} (${candidate.id})`);
-      if (!ytKey) {
-        log('YouTube API Key 없음, 후보 상태로 추가');
-        const category = candidate.category || 'youtuber';
-        if (!channelsData[category]) channelsData[category] = [];
-        channelsData[category].push({
-          name: candidate.name, id: candidate.id,
-          url: candidate.url || '', subscribers: candidate.subscribers || 0,
-          note: candidate.note || '월간 업데이트', status: 'candidate',
-        });
-        added++;
-        continue;
-      }
-      try {
-        const playlistId = 'UU' + candidate.id.slice(2);
-        const plRes      = await fetch(
-          `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${encodeURIComponent(playlistId)}&maxResults=10&key=${ytKey}`
-        );
-        const plData  = await plRes.json();
-        const videoIds = (plData.items || [])
-          .map(i => i.snippet?.resourceId?.videoId).filter(Boolean);
-
-        if (!videoIds.length) { log('최근 영상 없음, 스킵'); continue; }
-
-        const statsRes  = await fetch(
-          `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoIds.join(',')}&key=${ytKey}`
-        );
-        const statsData = await statsRes.json();
-        const maxViews  = Math.max(
-          ...(statsData.items || []).map(i => parseInt(i.statistics?.viewCount || '0'))
-        );
-        log(`최고 조회수: ${maxViews.toLocaleString()}`);
-
-        if (maxViews >= MIN_VIEWS) {
-          const category = candidate.category || 'youtuber';
-          if (!channelsData[category]) channelsData[category] = [];
-          channelsData[category].push({
-            name: candidate.name, id: candidate.id,
-            url: candidate.url || '', subscribers: candidate.subscribers || 0,
-            note: candidate.note || '월간 업데이트', status: 'confirmed',
-          });
-          log(`추가 완료 (${category})`);
-          added++;
-        } else {
-          log(`기준 미달 (${MIN_VIEWS.toLocaleString()}회 이상 필요)`);
-        }
-        await new Promise(r => setTimeout(r, 200));
-      } catch (e) {
-        log(`오류: ${e.message}`);
-      }
-    }
-
-    log(`\n완료: ${added}개 추가`);
-    if (added > 0) {
-      renderAll();
-      log('GitHub 저장 버튼을 눌러 반영하세요.');
-      showToast(`${added}개 추가! GitHub 저장 필요`, 'success');
-    }
-  } catch (e) {
-    log(`\n전체 오류: ${e.message}`);
-    console.error(e);
-  }
-}
-
-function closeUpdateModal() {
-  document.getElementById('updateModal').classList.add('hidden');
 }
 
 // ================================================================
