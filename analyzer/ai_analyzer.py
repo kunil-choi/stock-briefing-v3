@@ -486,7 +486,9 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
 
 # ── JSON 파싱 헬퍼 ────────────────────────────────────────────────────────────
 
-def _try_parse_json(text: str) -> dict | None:
+from typing import Optional
+
+def _try_parse_json(text: str) -> Optional[dict]:
     # 1차: 코드블록 내 JSON 추출
     m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
     if m:
