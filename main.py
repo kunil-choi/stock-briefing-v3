@@ -141,7 +141,6 @@ def main():
     try:
         html = analyze_and_generate_html(
             all_data,
-            ANTHROPIC_API_KEY,
             channels_data=channels,
             gh_repo=GITHUB_REPO,
             market_overview=market_overview,
