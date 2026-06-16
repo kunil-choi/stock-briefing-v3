@@ -10,7 +10,7 @@ import anthropic
 
 # 기본 모델명 상수 (최신 claude-sonnet-4-6 사용)
 DEFAULT_MODEL = "claude-sonnet-4-6"
-DEFAULT_MAX_TOKENS = 8000
+DEFAULT_MAX_TOKENS = 16000
 DEFAULT_RETRIES = 3
 DEFAULT_DELAY = 5  # 초
 
