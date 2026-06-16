@@ -17,6 +17,7 @@ AI 주식 브리핑 분석 엔진
 - FIX-FILTER-1: 관심종목 단계별 선정 로직 (1차: 채널타입 2종↑, 2차: 전체 4회↑, 3차: 전체 3회↑)
 - FIX-SIG-4   : 프롬프트 signal 지시를 긍정/중립/부정으로 통일 (BUG-A1)
 - FIX-PROMPT-1: rules 문자열 끝 손상 복구 및 stock_plans 규칙 명시 (BUG-A2)
+- FIX-APIKEY-1: call_claude_with_retry에 api_key 전달 누락 버그 수정
 """
 
 import json
@@ -24,6 +25,7 @@ import os
 import re
 import math
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 
 from .api_client import call_claude_with_retry
 
@@ -229,7 +231,7 @@ def extract_mentions(all_data: list, stock_map: dict,
     return mentions
 
 
-# ── FIX-FILTER-1: 단계별 관심종목 필터링 ────────────────────────────────────
+# ── FIX-FILTER-1: 단계별 관심종목 필터링 ─────────────────────────────────────
 
 def filter_mentions(mentions: dict, target: int = 10) -> list:
     all_sorted = sorted(
@@ -368,7 +370,6 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
     stocks_text = "\n".join(stocks_info)
     hidden_text = "\n".join(hidden_info) if hidden_info else "해당 없음"
 
-    # FIX-SIG-4: signal 지시를 긍정/중립/부정으로 통일 (BUG-A1 수정)
     prompt_json_structure = (
         '{\n'
         f'  "briefing_date": "{today_date}",\n'
@@ -454,7 +455,6 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         '}'
     )
 
-    # FIX-PROMPT-1: rules 끝 손상 복구 (BUG-A2 수정)
     rules = (
         "[작성 규칙]\n"
         "1. stocks: 유의미한 관심종목만 선별, 최대 10개\n"
@@ -485,8 +485,6 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
 
 
 # ── JSON 파싱 헬퍼 ────────────────────────────────────────────────────────────
-
-from typing import Optional
 
 def _try_parse_json(text: str) -> Optional[dict]:
     # 1차: 코드블록 내 JSON 추출
@@ -545,9 +543,9 @@ def _format_ai_strategy(strategy: dict) -> str:
 
     cash = strategy.get("cash_policy", {})
     if cash:
-        c_pct     = cash.get("current_pct", "")
-        c_deploy  = cash.get("deploy_trigger", "")
-        c_raise   = cash.get("raise_trigger", "")
+        c_pct    = cash.get("current_pct", "")
+        c_deploy = cash.get("deploy_trigger", "")
+        c_raise  = cash.get("raise_trigger", "")
         lines.append(
             f"■ 현금 정책\n"
             f"• 현재 현금 비중: {c_pct}%\n"
@@ -578,7 +576,7 @@ def _format_ai_strategy(strategy: dict) -> str:
 # ── URL 복원 헬퍼 ─────────────────────────────────────────────────────────────
 
 def _restore_source_url(item: dict, all_data: list) -> None:
-    """source_url/url이 빈 경우 all_data에서 동일 source_name + 유사 내용으로 복원."""
+    """source_url/url이 빈 경우 all_data에서 동일 source_name으로 복원."""
     for field in ("channel_mentions", "reasons"):
         entries = item.get(field, [])
         if not isinstance(entries, list):
@@ -638,6 +636,7 @@ def analyze_and_generate_html(
     market_overview: dict = None,
 ) -> str:
     from .html_generator import generate_html
+    from config import ANTHROPIC_API_KEY  # FIX-APIKEY-1
 
     now_kst       = datetime.now(KST)
     today_date    = now_kst.strftime("%Y년 %m월 %d일")
@@ -669,7 +668,8 @@ def analyze_and_generate_html(
     print(f"[Claude] 프롬프트 길이: {len(prompt)}자")
 
     try:
-        response_text = call_claude_with_retry(prompt)
+        # FIX-APIKEY-1: api_key 전달 추가
+        response_text = call_claude_with_retry(prompt, api_key=ANTHROPIC_API_KEY)
     except Exception as e:
         print(f"[Claude] API 호출 실패: {e}")
         return _fallback_html(f"Claude API 오류: {e}", briefing_date)
@@ -698,7 +698,7 @@ def analyze_and_generate_html(
             stock["total_count"]     = data["total_count"]
             stock["weighted_score"]  = round(data["weighted_score"], 2)
             stock["overlap_count"]   = len(data["channel_types"])
-            stock["reasons"]         = []   # FIX-DUP-1: channel_mentions만 사용
+            stock["reasons"]         = []  # FIX-DUP-1: channel_mentions만 사용
 
     # ── 9. 히든픽 weighted_score 동기화 ──────────────────────────────────────
     hidden_lookup = {p["name"]: p for p in hidden_candidates}
