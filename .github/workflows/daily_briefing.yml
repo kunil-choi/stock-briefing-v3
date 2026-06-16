@@ -2,7 +2,7 @@ name: Daily Stock Briefing v3
 
 on:
   schedule:
-    - cron: '0 21 * * 0-4'   # KST 월~금 06:00 (UTC 전날 21:00)
+    - cron: '0 23 * * 0-4'   # KST 월~금 08:00 (UTC 전날 23:00)
   workflow_dispatch:
     inputs:
       force_run:
