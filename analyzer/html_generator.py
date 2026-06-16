@@ -3,29 +3,34 @@
 AI 주식 브리핑 HTML 생성 엔진
 
 수정 이력:
-- BUG-9    : _indicator_badge에서 0.0을 유효값으로 처리
-- BUG-NEW-6: overlap_count를 channel_counts에서 재산출
-- BUG-H5   : signal 필터 확대
-- BUG-W-3  : reason 필드 렌더링 우선순위 (detail > reason > text)
-- BUG-M6   : archive 절대경로 안전 처리
-- CR-NEW-1 : chart_key 특수문자 안전 변환
-- SIM-P5-1 : onclick 작은따옴표 이스케이프
-- FIX-CSS-1: stock-card 종목명 누락 CSS 수정
-- FIX-TV-1 : 경제방송TV 섹션 source_type 매칭 보완
-- FIX-IND-1: 시장 지표 키 유연 탐색
-- V2-CARD  : 종목 카드에 summary/catalyst/risk/channel_mentions 섹션 추가
-- FIX-ANA-1: _build_analyst_html 들여쓰기 버그 수정 (_report_card 내부화)
-- FIX-ARC-1: 사용하지 않는 archive_html 생성 블록 제거
-- FIX-SIG-1: _is_positive_signal에서 "상승" 키워드 제거
-- FIX-SIG-2: filtered_hidden signal 없을 때 오늘의 픽 전체 미표시 버그 수정
-- FIX-JS-1 : showChart 방어코드 추가 (key 없을 때 빈 이미지 방지)
-- FIX-ANA-2: analyst-card 제목 말줄임 제거, 웹에서 전체 표시
-- FIX-HP-1 : 오늘의 픽 가중치 점수를 별점 5개로 시각화, signal 텍스트 제거
-- FIX-RSN-1: reasons 목록에 source_name 표시 추가
-- BUG-3    : signal 매핑 버그 수정 — 매수/강력매수/관망/매도 등 실제 값 정상 표시
-- NIGHT-1  : 야간선물(KOSPI200/KOSDAQ150) 지표 추가 및 새벽시장 포인트 섹션 신규
-- NIGHT-1B : 역외환율 표시 버그 수정 — 하드코딩 +0.4 제거, 등락 화살표 방향 동적 처리
-- REM-TV-1 : 경제방송TV 섹션 제거 — 08:00 실행 기준 당일 데이터 수집 불가로 삭제
+- BUG-9      : _indicator_badge에서 0.0을 유효값으로 처리
+- BUG-NEW-6  : overlap_count를 channel_counts에서 재산출
+- BUG-H5     : signal 필터 확대
+- BUG-W-3    : reason 필드 렌더링 우선순위 (detail > reason > text)
+- BUG-M6     : archive 절대경로 안전 처리
+- CR-NEW-1   : chart_key 특수문자 안전 변환
+- SIM-P5-1   : onclick 작은따옴표 이스케이프
+- FIX-CSS-1  : stock-card 종목명 누락 CSS 수정
+- FIX-TV-1   : 경제방송TV 섹션 source_type 매칭 보완
+- FIX-IND-1  : 시장 지표 키 유연 탐색
+- V2-CARD    : 종목 카드에 summary/catalyst/risk/channel_mentions 섹션 추가
+- FIX-ANA-1  : _build_analyst_html 들여쓰기 버그 수정 (_report_card 내부화)
+- FIX-ARC-1  : 사용하지 않는 archive_html 생성 블록 제거
+- FIX-SIG-1  : _is_positive_signal에서 "상승" 키워드 제거
+- FIX-SIG-2  : filtered_hidden signal 없을 때 오늘의 픽 전체 미표시 버그 수정
+- FIX-JS-1   : showChart 방어코드 추가 (key 없을 때 빈 이미지 방지)
+- FIX-ANA-2  : analyst-card 제목 말줄임 제거, 웹에서 전체 표시
+- FIX-HP-1   : 오늘의 픽 가중치 점수를 별점 5개로 시각화, signal 텍스트 제거
+- FIX-RSN-1  : reasons 목록에 source_name 표시 추가
+- BUG-3      : signal 매핑 버그 수정
+- NIGHT-1    : 야간선물 지표 추가 및 새벽시장 포인트 섹션 신규
+- NIGHT-1B   : 역외환율 표시 버그 수정
+- REM-TV-1   : 경제방송TV 섹션 제거
+- FIX-DUP-1  : channel_mentions/reasons 중복 렌더링 제거 — channel_mentions만 표시
+- FIX-ANA-3  : 애널리스트 카드 컬러 복원 + 리포트 본문(summary) 한 단락 추가
+- FIX-PRICE-1: 장 전(is_premarket=True) 시 "전일 종가" 라벨 표시
+- FIX-STRAT-3: ai_strategy 문자열을 구조화된 섹션 HTML로 렌더링
+- FIX-FILTER-2: filtered_stocks 단계별 선정 로직 (1차→2차→3차, 최대 10개)
 """
 
 import os
@@ -90,7 +95,8 @@ def _safe_js_str(s: str) -> str:
     return s.replace("\\", "\\\\").replace("'", "\\'")
 
 
-def _indicator_badge(label: str, value, pct, direction: str = "") -> str:
+def _indicator_badge(label: str, value, pct, direction: str = "",
+                     is_premarket: bool = False) -> str:
     if value is None:
         return ""
     try:
@@ -106,10 +112,12 @@ def _indicator_badge(label: str, value, pct, direction: str = "") -> str:
                    else f"{int(str(value).replace(',', '').replace(' ', '')):,}")
     except Exception:
         val_str = str(value)
-    pct_str = f"{pct_num:+.2f}%"
+    pct_str    = f"{pct_num:+.2f}%"
+    # FIX-PRICE-1: 장 전이면 라벨에 "전일" 표시
+    pre_label  = ' <span style="font-size:.65rem;color:#555;">(전일)</span>' if is_premarket else ""
     return (
         f'<div class="indicator-badge">'
-        f'<span class="ind-label">{label}</span>'
+        f'<span class="ind-label">{label}{pre_label}</span>'
         f'<span class="ind-value">{val_str}</span>'
         f'<span class="ind-pct" style="color:{color_map[direction]};">'
         f'{arrow_map[direction]} {pct_str}</span></div>'
@@ -128,12 +136,14 @@ def _build_market_indicators(market_overview: dict) -> str:
                 break
         if not item or not isinstance(item, dict):
             continue
-        value = (item.get("value") or item.get("close") or
-                 item.get("price") or item.get("index"))
-        pct   = (item.get("change_pct") or item.get("pct") or
-                 item.get("percent")    or item.get("change_percent"))
-        direction = item.get("direction", "")
-        badge = _indicator_badge(label, value, pct, direction)
+        value      = (item.get("value") or item.get("close") or
+                      item.get("price") or item.get("index"))
+        pct        = (item.get("change_pct") or item.get("pct") or
+                      item.get("percent")    or item.get("change_percent"))
+        direction  = item.get("direction", "")
+        # FIX-PRICE-1: is_premarket 플래그 전달
+        is_pre     = item.get("is_premarket", False)
+        badge      = _indicator_badge(label, value, pct, direction, is_pre)
         if badge:
             badges += badge
     if not badges:
@@ -142,14 +152,6 @@ def _build_market_indicators(market_overview: dict) -> str:
 
 
 def _build_dawn_market_html(market_overview: dict) -> str:
-    """
-    야간선물(KOSPI200/KOSDAQ150)과 역외환율을 기반으로
-    다음날 장 방향을 요약한 '새벽시장 포인트' 섹션을 생성한다.
-
-    - 야간선물 데이터가 없으면 (거래 시간 외) 빈 문자열 반환 → 섹션 미표시
-    - 등락률 기준으로 방향 판정: +0.3% 이상 → 콜 방향, -0.3% 이하 → 풋 방향, 그 외 → 중립
-    - NIGHT-1B: 역외환율 표시에서 하드코딩 +0.4 제거, 화살표 방향 동적 처리
-    """
     if not market_overview:
         return ""
 
@@ -222,7 +224,7 @@ def _build_dawn_market_html(market_overview: dict) -> str:
 
     kospi_pct  = float(kospi_night.get("change_pct",  0)) if kospi_night  else 0.0
     kosdaq_pct = float(kosdaq_night.get("change_pct", 0)) if kosdaq_night else 0.0
-    avg_pct = (kospi_pct + kosdaq_pct) / max(
+    avg_pct    = (kospi_pct + kosdaq_pct) / max(
         sum(1 for x in [kospi_night, kosdaq_night] if x), 1
     )
     if avg_pct >= 0.3:
@@ -263,13 +265,19 @@ def _render_market_summary(market_summary: str) -> str:
     return html or f'<p style="color:#ccc;">{market_summary.strip()}</p>'
 
 
+# ── FIX-ANA-3: 애널리스트 카드 컬러 복원 + 리포트 본문 추가 ──────────────────
+
 def _build_analyst_html(all_data: list) -> str:
     def _report_card(r: dict) -> str:
-        stock  = r.get("stock_name", "")
-        title  = r.get("report_title") or r.get("title", "")
-        broker = r.get("brokers") or r.get("source_name", "")
-        link   = r.get("link", "")
-        is_new = r.get("new_coverage", False)
+        stock   = r.get("stock_name", "")
+        title   = r.get("report_title") or r.get("title", "")
+        broker  = r.get("brokers") or r.get("source_name", "")
+        link    = r.get("link", "")
+        is_new  = r.get("new_coverage", False)
+        summary = (r.get("summary") or r.get("content") or "").strip()
+        # 본문 최대 150자 표시
+        summary_short = summary[:150] + ("…" if len(summary) > 150 else "") if summary else ""
+
         if not link and stock:
             enc  = stock.replace(" ", "+")
             link = (f"https://finance.naver.com/research/company_list.naver"
@@ -280,6 +288,12 @@ def _build_analyst_html(all_data: list) -> str:
                           f'class="analyst-title-link">{title}</a>')
         else:
             title_html = f'<span class="analyst-title-text">{title}</span>'
+
+        summary_html = (
+            f'<p class="analyst-summary">{summary_short}</p>'
+            if summary_short else ""
+        )
+
         return (
             f'<div class="analyst-card">'
             f'<div class="analyst-card-meta">'
@@ -288,6 +302,7 @@ def _build_analyst_html(all_data: list) -> str:
             f'{new_badge}'
             f'</div>'
             f'<div class="analyst-card-title">{title_html}</div>'
+            f'{summary_html}'
             f'</div>'
         )
 
@@ -342,6 +357,7 @@ def _render_star_rating(weighted_score, max_score: float = 5.0) -> str:
 
 
 def _render_reasons(reasons: list) -> str:
+    """히든픽 전용 reasons 렌더링 (관심종목은 channel_mentions만 사용)."""
     if not reasons:
         return ""
     items = ""
@@ -358,7 +374,6 @@ def _render_reasons(reasons: list) -> str:
             continue
         if not rd:
             continue
-
         source_html = ""
         if rn:
             meta = _TAG_META.get(rt, {"bg": "#2d2d44", "color": "#adb5bd"})
@@ -367,7 +382,6 @@ def _render_reasons(reasons: list) -> str:
                 f'style="background:{meta["bg"]};color:{meta["color"]};">'
                 f'{rn}</span> '
             )
-
         if rl:
             text_html = (
                 f'<a href="{rl}" target="_blank" rel="noopener" '
@@ -375,9 +389,7 @@ def _render_reasons(reasons: list) -> str:
             )
         else:
             text_html = f'<span style="color:#adb5bd;">{rd}</span>'
-
         items += f'<li>{source_html}{text_html}</li>'
-
     return f'<ul class="reasons-list">{items}</ul>' if items else ""
 
 
@@ -389,6 +401,10 @@ def _is_positive_signal(sig) -> bool:
 
 
 def _render_stock_detail(stock: dict) -> str:
+    """
+    종목 카드 상세 렌더링.
+    FIX-DUP-1: channel_mentions만 렌더링, reasons는 여기서 처리하지 않음.
+    """
     html = ""
 
     summary = (stock.get("summary") or stock.get("description") or "").strip()
@@ -415,6 +431,7 @@ def _render_stock_detail(stock: dict) -> str:
             f'<p class="stock-section-text">{risk}</p></div>'
         )
 
+    # FIX-DUP-1: channel_mentions만 표시 (reasons와 중복 방지)
     cm_list = stock.get("channel_mentions", [])
     if cm_list:
         cm_items = ""
@@ -446,6 +463,112 @@ def _render_stock_detail(stock: dict) -> str:
     return html
 
 
+# ── FIX-STRAT-3: ai_strategy 문자열 → 구조화된 HTML 렌더링 ───────────────────
+
+def _render_ai_strategy(ai_strategy: str) -> str:
+    """
+    ai_analyzer._format_ai_strategy()가 변환한 텍스트를
+    섹션별로 파싱해 HTML 카드로 렌더링한다.
+    """
+    if not ai_strategy or not ai_strategy.strip():
+        return '<p style="color:#666;">AI 전략 데이터 없음</p>'
+
+    # ■ 로 시작하는 섹션 분리
+    sections = re.split(r'(?=■ )', ai_strategy.strip())
+    html     = ""
+
+    for sec in sections:
+        sec = sec.strip()
+        if not sec:
+            continue
+        lines      = sec.split("\n")
+        title_line = lines[0].replace("■ ", "").strip()
+        body_lines = [l.strip() for l in lines[1:] if l.strip()]
+
+        # 섹션 아이콘 매핑
+        icon_map = {
+            "핵심 시나리오":    "🎯",
+            "포트폴리오 배분":  "📊",
+            "종목별 매매 계획": "📋",
+            "현금 정책":        "💵",
+            "리스크 시나리오":  "⚠️",
+            "테마 상관관계":    "🔗",
+        }
+        icon = next((v for k, v in icon_map.items() if k in title_line), "📌")
+
+        body_html = ""
+        for line in body_lines:
+            if line.startswith("•") or line.startswith("["):
+                # 항목 라인
+                body_html += (
+                    f'<div class="strat-item">{line}</div>'
+                )
+            else:
+                body_html += (
+                    f'<p class="strat-text">{line}</p>'
+                )
+
+        html += (
+            f'<div class="strat-section">'
+            f'<div class="strat-title">{icon} {title_line}</div>'
+            f'<div class="strat-body">{body_html}</div>'
+            f'</div>'
+        )
+
+    return html or f'<p style="color:#ccc;">{ai_strategy.strip()}</p>'
+
+
+# ── FIX-FILTER-2: 단계별 관심종목 필터링 ─────────────────────────────────────
+
+def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
+    """
+    1차: overlap_count >= 2 (서로 다른 채널타입 2종 이상)
+    2차: total_count >= 4  (채널타입 무관 4회 이상, 1차 미달 시 추가)
+    3차: total_count >= 3  (채널타입 무관 3회 이상, 2차 후도 미달 시 추가)
+    각 단계에서 이미 선정된 종목은 제외, 합산 target개 초과 시 중단.
+    """
+    selected       = []
+    selected_names = set()
+
+    # overlap_count 재계산 (channel_counts 기반)
+    for s in stocks:
+        cc = s.get("channel_counts", {})
+        if cc:
+            s["overlap_count"] = sum(1 for v in cc.values() if v and int(v) > 0)
+
+    # 1차
+    for s in stocks:
+        if len(selected) >= target:
+            break
+        if s.get("overlap_count", 0) >= 2 and s.get("name") not in selected_names:
+            selected.append(s)
+            selected_names.add(s.get("name"))
+
+    # 2차
+    if len(selected) < target:
+        for s in stocks:
+            if len(selected) >= target:
+                break
+            if s.get("name") in selected_names:
+                continue
+            if s.get("total_count", 0) >= 4:
+                selected.append(s)
+                selected_names.add(s.get("name"))
+
+    # 3차
+    if len(selected) < target:
+        for s in stocks:
+            if len(selected) >= target:
+                break
+            if s.get("name") in selected_names:
+                continue
+            if s.get("total_count", 0) >= 3:
+                selected.append(s)
+                selected_names.add(s.get("name"))
+
+    return selected
+
+
 def generate_html(
     data,
     channels_data=None,
@@ -470,12 +593,8 @@ def generate_html(
         briefing_date = now_kst.strftime("%Y년 %m월 %d일")
     briefing_time = now_kst.strftime("%H:%M")
 
-    for stock in stocks:
-        cc = stock.get("channel_counts", {})
-        if cc:
-            stock["overlap_count"] = sum(1 for v in cc.values() if v and int(v) > 0)
-
-    filtered_stocks = [s for s in stocks if s.get("overlap_count", 0) >= 2]
+    # FIX-FILTER-2: 단계별 필터링으로 교체
+    filtered_stocks = _filter_stocks_tiered(stocks)
 
     filtered_hidden = [
         h for h in hidden_picks
@@ -510,7 +629,6 @@ def generate_html(
         naver_code   = stock.get("naver_code") or stock.get("code", "")
         naver_url    = stock.get("naver_url", "")
         chart_b64    = stock.get("chart_base64", "")
-        reasons      = stock.get("reasons", [])
 
         if not naver_url:
             if naver_code:
@@ -531,12 +649,13 @@ def generate_html(
                     f'{src_type} {cnt}</span>'
                 )
 
+        # FIX-PRICE-1: 가격 없으면 "전일 종가 조회 중" 표시
         if isinstance(price, int):
             price_html = f'<span class="price-value">{price:,}원</span>'
         elif price and str(price).strip() not in ("None", "N/A", ""):
             price_html = f'<span class="price-value">{price}</span>'
         else:
-            price_html = '<span class="price-value" style="color:#666;">가격 조회 중</span>'
+            price_html = '<span class="price-value" style="color:#666;">전일 종가 조회 중</span>'
 
         if chart_b64:
             chart_key    = _safe_chart_key("chart", name)
@@ -554,8 +673,8 @@ def generate_html(
         else:
             chart_btn_html = ""
 
-        detail_html   = _render_stock_detail(stock)
-        reasons_block = _render_reasons(reasons)
+        # FIX-DUP-1: detail_html만 사용, reasons_block 제거
+        detail_html = _render_stock_detail(stock)
 
         stocks_html += f"""
 <div class="stock-card">
@@ -571,7 +690,6 @@ def generate_html(
     <div class="source-tags">{source_tags_html}</div>
     <div class="price-row">{price_html}{chart_btn_html}</div>
     {detail_html}
-    {reasons_block}
   </div>
 </div>"""
 
@@ -606,7 +724,7 @@ def generate_html(
         elif price and str(price).strip() not in ("None", "N/A", ""):
             price_html = f'<span class="price-value">{price}</span>'
         else:
-            price_html = '<span class="price-value" style="color:#666;">가격 조회 중</span>'
+            price_html = '<span class="price-value" style="color:#666;">전일 종가 조회 중</span>'
 
         if chart_b64:
             chart_key    = _safe_chart_key("hpchart", name)
@@ -651,8 +769,9 @@ def generate_html(
     else:
         chart_data_js = "const chartDataMap = {};"
 
-    analyst_html = _build_analyst_html(all_data)
-    # REM-TV-1: tv_html 제거
+    analyst_html   = _build_analyst_html(all_data)
+    # FIX-STRAT-3: 구조화된 HTML로 렌더링
+    strategy_html  = _render_ai_strategy(ai_strategy)
 
     css = """
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -924,12 +1043,15 @@ a:hover { text-decoration: underline; }
   border-left: 3px solid var(--accent);
 }
 .analyst-card {
-  background: var(--surface);
+  background: var(--surface2);
   border: 1px solid var(--border);
+  border-left: 3px solid #51cf66;
   border-radius: 8px;
   padding: .75rem 1rem;
-  margin-bottom: .5rem;
+  margin-bottom: .6rem;
+  transition: border-color .2s;
 }
+.analyst-card:hover { border-color: var(--accent); }
 .analyst-card-meta {
   display: flex;
   align-items: center;
@@ -937,20 +1059,64 @@ a:hover { text-decoration: underline; }
   flex-wrap: wrap;
   margin-bottom: .3rem;
 }
-.analyst-stock { font-weight: 700; color: var(--text); font-size: .9rem; }
-.analyst-broker { font-size: .78rem; color: var(--text-muted); }
-.new-coverage-badge {
-  font-size: .7rem;
-  background: #1a3a2d;
+.analyst-stock {
+  font-weight: 700;
+  color: #58a6ff;
+  font-size: .95rem;
+}
+.analyst-broker {
+  font-size: .78rem;
   color: #51cf66;
+  background: #1a3a2d;
   border: 1px solid #2a5a3d;
   border-radius: 8px;
   padding: .1rem .4rem;
 }
-.analyst-card-title { font-size: .85rem; }
-.analyst-title-link { color: var(--text-muted); }
+.new-coverage-badge {
+  font-size: .7rem;
+  background: #3a1a2d;
+  color: #ffa94d;
+  border: 1px solid #5a2a3d;
+  border-radius: 8px;
+  padding: .1rem .4rem;
+}
+.analyst-card-title {
+  font-size: .9rem;
+  margin-bottom: .3rem;
+  white-space: normal;
+  word-break: break-word;
+}
+.analyst-title-link { color: var(--text); font-weight: 600; }
 .analyst-title-link:hover { color: var(--accent); }
-.analyst-title-text { color: var(--text-muted); }
+.analyst-title-text { color: var(--text); font-weight: 600; }
+.analyst-summary {
+  font-size: .82rem;
+  color: var(--text-muted);
+  margin-top: .25rem;
+  line-height: 1.5;
+}
+/* FIX-STRAT-3: AI 전략 섹션 스타일 */
+.strat-section {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: .85rem 1rem;
+  margin-bottom: .6rem;
+}
+.strat-title {
+  font-size: .95rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: .5rem;
+}
+.strat-body { display: flex; flex-direction: column; gap: .3rem; }
+.strat-item {
+  font-size: .85rem;
+  color: var(--text-muted);
+  padding-left: .5rem;
+  border-left: 2px solid var(--border);
+}
+.strat-text { font-size: .88rem; color: var(--text-muted); }
 .modal-overlay {
   display: none;
   position: fixed;
@@ -1045,9 +1211,7 @@ a:hover { text-decoration: underline; }
   <!-- AI 전략 -->
   <section class="section">
     <div class="section-title">🤖 AI 투자 전략</div>
-    <div class="summary-block">
-      <p class="summary-text">{ai_strategy or "AI 전략 데이터 없음"}</p>
-    </div>
+    {strategy_html}
   </section>
 
 </div>
