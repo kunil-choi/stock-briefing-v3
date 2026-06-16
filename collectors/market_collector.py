@@ -9,6 +9,7 @@
 - FIX-MKT-4 : KOSPI/KOSDAQ도 yfinance 우선으로 변경
 - BUG-8 FIX : 야간선물 수집 전면 재작성
 - FIX-MKT-5 : 장 시작 전(09:00 KST 이전)에는 전일 종가 + "전일종가" 라벨 표시
+- FIX-MKT-6 : _is_premarket() 주말(토·일) 처리 추가 (BUG-M1)
 """
 
 import re
@@ -45,8 +46,13 @@ _NAVER_NIGHT_FUTURES_API = (
 # ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
 
 def _is_premarket() -> bool:
-    """현재 시각이 장 시작(09:00 KST) 이전인지 확인."""
+    """
+    현재 시각이 장 시작(09:00 KST) 이전인지 확인.
+    FIX-MKT-6: 토·일요일은 항상 True 반환 (장 없음).
+    """
     now = datetime.now(KST)
+    if now.weekday() >= 5:   # 5=토, 6=일
+        return True
     return now.hour < 9
 
 
@@ -59,10 +65,10 @@ def _make_indicator(value, change_pct, direction: str = "",
     if not direction:
         direction = "up" if pct_num > 0 else "down" if pct_num < 0 else "flat"
     return {
-        "value":      value,
-        "change_pct": pct_num,
-        "direction":  direction,
-        "is_premarket": is_premarket,   # FIX-MKT-5: 전일종가 여부 플래그
+        "value":        value,
+        "change_pct":   pct_num,
+        "direction":    direction,
+        "is_premarket": is_premarket,
     }
 
 
@@ -110,8 +116,8 @@ def _fetch_naver_index(symbol: str):
         resp.encoding = "euc-kr"
         text = resp.text
 
-        m_val = re.search(r'id="now_value"[^>]*>([\d,\.]+)', text)
-        m_pct = re.search(r'id="change_percent"[^>]*>([\d\.]+)', text)
+        m_val = re.search(r'id="now_value"[^>]*>([\d,.]+)', text)
+        m_pct = re.search(r'id="change_percent"[^>]*>([\d.]+)', text)
         m_dir = re.search(r'class="(up|down|dn|no)"', text)
 
         if not m_val:
@@ -139,10 +145,10 @@ def _fetch_naver_forex():
         resp.encoding = "euc-kr"
         text = resp.text
         m_val = re.search(
-            r'USD/KRW.*?value["\s]+>([\d,\.]+)', text, re.DOTALL
+            r'USD/KRW.*?value[\s"]+>([\d,.]+)', text, re.DOTALL
         )
         if not m_val:
-            m_val = re.search(r'"exchangeRate"[^>]*>([\d,\.]+)', text)
+            m_val = re.search(r'"exchangeRate"[^>]*>([\d,.]+)', text)
         if not m_val:
             return None, None
         value = float(m_val.group(1).replace(",", ""))
@@ -181,10 +187,10 @@ def _fetch_naver_night_future(symbol: str):
 def collect_market_overview() -> dict:
     print("\n[시장수집] 지표 수집 시작...")
     result    = {}
-    premarket = _is_premarket()   # FIX-MKT-5
+    premarket = _is_premarket()
 
     if premarket:
-        print("  [장전] 09:00 KST 이전 — 전일 종가 기준으로 표시")
+        print("  [장전/주말] 전일 종가 기준으로 표시")
 
     # ── KOSPI ─────────────────────────────────────────────────────────────────
     val, pct = _fetch_yf("^KS11")
@@ -192,8 +198,7 @@ def collect_market_overview() -> dict:
         val, pct = _fetch_naver_index("KOSPI")
     if val is not None:
         result["kospi"] = _make_indicator(val, pct, is_premarket=premarket)
-        print(f"  KOSPI: {val:,.2f} ({pct:+.2f}%)"
-              + (" [전일종가]" if premarket else ""))
+        print(f"  KOSPI: {val:,.2f} ({pct:+.2f}%)" + (" [전일종가]" if premarket else ""))
 
     # ── KOSDAQ ────────────────────────────────────────────────────────────────
     val, pct = _fetch_yf("^KQ11")
@@ -201,8 +206,7 @@ def collect_market_overview() -> dict:
         val, pct = _fetch_naver_index("KOSDAQ")
     if val is not None:
         result["kosdaq"] = _make_indicator(val, pct, is_premarket=premarket)
-        print(f"  KOSDAQ: {val:,.2f} ({pct:+.2f}%)"
-              + (" [전일종가]" if premarket else ""))
+        print(f"  KOSDAQ: {val:,.2f} ({pct:+.2f}%)" + (" [전일종가]" if premarket else ""))
 
     # ── NASDAQ ────────────────────────────────────────────────────────────────
     val, pct = _fetch_yf("^IXIC")
