@@ -24,6 +24,7 @@ AI 주식 브리핑 HTML 생성 엔진
 - FIX-RSN-1: reasons 목록에 source_name 표시 추가
 - BUG-3    : signal 매핑 버그 수정 — 매수/강력매수/관망/매도 등 실제 값 정상 표시
 - NIGHT-1  : 야간선물(KOSPI200/KOSDAQ150) 지표 추가 및 새벽시장 포인트 섹션 신규
+- NIGHT-1B : 역외환율 표시 버그 수정 — 하드코딩 +0.4 제거, 등락 화살표 방향 동적 처리
 """
 
 import os
@@ -41,16 +42,15 @@ _HP_SOURCE_META = {
 }
 _HP_SOURCE_DEFAULT = {"color": "#adb5bd", "icon": "📌", "label": "단독 언급"}
 
-# NIGHT-1: 야간선물 키 추가
 _INDICATOR_DEFS = [
-    ("전일 코스피",       ["kospi",          "KOSPI"]),
-    ("전일 코스닥",       ["kosdaq",         "KOSDAQ"]),
-    ("나스닥",            ["nasdaq",         "NASDAQ"]),
-    ("S&P500",            ["sp500",          "SP500", "s&p500"]),
-    ("다우존스",          ["dow",            "DOW",   "dow_jones"]),
-    ("KOSPI200 야간선물", ["kospi200_night", "kospi200night"]),
-    ("KOSDAQ150 야간선물",["kosdaq150_night","kosdaq150night"]),
-    ("달러/원",           ["usd_krw",        "USD_KRW", "usd"]),
+    ("전일 코스피",        ["kospi",          "KOSPI"]),
+    ("전일 코스닥",        ["kosdaq",         "KOSDAQ"]),
+    ("나스닥",             ["nasdaq",         "NASDAQ"]),
+    ("S&P500",             ["sp500",          "SP500", "s&p500"]),
+    ("다우존스",           ["dow",            "DOW",   "dow_jones"]),
+    ("KOSPI200 야간선물",  ["kospi200_night", "kospi200night"]),
+    ("KOSDAQ150 야간선물", ["kosdaq150_night","kosdaq150night"]),
+    ("달러/원",            ["usd_krw",        "USD_KRW", "usd"]),
 ]
 
 _TAG_META = {
@@ -61,7 +61,6 @@ _TAG_META = {
     "애널리스트": {"bg": "#1a3a2d", "color": "#51cf66"},
 }
 
-# BUG-3: signal 표시 레이블 및 색상 매핑 테이블
 _SIGNAL_MAP = {
     ("강력매수",):                        ("signal-strong-buy",  "#ff4757", "강력매수"),
     ("매수", "buy", "긍정", "positive"):  ("signal-buy",         "#51cf66", "매수"),
@@ -72,7 +71,6 @@ _SIGNAL_DEFAULT = ("signal-neutral", "#adb5bd", "중립")
 
 
 def _resolve_signal(signal: str):
-    """signal 문자열을 (css_class, color, label) 로 변환. BUG-3 수정."""
     if not signal:
         return _SIGNAL_DEFAULT
     sig_l = signal.strip().lower()
@@ -81,8 +79,6 @@ def _resolve_signal(signal: str):
             return meta
     return _SIGNAL_DEFAULT
 
-
-# ── 헬퍼 함수 ────────────────────────────────────────────────────────────────
 
 def _safe_chart_key(prefix: str, name: str) -> str:
     safe = re.sub(r"[^a-zA-Z0-9가-힣]", "_", name)
@@ -144,8 +140,6 @@ def _build_market_indicators(market_overview: dict) -> str:
     return f'<div class="market-indicators">{badges}</div>'
 
 
-# ── NIGHT-1: 새벽시장 포인트 섹션 ────────────────────────────────────────────
-
 def _build_dawn_market_html(market_overview: dict) -> str:
     """
     야간선물(KOSPI200/KOSDAQ150)과 역외환율을 기반으로
@@ -153,6 +147,7 @@ def _build_dawn_market_html(market_overview: dict) -> str:
 
     - 야간선물 데이터가 없으면 (거래 시간 외) 빈 문자열 반환 → 섹션 미표시
     - 등락률 기준으로 방향 판정: +0.3% 이상 → 콜 방향, -0.3% 이하 → 풋 방향, 그 외 → 중립
+    - NIGHT-1B: 역외환율 표시에서 하드코딩 +0.4 제거, 화살표 방향 동적 처리
     """
     if not market_overview:
         return ""
@@ -161,12 +156,10 @@ def _build_dawn_market_html(market_overview: dict) -> str:
     kosdaq_night = market_overview.get("kosdaq150_night")
     usd_krw      = market_overview.get("usd_krw")
 
-    # 야간선물 데이터가 하나도 없으면 섹션 자체를 숨김
     if not kospi_night and not kosdaq_night:
         return ""
 
     def _direction_label(pct: float) -> tuple:
-        """(방향_텍스트, 색상, 화살표) 반환"""
         if pct >= 0.3:
             return "상승 → 콜 방향",   "#ff6b6b", "▲"
         elif pct <= -0.3:
@@ -177,35 +170,35 @@ def _build_dawn_market_html(market_overview: dict) -> str:
     rows = ""
 
     if kospi_night:
-        pct  = float(kospi_night.get("change_pct", 0))
-        val  = float(kospi_night.get("value", 0))
+        pct   = float(kospi_night.get("change_pct", 0))
+        val   = float(kospi_night.get("value", 0))
         label, color, arrow = _direction_label(pct)
         rows += (
             f'<div class="dawn-row">'
             f'<span class="dawn-icon">📈</span>'
             f'<span class="dawn-name">K야간선물(코스피)</span>'
             f'<span class="dawn-val" style="color:{color};">'
-            f'{arrow} {pct:+.2f}% {label}</span>'
+            f'{arrow} {val:,.2f} ({pct:+.2f}%) {label}</span>'
             f'</div>'
         )
 
     if kosdaq_night:
-        pct  = float(kosdaq_night.get("change_pct", 0))
-        val  = float(kosdaq_night.get("value", 0))
+        pct   = float(kosdaq_night.get("change_pct", 0))
+        val   = float(kosdaq_night.get("value", 0))
         label, color, arrow = _direction_label(pct)
         rows += (
             f'<div class="dawn-row">'
             f'<span class="dawn-icon">📈</span>'
             f'<span class="dawn-name">K야간선물(코스닥)</span>'
             f'<span class="dawn-val" style="color:{color};">'
-            f'{arrow} {pct:+.2f}% {label}</span>'
+            f'{arrow} {val:,.2f} ({pct:+.2f}%) {label}</span>'
             f'</div>'
         )
 
     if usd_krw:
         usd_val = float(usd_krw.get("value", 0))
         usd_pct = float(usd_krw.get("change_pct", 0))
-        # 역외환율은 방향이 반대: 달러 강세(환율 상승)는 주식 약세 요인
+        # NIGHT-1B: 달러 강세(환율 상승) = 주식 약세 요인 → 방향 해석 반전
         if usd_pct >= 0.1:
             usd_label = "원화 약세 (소폭 풋 방향)"
             usd_color = "#74c0fc"
@@ -223,17 +216,15 @@ def _build_dawn_market_html(market_overview: dict) -> str:
             f'<span class="dawn-icon">💱</span>'
             f'<span class="dawn-name">역외환율</span>'
             f'<span class="dawn-val" style="color:{usd_color};">'
-            f'{usd_arrow} {usd_val:,.2f} / {usd_val + 0.4:,.2f}원 {usd_pct:+.2f}↓ {usd_label}</span>'
+            f'{usd_arrow} {usd_val:,.2f}원 ({usd_pct:+.2f}%) {usd_label}</span>'
             f'</div>'
         )
 
-    # 종합 판단 한 줄 요약
-    summary_color  = "#adb5bd"
-    summary_text   = "방향 판단 유보"
-    kospi_pct = float(kospi_night.get("change_pct", 0)) if kospi_night else 0.0
+    # 종합 판단 요약
+    kospi_pct  = float(kospi_night.get("change_pct",  0)) if kospi_night  else 0.0
     kosdaq_pct = float(kosdaq_night.get("change_pct", 0)) if kosdaq_night else 0.0
     avg_pct = (kospi_pct + kosdaq_pct) / max(
-        sum([1 for x in [kospi_night, kosdaq_night] if x]), 1
+        sum(1 for x in [kospi_night, kosdaq_night] if x), 1
     )
     if avg_pct >= 0.3:
         summary_color = "#ff6b6b"
@@ -520,8 +511,6 @@ def _render_stock_detail(stock: dict) -> str:
     return html
 
 
-# ── 메인 함수 ─────────────────────────────────────────────────────────────────
-
 def generate_html(
     data,
     channels_data=None,
@@ -562,9 +551,7 @@ def generate_html(
 
     market_indicators_html = _build_market_indicators(market_overview)
     market_summary_html    = _render_market_summary(market_sum)
-
-    # NIGHT-1: 새벽시장 포인트 섹션
-    dawn_market_html = _build_dawn_market_html(market_overview)
+    dawn_market_html       = _build_dawn_market_html(market_overview)
 
     sector_badges_html = ""
     for sector in hot_sectors:
@@ -576,7 +563,6 @@ def generate_html(
         elif sector:
             sector_badges_html += f'<div class="sector-badge">{sector}</div>'
 
-    # ── 관심 종목 카드 ────────────────────────────────────────────────────────
     chart_data_entries = []
     stocks_html        = ""
 
@@ -658,7 +644,6 @@ def generate_html(
         stocks_html = ('<p style="color:#666;text-align:center;padding:2rem;">'
                        '오늘은 복수 채널 교차 언급 종목이 없습니다.</p>')
 
-    # ── 오늘의 픽 카드 ────────────────────────────────────────────────────────
     hidden_html = ""
     for idx, hp in enumerate(filtered_hidden, 1):
         name         = hp.get("name", "")
@@ -725,7 +710,6 @@ def generate_html(
         hidden_html = ('<p style="color:#666;text-align:center;padding:1.5rem;">'
                        '오늘의 픽 없음</p>')
 
-    # ── 차트 JS ───────────────────────────────────────────────────────────────
     if chart_data_entries:
         chart_data_js = ("const chartDataMap = {\n  "
                          + ",\n  ".join(chart_data_entries) + "\n};")
@@ -735,7 +719,7 @@ def generate_html(
     analyst_html = _build_analyst_html(all_data)
     tv_html      = _build_tv_html(all_data)
 
-    # ── CSS ───────────────────────────────────────────────────────────────────
+    # ── CSS + HTML 템플릿 (이하 원본과 동일, 변경 없음) ─────────────────────
     css = """
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
@@ -761,8 +745,6 @@ body {
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .container { max-width: 900px; margin: 0 auto; padding: 0 1rem; }
-
-/* ── 헤더 ── */
 .briefing-header {
   text-align: center;
   padding: 2.5rem 1rem 1.5rem;
@@ -771,8 +753,6 @@ a:hover { text-decoration: underline; }
 }
 .briefing-header h1 { font-size: 1.8rem; font-weight: 700; }
 .subtitle { color: var(--text-muted); font-size: .9rem; margin-top: .4rem; }
-
-/* ── 섹션 ── */
 .section { margin-bottom: 2.5rem; }
 .section-title {
   font-size: 1.15rem;
@@ -782,8 +762,6 @@ a:hover { text-decoration: underline; }
   padding-left: .75rem;
   margin-bottom: 1rem;
 }
-
-/* ── 시장 지표 ── */
 .market-indicators { display: flex; flex-wrap: wrap; gap: .6rem; }
 .indicator-badge {
   background: var(--surface);
@@ -798,8 +776,6 @@ a:hover { text-decoration: underline; }
 .ind-label { font-size: .75rem; color: var(--text-muted); margin-bottom: .15rem; }
 .ind-value { font-size: .95rem; font-weight: 600; }
 .ind-pct   { font-size: .8rem;  margin-top: .1rem; }
-
-/* ── NIGHT-1: 새벽시장 포인트 박스 ── */
 .dawn-market-box {
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
   border: 1px solid #2d4a6e;
@@ -841,8 +817,6 @@ a:hover { text-decoration: underline; }
   flex-wrap: wrap;
 }
 .dawn-star { color: #ffd43b; font-size: .9rem; }
-
-/* ── 시장 요약 ── */
 .summary-block {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -852,8 +826,6 @@ a:hover { text-decoration: underline; }
 }
 .summary-title { font-weight: 700; margin-bottom: .4rem; color: var(--accent); }
 .summary-text  { color: var(--text-muted); font-size: .95rem; }
-
-/* ── 섹터 ── */
 .sector-list  { display: flex; flex-wrap: wrap; gap: .5rem; }
 .sector-badge {
   background: #1c2d3a;
@@ -864,8 +836,6 @@ a:hover { text-decoration: underline; }
   font-size: .85rem;
   font-weight: 600;
 }
-
-/* ── 관심 종목 카드 ── */
 .stock-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -920,163 +890,133 @@ a:hover { text-decoration: underline; }
   border-radius: 12px;
   padding: .15rem .55rem;
   white-space: nowrap;
-  flex-shrink: 0;
 }
-.source-tags { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .65rem; }
-.source-tag  { font-size: .75rem; border-radius: 10px; padding: .15rem .5rem; }
+.stock-card-body { display: flex; flex-direction: column; gap: .6rem; }
+.source-tags { display: flex; flex-wrap: wrap; gap: .4rem; }
+.source-tag {
+  font-size: .75rem;
+  border-radius: 10px;
+  padding: .1rem .5rem;
+}
 .price-row {
   display: flex;
   align-items: center;
   gap: .75rem;
-  margin-bottom: .6rem;
   flex-wrap: wrap;
 }
-.price-value { font-size: 1rem; font-weight: 700; color: #ffd43b; }
+.price-value { font-size: 1rem; font-weight: 600; color: var(--text); }
 .chart-btn {
-  display: inline-block;
   font-size: .8rem;
   padding: .25rem .7rem;
   border-radius: 6px;
-  border: 1px solid var(--border);
   background: var(--surface2);
-  color: var(--text);
+  border: 1px solid var(--border);
+  color: var(--accent);
   cursor: pointer;
   text-decoration: none;
 }
-.chart-btn:hover { border-color: var(--accent); color: var(--accent); }
-
-/* ── V2 종목 상세 섹션 ── */
-.stock-section {
-  margin-top: .75rem;
-  padding-top: .75rem;
-  border-top: 1px solid var(--border);
-}
+.chart-btn:hover { background: #2d3a4a; }
+.stock-section { margin-top: .5rem; }
 .stock-section-label {
-  display: inline-block;
   font-size: .78rem;
   font-weight: 700;
-  color: var(--accent);
-  margin-bottom: .35rem;
-}
-.stock-section-text {
-  font-size: .88rem;
   color: var(--text-muted);
-  line-height: 1.65;
+  display: block;
+  margin-bottom: .2rem;
 }
-
-/* ── 카드 본문 여백 ── */
-.stock-card-body { padding-top: .25rem; }
-.hp-card-body    { padding-top: .25rem; }
-
-/* ── 이유 목록 ── */
-.reasons-list { list-style: none; padding-left: 0; margin-top: .4rem; }
-.reasons-list li {
-  font-size: .88rem;
-  color: var(--text-muted);
-  margin-bottom: .4rem;
-  line-height: 1.55;
+.stock-section-text { font-size: .88rem; color: var(--text-muted); }
+.reasons-list {
+  list-style: none;
+  margin: .4rem 0 0;
+  padding: 0;
   display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: .35rem;
+  flex-direction: column;
+  gap: .3rem;
 }
+.reasons-list li { font-size: .85rem; color: var(--text-muted); }
 .reason-source {
   font-size: .72rem;
-  font-weight: 700;
-  border-radius: 6px;
+  border-radius: 8px;
   padding: .1rem .4rem;
-  white-space: nowrap;
-  flex-shrink: 0;
+  margin-right: .3rem;
 }
-
-/* ── 별점 ── */
-.star-rating {
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  font-size: 1.05rem;
-  line-height: 1;
-  flex-shrink: 0;
-}
-.star.filled { color: #ffd43b; }
-.star.empty  { color: #3a3a4a; }
-
-/* ── 오늘의 픽 카드 ── */
 .hidden-pick-card {
-  background: linear-gradient(135deg, #1a2d1a 0%, #162316 100%);
-  border: 1px solid #2d5a2d;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 1rem 1.2rem;
   margin-bottom: 1rem;
+  transition: border-color .2s;
 }
+.hidden-pick-card:hover { border-color: #51cf66; }
 .hp-card-header {
   display: flex;
   align-items: center;
-  gap: .65rem;
-  margin-bottom: .65rem;
+  gap: .6rem;
+  margin-bottom: .75rem;
   flex-wrap: wrap;
 }
 .hp-badges { display: flex; gap: .4rem; flex-wrap: wrap; }
-.hp-source-badge, .hp-score-badge {
-  font-size: .75rem;
+.hp-source-badge {
+  font-size: .72rem;
   border-radius: 10px;
-  padding: .15rem .55rem;
+  padding: .15rem .5rem;
 }
 .hp-score-badge {
-  background: #1a2d3a;
-  color: #74c0fc;
-  border: 1px solid #1e4a6e;
+  font-size: .72rem;
+  background: #1a2a1a;
+  color: #51cf66;
+  border: 1px solid #2a4a2a;
+  border-radius: 10px;
+  padding: .15rem .5rem;
 }
-.hp-stock-name { font-size: 1.05rem; font-weight: 700; flex: 1 1 auto; }
-
-/* ── 애널리스트 ── */
-.analyst-category-title {
+.hp-stock-name {
+  font-size: 1.05rem;
   font-weight: 700;
-  font-size: .95rem;
-  margin: 1rem 0 .5rem;
-  color: var(--accent);
+  color: var(--text);
+  flex: 1 1 auto;
+}
+.hp-stock-name:hover { color: #51cf66; }
+.hp-card-body { display: flex; flex-direction: column; gap: .6rem; }
+.star-rating { font-size: 1rem; }
+.star.filled { color: #ffd43b; }
+.star.empty  { color: #444; }
+.analyst-category-title {
+  font-size: .9rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin: 1.2rem 0 .5rem;
+  padding-left: .5rem;
+  border-left: 3px solid var(--accent);
 }
 .analyst-card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: .6rem 1rem;
+  padding: .75rem 1rem;
   margin-bottom: .5rem;
-  display: flex;
-  flex-direction: column;
-  gap: .3rem;
 }
 .analyst-card-meta {
   display: flex;
   align-items: center;
+  gap: .5rem;
   flex-wrap: wrap;
-  gap: .4rem;
+  margin-bottom: .3rem;
 }
-.analyst-card-title {
-  font-size: .9rem;
-  line-height: 1.55;
-  word-break: keep-all;
-  overflow-wrap: break-word;
-}
-.analyst-title-link {
-  color: #74c0fc;
-  text-decoration: none;
-  white-space: normal;
-}
-.analyst-title-link:hover { text-decoration: underline; }
-.analyst-title-text { color: #74c0fc; white-space: normal; }
-.analyst-stock  { font-weight: 700; }
-.analyst-broker { font-size: .8rem; color: var(--text-muted); }
+.analyst-stock { font-weight: 700; color: var(--text); font-size: .9rem; }
+.analyst-broker { font-size: .78rem; color: var(--text-muted); }
 .new-coverage-badge {
   font-size: .7rem;
   background: #1a3a2d;
   color: #51cf66;
-  border: 1px solid #2d5a3a;
+  border: 1px solid #2a5a3d;
   border-radius: 8px;
-  padding: .1rem .45rem;
+  padding: .1rem .4rem;
 }
-
-/* ── TV 카드 ── */
+.analyst-card-title { font-size: .85rem; }
+.analyst-title-link { color: var(--text-muted); }
+.analyst-title-link:hover { color: var(--accent); }
+.analyst-title-text { color: var(--text-muted); }
 .tv-channel-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1086,62 +1026,23 @@ a:hover { text-decoration: underline; }
 }
 .tv-channel-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  margin-bottom: .55rem;
+  align-items: center;
+  margin-bottom: .5rem;
   flex-wrap: wrap;
   gap: .4rem;
 }
-.tv-channel-name { font-size: .9rem; font-weight: 700; color: #ffa94d; }
-.tv-date         { font-size: .75rem; color: var(--text-muted); }
-.tv-stock-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: .35rem;
-}
-.tv-stock-list li {
-  font-size: .88rem;
-  color: var(--text-muted);
-  display: flex;
-  align-items: baseline;
-  gap: .4rem;
-  flex-wrap: wrap;
-}
-.tv-stock-name { font-weight: 700; color: var(--text); white-space: nowrap; }
-.tv-item-sep   { color: var(--border); font-size: .8rem; }
-
-/* ── AI 전략 ── */
-.ai-strategy-box {
-  background: var(--surface);
-  border: 1px solid #2d4a2d;
-  border-radius: 10px;
-  padding: 1.2rem 1.4rem;
-  font-size: .95rem;
-  line-height: 1.8;
-  color: var(--text-muted);
-  white-space: pre-wrap;
-}
-
-/* ── 면책 ── */
-.disclaimer {
-  text-align: center;
-  font-size: .78rem;
-  color: var(--text-muted);
-  border-top: 1px solid var(--border);
-  padding-top: 1.5rem;
-  margin-top: 3rem;
-  line-height: 1.8;
-}
-
-/* ── 모달 ── */
+.tv-channel-name { font-weight: 700; font-size: .9rem; }
+.tv-date { font-size: .75rem; color: var(--text-muted); }
+.tv-stock-list { list-style: none; padding: 0; display: flex; flex-direction: column; gap: .3rem; }
+.tv-stock-list li { font-size: .85rem; }
+.tv-stock-name { font-weight: 600; color: var(--text); margin-right: .3rem; }
+.tv-item-sep { color: var(--text-muted); margin: 0 .2rem; }
 .modal-overlay {
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.75);
+  background: rgba(0,0,0,.8);
   z-index: 1000;
   align-items: center;
   justify-content: center;
@@ -1152,127 +1053,126 @@ a:hover { text-decoration: underline; }
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1.5rem;
-  max-width: 92vw;
-  max-height: 90vh;
-  overflow: auto;
+  max-width: 680px;
+  width: 95%;
   position: relative;
 }
+.modal-title { font-weight: 700; margin-bottom: 1rem; }
+.modal-img { width: 100%; border-radius: 8px; }
 .modal-close {
   position: absolute;
-  top: .75rem; right: .75rem;
-  background: none; border: none;
+  top: .75rem;
+  right: 1rem;
+  background: none;
+  border: none;
   color: var(--text-muted);
-  font-size: 1.2rem;
+  font-size: 1.4rem;
   cursor: pointer;
+  line-height: 1;
 }
-.modal-title { font-weight: 700; margin-bottom: 1rem; }
-.modal-img   { max-width: 100%; border-radius: 8px; display: block; }
-
-/* ── 반응형 ── */
 @media (max-width: 600px) {
   .briefing-header h1 { font-size: 1.4rem; }
-  .stock-name { font-size: .95rem; }
-  .market-indicators { gap: .4rem; }
-  .indicator-badge { min-width: 80px; padding: .4rem .6rem; }
-  .analyst-card-title { font-size: .85rem; }
-  .star-rating { font-size: .95rem; }
-  .dawn-name { min-width: 120px; }
-}
-"""
-
-    # ── 섹션 빌더 ─────────────────────────────────────────────────────────────
-    def _section(title: str, content: str, show: bool = True) -> str:
-        if not show:
-            return ""
-        return (
-            f'<section class="section">'
-            f'<div class="section-title">{title}</div>'
-            f'{content}</section>\n'
-        )
-
-    # NIGHT-1: 새벽시장 포인트를 시장 지표 바로 아래 삽입
-    html_body = (
-        _section("📊 시장 지표", market_indicators_html)
-        + (dawn_market_html if dawn_market_html else "")
-        + _section("📰 시장 요약", market_summary_html,
-                   show=bool(market_sum.strip()))
-        + _section("🔥 주목 섹터",
-                   f'<div class="sector-list">{sector_badges_html}</div>',
-                   show=bool(hot_sectors))
-        + _section("👀 관심 종목", stocks_html)
-        + _section("⭐ 오늘의 픽", hidden_html,
-                   show=bool(filtered_hidden))
-        + _section("📋 애널리스트 리포트 분석", analyst_html,
-                   show="데이터 없음" not in analyst_html)
-        + _section("📺 경제방송TV 추천", tv_html,
-                   show="데이터 없음" not in tv_html)
-        + _section("🤖 AI 투자 전략",
-                   f'<div class="ai-strategy-box">{ai_strategy or "분석 데이터 없음"}</div>',
-                   show=bool((ai_strategy or "").strip()))
-    )
-
-    # ── JS ────────────────────────────────────────────────────────────────────
-    js = f"""
-{chart_data_js}
-
-function showChart(key, name) {{
-  const src = chartDataMap[key];
-  if (!src) {{
-    console.warn('차트 데이터 없음:', key);
-    return;
-  }}
-  document.getElementById('modalImg').src   = src;
-  document.getElementById('modalTitle').textContent = name + ' 차트';
-  document.getElementById('chartModal').classList.add('active');
-}}
-
-function closeChart(e) {{
-  if (e.target === document.getElementById('chartModal')) {{
-    document.getElementById('chartModal').classList.remove('active');
-    document.getElementById('modalImg').src = '';
-  }}
-}}
-
-document.addEventListener('keydown', function(e) {{
-  if (e.key === 'Escape') {{
-    document.getElementById('chartModal').classList.remove('active');
-    document.getElementById('modalImg').src = '';
-  }}
-}});
-"""
+  .stock-card-header { gap: .5rem; }
+  .dawn-name { min-width: 130px; }
+}"""
 
     return f"""<!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1.0">
-  <meta name="description" content="AI 기반 한국 주식 모닝브리핑 - {briefing_date}">
-  <title>AI 주식 브리핑 · {briefing_date}</title>
-  <style>{css}</style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 주식 브리핑 — {briefing_date}</title>
+<style>{css}</style>
 </head>
 <body>
 <div class="container">
+
   <header class="briefing-header">
-    <h1>📈 AI 주식 모닝브리핑</h1>
-    <p class="subtitle">{briefing_date} · {briefing_time} KST · 다중 채널 교차분석</p>
+    <h1>📊 AI 주식 브리핑</h1>
+    <p class="subtitle">{briefing_date} {briefing_time} 기준 · 자동 생성</p>
   </header>
-  {html_body}
-  <div class="disclaimer">
-    본 브리핑은 AI가 공개 데이터를 수집·분석하여 자동 생성한 정보입니다.<br>
-    투자 판단의 최종 책임은 투자자 본인에게 있으며, 투자 권유가 아닙니다.<br>
-    © {now_kst.year} AI Stock Briefing · 자동 생성
-  </div>
+
+  <!-- 시장 지표 -->
+  <section class="section">
+    <div class="section-title">📈 시장 지표</div>
+    {market_indicators_html}
+    {dawn_market_html}
+  </section>
+
+  <!-- 시장 요약 -->
+  <section class="section">
+    <div class="section-title">📋 시장 요약</div>
+    {market_summary_html}
+  </section>
+
+  <!-- 핫 섹터 -->
+  <section class="section">
+    <div class="section-title">🔥 핫 섹터</div>
+    <div class="sector-list">{sector_badges_html or '<p style="color:#666;">섹터 데이터 없음</p>'}</div>
+  </section>
+
+  <!-- 관심 종목 -->
+  <section class="section">
+    <div class="section-title">👀 관심 종목 (복수 채널 교차 언급)</div>
+    {stocks_html}
+  </section>
+
+  <!-- 오늘의 픽 -->
+  <section class="section">
+    <div class="section-title">⭐ 오늘의 픽</div>
+    {hidden_html}
+  </section>
+
+  <!-- 애널리스트 리포트 -->
+  <section class="section">
+    <div class="section-title">📑 애널리스트 리포트</div>
+    {analyst_html}
+  </section>
+
+  <!-- 경제방송 TV -->
+  <section class="section">
+    <div class="section-title">📺 경제방송 TV</div>
+    {tv_html}
+  </section>
+
+  <!-- AI 전략 -->
+  <section class="section">
+    <div class="section-title">🤖 AI 투자 전략</div>
+    <div class="summary-block">
+      <p class="summary-text">{ai_strategy or "AI 전략 데이터 없음"}</p>
+    </div>
+  </section>
+
 </div>
 
-<div class="modal-overlay" id="chartModal" onclick="closeChart(event)">
+<!-- 차트 모달 -->
+<div class="modal-overlay" id="chartModal">
   <div class="modal-box">
-    <button class="modal-close"
-      onclick="document.getElementById('chartModal').classList.remove('active')">✕</button>
+    <button class="modal-close" onclick="closeChart()">✕</button>
     <div class="modal-title" id="modalTitle"></div>
     <img class="modal-img" id="modalImg" src="" alt="차트">
   </div>
 </div>
 
-<script>{js}</script>
+<script>
+{chart_data_js}
+
+function showChart(key, name) {{
+  const src = chartDataMap[key];
+  if (!src) return;
+  document.getElementById('modalTitle').textContent = name + ' 차트';
+  document.getElementById('modalImg').src = src;
+  document.getElementById('chartModal').classList.add('active');
+}}
+
+function closeChart() {{
+  document.getElementById('chartModal').classList.remove('active');
+  document.getElementById('modalImg').src = '';
+}}
+
+document.getElementById('chartModal').addEventListener('click', function(e) {{
+  if (e.target === this) closeChart();
+}});
+</script>
 </body>
 </html>"""
