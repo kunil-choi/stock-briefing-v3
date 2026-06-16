@@ -3,14 +3,12 @@
 시장 지표 수집기
 
 수정 이력:
-- FIX-MKT-1: 반환 딕셔너리 키를 html_generator._INDICATOR_DEFS와 일치하도록 통일
-- FIX-MKT-2: FinanceDataReader 의존 제거, yfinance 우선 / 네이버 폴백
-- FIX-MKT-3: collect_market_overview() 함수 내 들여쓰기 버그 수정
-- FIX-MKT-4: KOSPI/KOSDAQ도 yfinance 우선으로 변경 (네이버 등락률 파싱 0.00% 버그 수정)
-- BUG-8 FIX: 야간선물 수집 전면 재작성
-             네이버 증권 realtime JSON API 사용
-             KOSPI200 야간선물(K2FA001.N) + KOSDAQ150 야간선물(KSFA001.N) 추가
-             야간 거래 시간(18:00~05:00) 외에는 None 반환 → 지표 미표시
+- FIX-MKT-1 : 반환 딕셔너리 키를 html_generator._INDICATOR_DEFS와 일치하도록 통일
+- FIX-MKT-2 : FinanceDataReader 의존 제거, yfinance 우선 / 네이버 폴백
+- FIX-MKT-3 : collect_market_overview() 함수 내 들여쓰기 버그 수정
+- FIX-MKT-4 : KOSPI/KOSDAQ도 yfinance 우선으로 변경
+- BUG-8 FIX : 야간선물 수집 전면 재작성
+- FIX-MKT-5 : 장 시작 전(09:00 KST 이전)에는 전일 종가 + "전일종가" 라벨 표시
 """
 
 import re
@@ -39,15 +37,21 @@ _NAVER_HEADERS = {
     "Referer": "https://finance.naver.com/",
 }
 
-# 야간선물 네이버 realtime API
 _NAVER_NIGHT_FUTURES_API = (
     "https://polling.finance.naver.com/api/realtime/domestic/index/{symbol}"
 )
 
 
-# ── 내부 헬퍼 ────────────────────────────────────────────────────────────────
+# ── 내부 헬퍼 ─────────────────────────────────────────────────────────────────
 
-def _make_indicator(value, change_pct, direction: str = "") -> dict:
+def _is_premarket() -> bool:
+    """현재 시각이 장 시작(09:00 KST) 이전인지 확인."""
+    now = datetime.now(KST)
+    return now.hour < 9
+
+
+def _make_indicator(value, change_pct, direction: str = "",
+                    is_premarket: bool = False) -> dict:
     try:
         pct_num = float(change_pct) if change_pct is not None else 0.0
     except (TypeError, ValueError):
@@ -58,6 +62,7 @@ def _make_indicator(value, change_pct, direction: str = "") -> dict:
         "value":      value,
         "change_pct": pct_num,
         "direction":  direction,
+        "is_premarket": is_premarket,   # FIX-MKT-5: 전일종가 여부 플래그
     }
 
 
@@ -147,55 +152,25 @@ def _fetch_naver_forex():
         return None, None
 
 
-# ── BUG-8 FIX: 네이버 야간선물 realtime JSON API ─────────────────────────────
+# ── 야간선물 realtime JSON API ────────────────────────────────────────────────
 
 def _fetch_naver_night_future(symbol: str):
-    """
-    네이버 증권 realtime JSON API로 야간선물 조회.
-
-    대상 심볼:
-      K2FA001.N  → KOSPI200 야간선물
-      KSFA001.N  → KOSDAQ150 야간선물
-
-    야간 거래 시간(18:00 ~ 익일 05:00) 외에는 datas가 빈 배열로 반환됨.
-    이 경우 (None, None) 반환 → 지표 미표시 처리.
-
-    응답 예시 (거래 중):
-    {
-      "pollingInterval": 70000,
-      "datas": [{
-        "closePrice": "325.75",
-        "compareToPreviousClosePrice": "+3.25",
-        "fluctuationsRatio": "+1.01"
-      }],
-      "time": "20260615030000"
-    }
-    """
     if not _REQUESTS_AVAILABLE:
         return None, None
-
     url = _NAVER_NIGHT_FUTURES_API.format(symbol=symbol)
     try:
-        resp = requests.get(url, headers=_NAVER_HEADERS, timeout=10)
+        resp  = requests.get(url, headers=_NAVER_HEADERS, timeout=10)
         resp.raise_for_status()
-        data = resp.json()
-
+        data  = resp.json()
         datas = data.get("datas", [])
         if not datas:
-            # 야간 거래 시간 외 → 데이터 없음
             return None, None
-
-        item = datas[0]
+        item      = datas[0]
         close_str = item.get("closePrice", "").replace(",", "").replace("+", "")
         pct_str   = item.get("fluctuationsRatio", "0").replace(",", "")
-
         if not close_str:
             return None, None
-
-        value = float(close_str)
-        pct   = float(pct_str)
-        return value, pct
-
+        return float(close_str), float(pct_str)
     except Exception as e:
         print(f"  [Naver Night Future] {symbol} 조회 실패: {e}")
         return None, None
@@ -204,55 +179,50 @@ def _fetch_naver_night_future(symbol: str):
 # ── 공개 API ──────────────────────────────────────────────────────────────────
 
 def collect_market_overview() -> dict:
-    """
-    시장 지표를 수집하여 딕셔너리를 반환한다.
-
-    반환 키:
-      kospi, kosdaq, nasdaq, sp500, dow,
-      kospi200_night  ← BUG-8 FIX: KOSPI200 야간선물 (신규)
-      kosdaq150_night ← BUG-8 FIX: KOSDAQ150 야간선물 (신규)
-      usd_krw
-    """
     print("\n[시장수집] 지표 수집 시작...")
-    result = {}
+    result    = {}
+    premarket = _is_premarket()   # FIX-MKT-5
+
+    if premarket:
+        print("  [장전] 09:00 KST 이전 — 전일 종가 기준으로 표시")
 
     # ── KOSPI ─────────────────────────────────────────────────────────────────
     val, pct = _fetch_yf("^KS11")
     if val is None:
         val, pct = _fetch_naver_index("KOSPI")
     if val is not None:
-        result["kospi"] = _make_indicator(val, pct)
-        print(f"  KOSPI: {val:,.2f} ({pct:+.2f}%)")
+        result["kospi"] = _make_indicator(val, pct, is_premarket=premarket)
+        print(f"  KOSPI: {val:,.2f} ({pct:+.2f}%)"
+              + (" [전일종가]" if premarket else ""))
 
     # ── KOSDAQ ────────────────────────────────────────────────────────────────
     val, pct = _fetch_yf("^KQ11")
     if val is None:
         val, pct = _fetch_naver_index("KOSDAQ")
     if val is not None:
-        result["kosdaq"] = _make_indicator(val, pct)
-        print(f"  KOSDAQ: {val:,.2f} ({pct:+.2f}%)")
+        result["kosdaq"] = _make_indicator(val, pct, is_premarket=premarket)
+        print(f"  KOSDAQ: {val:,.2f} ({pct:+.2f}%)"
+              + (" [전일종가]" if premarket else ""))
 
     # ── NASDAQ ────────────────────────────────────────────────────────────────
     val, pct = _fetch_yf("^IXIC")
     if val is not None:
-        result["nasdaq"] = _make_indicator(val, pct)
+        result["nasdaq"] = _make_indicator(val, pct, is_premarket=premarket)
         print(f"  NASDAQ: {val:,.2f} ({pct:+.2f}%)")
 
     # ── S&P 500 ───────────────────────────────────────────────────────────────
     val, pct = _fetch_yf("^GSPC")
     if val is not None:
-        result["sp500"] = _make_indicator(val, pct)
+        result["sp500"] = _make_indicator(val, pct, is_premarket=premarket)
         print(f"  S&P500: {val:,.2f} ({pct:+.2f}%)")
 
     # ── 다우존스 ──────────────────────────────────────────────────────────────
     val, pct = _fetch_yf("^DJI")
     if val is not None:
-        result["dow"] = _make_indicator(val, pct)
+        result["dow"] = _make_indicator(val, pct, is_premarket=premarket)
         print(f"  DOW: {val:,.2f} ({pct:+.2f}%)")
 
-    # ── KOSPI200 야간선물 (BUG-8 FIX) ────────────────────────────────────────
-    # 네이버 증권 realtime JSON API 사용 (계좌/API키 불필요)
-    # 야간 거래 시간(18:00~05:00) 외에는 None → result에 키 미추가
+    # ── KOSPI200 야간선물 ──────────────────────────────────────────────────────
     val, pct = _fetch_naver_night_future("K2FA001.N")
     if val is not None:
         result["kospi200_night"] = _make_indicator(val, pct)
@@ -260,7 +230,7 @@ def collect_market_overview() -> dict:
     else:
         print("  KOSPI200 야간선물: 거래 시간 외 또는 데이터 없음 → 스킵")
 
-    # ── KOSDAQ150 야간선물 (BUG-8 FIX) ───────────────────────────────────────
+    # ── KOSDAQ150 야간선물 ─────────────────────────────────────────────────────
     val, pct = _fetch_naver_night_future("KSFA001.N")
     if val is not None:
         result["kosdaq150_night"] = _make_indicator(val, pct)
@@ -273,7 +243,7 @@ def collect_market_overview() -> dict:
     if val is None:
         val, pct = _fetch_naver_forex()
     if val is not None:
-        result["usd_krw"] = _make_indicator(val, pct)
+        result["usd_krw"] = _make_indicator(val, pct, is_premarket=premarket)
         print(f"  USD/KRW: {val:,.2f} ({pct:+.2f}%)")
 
     if not result:
