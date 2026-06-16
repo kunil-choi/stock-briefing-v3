@@ -1,6 +1,6 @@
 {
   "meta": {
-    "last_updated": "2026-06-15",
+    "last_updated": "2026-06-16",
     "description": "주식 브리핑 유튜브 채널 목록",
     "source": "수동 검증 + playlist.co + socialertus.com",
     "criteria": "주식/경제방송 채널, 구독자 기준 10만 이상 또는 최소 10,000명",
@@ -139,10 +139,10 @@
     },
     {
       "name": "신사임당",
-      "id": "UCep5LSsJGJfuYjU8F4bXjzA",
-      "url": "https://www.youtube.com/@CJ신사임당",
+      "id": "UCaJdckl6MBdDPDf75Ec_bJA",
+      "url": "https://www.youtube.com/@CH신사임당",
       "subscribers": 2760000,
-      "note": "경제/경영 (V2 ID로 수정)",
+      "note": "경제/경영 — FIX-CH-1: ID·handle 오류 수정 (구 ID 존재하지 않음)",
       "status": "confirmed"
     },
     {
@@ -188,17 +188,17 @@
     {
       "name": "박곰희TV",
       "id": "UCr7XsrSrvAn_WcU4kF99bbQ",
-      "url": "https://www.youtube.com/@박곰희TV",
+      "url": "https://www.youtube.com/@gomhee",
       "subscribers": 720000,
-      "note": "ETF/경영",
+      "note": "ETF/경영 — FIX-CH-2: handle을 실제 @gomhee로 수정",
       "status": "confirmed"
     },
     {
       "name": "할 수 있다! 알고 투자",
-      "id": "UCSuE3VD_ynVXrYKEBFMvCTA",
-      "url": "https://www.youtube.com/@haltu",
+      "id": "UCSWPuzlD337Y6VBkyFPwT8g",
+      "url": "https://www.youtube.com/@강환국",
       "subscribers": 390000,
-      "note": "알고투자 분석 (V2 ID로 수정)",
+      "note": "알고투자 분석 — FIX-CH-3: ID·handle 오류 수정 (구 ID 불일치)",
       "status": "confirmed"
     },
     {
@@ -252,9 +252,9 @@
     {
       "name": "슈퍼개미 이세무사TV",
       "id": "UCowHl0BGalL433P6bCBgeKA",
-      "url": "https://www.youtube.com/@leesemusa​TV",
+      "url": "https://www.youtube.com/@leesemusaTV",
       "subscribers": 256000,
-      "note": "주식/세무 재테크",
+      "note": "주식/세무 재테크 — FIX-CH-4: URL 제로폭 공백 문자 제거",
       "status": "confirmed"
     },
     {
@@ -332,9 +332,9 @@
     {
       "name": "체슬리TV",
       "id": "UCXST0Hq6CAmG0dmo3jgrlEw",
-      "url": "https://www.youtube.com/@TV-lb7cv",
+      "url": "https://www.youtube.com/@chesleytv",
       "subscribers": 405000,
-      "note": "국내/해외 주식 분석",
+      "note": "국내/해외 주식 분석 — FIX-CH-5: handle을 실제 @chesleytv로 수정",
       "status": "confirmed"
     },
     {
@@ -348,9 +348,9 @@
     {
       "name": "채부심",
       "id": "UCD9vzSxZ69pjcnf8hgCQXVQ",
-      "url": "https://www.youtube.com/@wealthyofficeworker",
+      "url": "https://www.youtube.com/@chaeboosim",
       "subscribers": 280000,
-      "note": "경영/재테크",
+      "note": "경영/재테크 — FIX-CH-6: URL이 부자회사원과 중복, @chaeboosim으로 수정",
       "status": "confirmed"
     },
     {
