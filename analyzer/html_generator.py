@@ -33,6 +33,8 @@ AI 주식 브리핑 HTML 생성 엔진
 - FIX-FILTER-2: filtered_stocks 단계별 선정 로직 (1차→2차→3차, 최대 10개)
 - FIX-BUG-3  : _filter_stocks_tiered int(v) 타입 안전 처리
 - FIX-SIG-3  : 관심종목 signal 뱃지를 긍정/중립/부정으로 변경
+- FIX-H1     : _filter_stocks_tiered name=None 방어 처리
+- FIX-H3     : filtered_hidden 필터 조건 단순화
 """
 
 import os
@@ -259,8 +261,6 @@ def _render_market_summary(market_summary: str) -> str:
     return html or f'<p style="color:#ccc;">{market_summary.strip()}</p>'
 
 
-# ── FIX-ANA-3: 애널리스트 카드 컬러 복원 + 리포트 본문 추가 ──────────────────
-
 def _build_analyst_html(all_data: list) -> str:
     def _report_card(r: dict) -> str:
         stock   = r.get("stock_name", "")
@@ -455,8 +455,6 @@ def _render_stock_detail(stock: dict) -> str:
     return html
 
 
-# ── FIX-STRAT-3: ai_strategy 문자열 → 구조화된 HTML 렌더링 ───────────────────
-
 def _render_ai_strategy(ai_strategy: str) -> str:
     if not ai_strategy or not ai_strategy.strip():
         return '<p style="color:#666;">AI 전략 데이터 없음</p>'
@@ -499,19 +497,18 @@ def _render_ai_strategy(ai_strategy: str) -> str:
     return html or f'<p style="color:#ccc;">{ai_strategy.strip()}</p>'
 
 
-# ── FIX-FILTER-2 + FIX-BUG-3: 단계별 관심종목 필터링 ────────────────────────
-
 def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
     """
     1차: overlap_count >= 2 (서로 다른 채널타입 2종 이상)
     2차: total_count >= 4  (채널타입 무관 4회 이상, 1차 미달 시 추가)
     3차: total_count >= 3  (채널타입 무관 3회 이상, 2차 후도 미달 시 추가)
     FIX-BUG-3: channel_counts 값 타입 안전 처리 (None, 문자열 방어)
+    FIX-H1   : name=None 방어 처리
     """
     selected       = []
     selected_names = set()
 
-    # overlap_count 재계산 — FIX-BUG-3: 타입 안전 처리
+    # overlap_count 재계산
     for s in stocks:
         cc = s.get("channel_counts", {})
         if cc:
@@ -528,31 +525,36 @@ def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
     for s in stocks:
         if len(selected) >= target:
             break
-        if s.get("overlap_count", 0) >= 2 and s.get("name") not in selected_names:
+        name = s.get("name")
+        if not name:          # FIX-H1: name 없는 항목 스킵
+            continue
+        if s.get("overlap_count", 0) >= 2 and name not in selected_names:
             selected.append(s)
-            selected_names.add(s.get("name"))
+            selected_names.add(name)
 
     # 2차
     if len(selected) < target:
         for s in stocks:
             if len(selected) >= target:
                 break
-            if s.get("name") in selected_names:
+            name = s.get("name")
+            if not name or name in selected_names:
                 continue
             if s.get("total_count", 0) >= 4:
                 selected.append(s)
-                selected_names.add(s.get("name"))
+                selected_names.add(name)
 
     # 3차
     if len(selected) < target:
         for s in stocks:
             if len(selected) >= target:
                 break
-            if s.get("name") in selected_names:
+            name = s.get("name")
+            if not name or name in selected_names:
                 continue
             if s.get("total_count", 0) >= 3:
                 selected.append(s)
-                selected_names.add(s.get("name"))
+                selected_names.add(name)
 
     return selected
 
@@ -583,11 +585,10 @@ def generate_html(
 
     filtered_stocks = _filter_stocks_tiered(stocks)
 
+    # FIX-H3: 조건 단순화 — signal 없거나 긍정이면 포함
     filtered_hidden = [
         h for h in hidden_picks
-        if (not h.get("signal"))
-        or _is_positive_signal(h.get("signal"))
-        or str(h.get("signal", "")).strip().lower() in ("positive", "긍정", "")
+        if not h.get("signal") or _is_positive_signal(h.get("signal"))
     ]
 
     market_indicators_html = _build_market_indicators(market_overview)
@@ -624,7 +625,6 @@ def generate_html(
                 naver_url = (f"https://finance.naver.com/search/searchResult.naver"
                              f"?query={name.replace(' ', '+')}")
 
-        # FIX-SIG-3: 긍정/중립/부정 3단계 뱃지
         sig_class, sig_color, signal_label = _resolve_signal(signal)
 
         source_tags_html = ""
@@ -797,33 +797,23 @@ a:hover { text-decoration: underline; }
 .subtitle { color: var(--text-muted); font-size: .9rem; margin-top: .4rem; }
 .section { margin-bottom: 2.5rem; }
 .section-title {
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--text);
+  font-size: 1.15rem; font-weight: 700; color: var(--text);
   border-left: 4px solid var(--accent);
-  padding-left: .75rem;
-  margin-bottom: 1rem;
+  padding-left: .75rem; margin-bottom: 1rem;
 }
 .market-indicators { display: flex; flex-wrap: wrap; gap: .6rem; }
 .indicator-badge {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: .5rem .9rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  min-width: 100px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: .5rem .9rem;
+  display: flex; flex-direction: column; align-items: center; min-width: 100px;
 }
 .ind-label { font-size: .75rem; color: var(--text-muted); margin-bottom: .15rem; }
 .ind-value { font-size: .95rem; font-weight: 600; }
-.ind-pct   { font-size: .8rem;  margin-top: .1rem; }
+.ind-pct   { font-size: .8rem; margin-top: .1rem; }
 .dawn-market-box {
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  border: 1px solid #2d4a6e;
-  border-radius: 12px;
-  padding: 1.2rem 1.4rem;
-  margin-bottom: 1.5rem;
+  border: 1px solid #2d4a6e; border-radius: 12px;
+  padding: 1.2rem 1.4rem; margin-bottom: 1.5rem;
 }
 .dawn-header {
   font-size: 1.05rem; font-weight: 700; color: #74c0fc;
@@ -860,8 +850,7 @@ a:hover { text-decoration: underline; }
 }
 .stock-card-header {
   display: flex; align-items: center; gap: .75rem;
-  padding: .9rem 1.2rem; border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
+  padding: .9rem 1.2rem; border-bottom: 1px solid var(--border); flex-wrap: wrap;
 }
 .stock-rank {
   font-size: 1rem; font-weight: 800; color: var(--accent);
@@ -875,7 +864,6 @@ a:hover { text-decoration: underline; }
   border: 1.5px solid; border-radius: 4px;
   padding: .15rem .45rem; white-space: nowrap;
 }
-/* FIX-SIG-3: 긍정/중립/부정 색상 */
 .signal-positive { border-color: #51cf66 !important; color: #51cf66 !important; }
 .signal-neutral  { border-color: #adb5bd !important; color: #adb5bd !important; }
 .signal-negative { border-color: #74c0fc !important; color: #74c0fc !important; }
@@ -887,8 +875,7 @@ a:hover { text-decoration: underline; }
 .stock-card-body { padding: .9rem 1.2rem; }
 .source-tags { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .6rem; }
 .source-tag {
-  font-size: .72rem; font-weight: 600;
-  border-radius: 4px; padding: .15rem .4rem;
+  font-size: .72rem; font-weight: 600; border-radius: 4px; padding: .15rem .4rem;
 }
 .price-row {
   display: flex; align-items: center; gap: .75rem;
@@ -920,7 +907,8 @@ a:hover { text-decoration: underline; }
 }
 .hidden-pick-card {
   background: linear-gradient(135deg, #1a1a2e 0%, #161b22 100%);
-  border: 1px solid #2d3a4a; border-radius: 12px; margin-bottom: 1rem; overflow: hidden;
+  border: 1px solid #2d3a4a; border-radius: 12px;
+  margin-bottom: 1rem; overflow: hidden;
 }
 .hp-card-header {
   display: flex; align-items: center; gap: .6rem;
@@ -928,8 +916,7 @@ a:hover { text-decoration: underline; }
 }
 .hp-badges { display: flex; gap: .4rem; flex-wrap: wrap; }
 .hp-source-badge {
-  font-size: .72rem; font-weight: 700;
-  border-radius: 4px; padding: .15rem .45rem;
+  font-size: .72rem; font-weight: 700; border-radius: 4px; padding: .15rem .45rem;
 }
 .hp-score-badge {
   font-size: .72rem; font-weight: 700;
@@ -987,10 +974,8 @@ a:hover { text-decoration: underline; }
   background: var(--surface2); border: 1px solid var(--border);
   border-radius: 8px; padding: .85rem 1rem; margin-bottom: .75rem;
 }
-.strat-title {
-  font-size: .9rem; font-weight: 700; color: var(--accent); margin-bottom: .45rem;
-}
-.strat-body { font-size: .85rem; color: var(--text-muted); }
+.strat-title { font-size: .9rem; font-weight: 700; color: var(--accent); margin-bottom: .45rem; }
+.strat-body  { font-size: .85rem; color: var(--text-muted); }
 .strat-item {
   background: #1c2d3a; border-radius: 4px;
   padding: .3rem .6rem; margin-bottom: .3rem; line-height: 1.5;
@@ -1004,7 +989,8 @@ a:hover { text-decoration: underline; }
 .modal-overlay.active { display: flex; }
 .modal-box {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 12px; padding: 1.5rem; max-width: 700px; width: 90%; position: relative;
+  border-radius: 12px; padding: 1.5rem;
+  max-width: 700px; width: 90%; position: relative;
 }
 .modal-close {
   position: absolute; top: .75rem; right: 1rem;
@@ -1015,11 +1001,11 @@ a:hover { text-decoration: underline; }
 #modal-chart-img { width: 100%; border-radius: 8px; margin-top: .5rem; }
 @media (max-width: 600px) {
   .briefing-header h1 { font-size: 1.4rem; }
-  .stock-card-header   { padding: .7rem .9rem; }
-  .stock-card-body     { padding: .7rem .9rem; }
-  .hp-card-header      { padding: .7rem .9rem; }
-  .hp-card-body        { padding: .7rem .9rem; }
-  .dawn-name           { min-width: 120px; }
+  .stock-card-header  { padding: .7rem .9rem; }
+  .stock-card-body    { padding: .7rem .9rem; }
+  .hp-card-header     { padding: .7rem .9rem; }
+  .hp-card-body       { padding: .7rem .9rem; }
+  .dawn-name          { min-width: 120px; }
 }"""
 
     html = f"""<!DOCTYPE html>
