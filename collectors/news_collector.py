@@ -237,5 +237,5 @@ def collect_news(rss_feeds: dict, hours: int = 24) -> list:
     if failed_feeds:
         print(f"\n  [뉴스] 실패 피드: {', '.join(failed_feeds)}")
 
-    print(f"\n[뉴스 합계] {deduped}건 (중복 제거 전: {len(results)}건, 본문크롤링 포함)")
+        print(f"\n[뉴스 합계] {len(deduped)}건 (중복 제거 전: {len(results)}건, 본문크롤링 포함)")
     return deduped
