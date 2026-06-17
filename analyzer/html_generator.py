@@ -3,70 +3,83 @@
 AI 주식 브리핑 HTML 생성 엔진
 
 수정 이력:
-- BUG-9      : _indicator_badge에서 0.0을 유효값으로 처리
-- BUG-NEW-6  : overlap_count를 channel_counts에서 재산출
-- BUG-H5     : signal 필터 확대
-- BUG-W-3    : reason 필드 렌더링 우선순위 (detail > reason > text)
-- BUG-M6     : archive 절대경로 안전 처리
-- CR-NEW-1   : chart_key 특수문자 안전 변환
-- SIM-P5-1   : onclick 작은따옴표 이스케이프
-- FIX-CSS-1  : stock-card 종목명 누락 CSS 수정
-- FIX-TV-1   : 경제방송TV 섹션 source_type 매칭 보완
-- FIX-IND-1  : 시장 지표 키 유연 탐색
-- V2-CARD    : 종목 카드에 summary/catalyst/risk/channel_mentions 섹션 추가
-- FIX-ANA-1  : _build_analyst_html 들여쓰기 버그 수정 (_report_card 내부화)
-- FIX-ARC-1  : 사용하지 않는 archive_html 생성 블록 제거
-- FIX-SIG-1  : _is_positive_signal에서 "상승" 키워드 제거
-- FIX-SIG-2  : filtered_hidden signal 없을 때 오늘의 픽 전체 미표시 버그 수정
-- FIX-JS-1   : showChart 방어코드 추가 (key 없을 때 빈 이미지 방지)
-- FIX-ANA-2  : analyst-card 제목 말줄임 제거, 웹에서 전체 표시
-- FIX-HP-1   : 오늘의 픽 가중치 점수를 별점 5개로 시각화, signal 텍스트 제거
-- FIX-RSN-1  : reasons 목록에 source_name 표시 추가
-- BUG-3      : signal 매핑 버그 수정
-- NIGHT-1    : 야간선물 지표 추가 및 새벽시장 포인트 섹션 신규
-- NIGHT-1B   : 역외환율 표시 버그 수정
-- REM-TV-1   : 경제방송TV 섹션 제거
-- FIX-DUP-1  : channel_mentions/reasons 중복 렌더링 제거 — channel_mentions만 표시
-- FIX-ANA-3  : 애널리스트 카드 컬러 복원 + 리포트 본문(summary) 한 단락 추가
-- FIX-PRICE-1: 장 전(is_premarket=True) 시 "전일 종가" 라벨 표시
-- FIX-STRAT-3: ai_strategy 문자열을 구조화된 섹션 HTML로 렌더링
-- FIX-FILTER-2: filtered_stocks 단계별 선정 로직 (1차→2차→3차, 최대 10개)
-- FIX-BUG-3  : _filter_stocks_tiered int(v) 타입 안전 처리
-- FIX-SIG-3  : 관심종목 signal 뱃지를 긍정/중립/부정으로 변경
-- FIX-H1     : _filter_stocks_tiered name=None 방어 처리
-- FIX-H3     : filtered_hidden 필터 조건 단순화
-- FIX-RPT-1  : _report_card에서 ai_summary만 표시, 미사용 변수(summary/summary_short) 제거
-- FIX-FILTER-3: _filter_stocks_tiered 3차 기준 3회↑ → 2회↑ (ai_analyzer와 동기화)
-- FIX-IMPORT-1: 미사용 OrderedDict import 제거
-- FIX-ANA-4  : analyst_category=None 항목 누락 방어 (single_broker 폴백 처리)
-- FIX-SIG-4  : _SIGNAL_MAP 키를 list로 명확화하여 가독성 개선
-- FIX-STRAT-4: _render_ai_strategy re.split 빈 토큰 방어 개선
+- BUG-9        : _indicator_badge에서 0.0을 유효값으로 처리
+- BUG-NEW-6    : overlap_count를 channel_counts에서 재산출
+- BUG-H5       : signal 필터 확대
+- BUG-W-3      : reason 필드 렌더링 우선순위 (detail > reason > text)
+- BUG-M6       : archive 절대경로 안전 처리
+- CR-NEW-1     : chart_key 특수문자 안전 변환
+- SIM-P5-1     : onclick 작은따옴표 이스케이프
+- FIX-CSS-1    : stock-card 종목명 누락 CSS 수정
+- FIX-TV-1     : 경제방송TV 섹션 source_type 매칭 보완
+- FIX-IND-1    : 시장 지표 키 유연 탐색
+- V2-CARD      : 종목 카드에 summary/catalyst/risk/channel_mentions 섹션 추가
+- FIX-ANA-1    : _build_analyst_html 들여쓰기 버그 수정 (_report_card 내부화)
+- FIX-ARC-1    : 사용하지 않는 archive_html 생성 블록 제거
+- FIX-SIG-1    : _is_positive_signal에서 "상승" 키워드 제거
+- FIX-SIG-2    : filtered_hidden signal 없을 때 오늘의 픽 전체 미표시 버그 수정
+- FIX-JS-1     : showChart 방어코드 추가 (key 없을 때 빈 이미지 방지)
+- FIX-ANA-2    : analyst-card 제목 말줄임 제거, 웹에서 전체 표시
+- FIX-HP-1     : 오늘의 픽 가중치 점수를 별점 5개로 시각화, signal 텍스트 제거
+- FIX-RSN-1    : reasons 목록에 source_name 표시 추가
+- BUG-3        : signal 매핑 버그 수정
+- NIGHT-1      : 야간선물 지표 추가 및 새벽시장 포인트 섹션 신규
+- NIGHT-1B     : 역외환율 표시 버그 수정
+- REM-TV-1     : 경제방송TV 섹션 제거
+- FIX-DUP-1    : channel_mentions/reasons 중복 렌더링 제거 — channel_mentions만 표시
+- FIX-ANA-3    : 애널리스트 카드 컬러 복원 + 리포트 본문(summary) 한 단락 추가
+- FIX-PRICE-1  : 장 전(is_premarket=True) 시 "전일 종가" 라벨 표시
+- FIX-STRAT-3  : ai_strategy 문자열을 구조화된 섹션 HTML로 렌더링
+- FIX-FILTER-2 : filtered_stocks 단계별 선정 로직 (1차→2차→3차, 최대 10개)
+- FIX-BUG-3    : _filter_stocks_tiered int(v) 타입 안전 처리
+- FIX-SIG-3    : 관심종목 signal 뱃지를 긍정/중립/부정으로 변경
+- FIX-H1       : _filter_stocks_tiered name=None 방어 처리
+- FIX-H3       : filtered_hidden 필터 조건 단순화
+- FIX-RPT-1    : _report_card에서 ai_summary만 표시, 미사용 변수(summary/summary_short) 제거
+- FIX-FILTER-3 : _filter_stocks_tiered 3차 기준 3회↑ → 2회↑ (ai_analyzer와 동기화)
+- FIX-IMPORT-1 : 미사용 OrderedDict import 제거
+- FIX-ANA-4    : analyst_category=None 항목 누락 방어 (single_broker 폴백 처리)
+- FIX-SIG-4    : _SIGNAL_MAP 키를 list로 명확화하여 가독성 개선
+- FIX-STRAT-4  : _render_ai_strategy re.split 빈 토큰 방어 개선
 - FIX-DISCLAIMER-1: 법적 면책 문구 추가 (TV 방송 대응)
+- [1] gh_token  : generate_html() gh_token 파라미터 하위 호환 복원
+- [2] ANA-SINGLE: _build_analyst_html single 리스트 category 기반 필터 단순화
+- [3] STRAT-XSS : _render_ai_strategy 폴백 출력 html.escape 적용
+- [4] IND-VAL   : _indicator_badge val_str float 변환 로직 개선
+- [5] DAWN-NONE : _build_dawn_market_html None값 float() TypeError 방어
+- [6] SECTOR-ESC: sector reason title 속성 따옴표 이스케이프
+- [7] RSN-URL   : _render_reasons URL 프로토콜 검증 + rd html.escape
+- [8] CM-ESC    : _render_stock_detail content html.escape 누락 수정
+- [9] STAR-NEG  : _render_star_rating 음수 score 방어
+- [10] CHART-DUP: chart_data_entries 중복 key 방지
+- [11] BROKER-LIST: _build_analyst_html brokers 리스트 타입 렌더링 수정
+- [12] SUMMARY-SPLIT: _render_market_summary 단락 분리 패턴 개선
+- [13] JS-NEWLINE: safe_name_js 줄바꿈 문자 제거
 """
 
-import os
 import re
+import html as _he
 from datetime import datetime, timedelta, timezone
 
 KST         = timezone(timedelta(hours=9))
 PARA_TITLES = ["📌 시장 개요", "📊 주요 이슈", "🔍 투자 포인트", "⚠️ 리스크 요인", "💡 전망"]
 
 _HP_SOURCE_META = {
-    "애널리스트":  {"color": "#51cf66", "icon": "📊", "label": "애널리스트"},
-    "경제방송TV":  {"color": "#ffa94d", "icon": "📺", "label": "경제방송TV"},
-    "경제방송":    {"color": "#74c0fc", "icon": "📡", "label": "경제방송"},
+    "애널리스트": {"color": "#51cf66", "icon": "📊", "label": "애널리스트"},
+    "경제방송TV": {"color": "#ffa94d", "icon": "📺", "label": "경제방송TV"},
+    "경제방송":   {"color": "#74c0fc", "icon": "📡", "label": "경제방송"},
 }
 _HP_SOURCE_DEFAULT = {"color": "#adb5bd", "icon": "📌", "label": "단독 언급"}
 
 _INDICATOR_DEFS = [
-    ("전일 코스피",        ["kospi",          "KOSPI"]),
-    ("전일 코스닥",        ["kosdaq",         "KOSDAQ"]),
-    ("나스닥",             ["nasdaq",         "NASDAQ"]),
-    ("S&P500",             ["sp500",          "SP500", "s&p500"]),
-    ("다우존스",           ["dow",            "DOW",   "dow_jones"]),
-    ("KOSPI200 야간선물",  ["kospi200_night", "kospi200night"]),
-    ("KOSDAQ150 야간선물", ["kosdaq150_night","kosdaq150night"]),
-    ("달러/원",            ["usd_krw",        "USD_KRW", "usd"]),
+    ("전일 코스피",        ["kospi",           "KOSPI"]),
+    ("전일 코스닥",        ["kosdaq",          "KOSDAQ"]),
+    ("나스닥",             ["nasdaq",          "NASDAQ"]),
+    ("S&P500",             ["sp500",           "SP500", "s&p500"]),
+    ("다우존스",           ["dow",             "DOW",   "dow_jones"]),
+    ("KOSPI200 야간선물",  ["kospi200_night",  "kospi200night"]),
+    ("KOSDAQ150 야간선물", ["kosdaq150_night", "kosdaq150night"]),
+    ("달러/원",            ["usd_krw",         "USD_KRW", "usd"]),
 ]
 
 _TAG_META = {
@@ -77,7 +90,7 @@ _TAG_META = {
     "애널리스트": {"bg": "#1a3a2d", "color": "#51cf66"},
 }
 
-# FIX-SIG-4: 키를 list로 명확화하여 가독성 개선 (FIX-SIG-3 이어서)
+# FIX-SIG-4: 키를 list of tuples로 명확화
 _SIGNAL_MAP = [
     (["강력매수", "매수", "buy", "긍정", "positive"], ("signal-positive", "#51cf66", "긍정")),
     (["관망", "hold", "중립", "neutral"],             ("signal-neutral",  "#adb5bd", "중립")),
@@ -86,7 +99,11 @@ _SIGNAL_MAP = [
 _SIGNAL_DEFAULT = ("signal-neutral", "#adb5bd", "중립")
 
 
-def _resolve_signal(signal: str):
+# ──────────────────────────────────────────────
+# 유틸리티
+# ──────────────────────────────────────────────
+
+def _resolve_signal(signal: str) -> tuple:
     if not signal:
         return _SIGNAL_DEFAULT
     sig_l = signal.strip().lower()
@@ -102,7 +119,17 @@ def _safe_chart_key(prefix: str, name: str) -> str:
 
 
 def _safe_js_str(s: str) -> str:
+    # [13] JS-NEWLINE: 줄바꿈 문자 제거 후 JS 이스케이프
+    s = s.replace('\r', '').replace('\n', ' ')
     return s.replace("\\", "\\\\").replace("'", "\\'")
+
+
+# [5] DAWN-NONE: None 값 float() 변환 TypeError 방어용 헬퍼
+def _safe_float(d: dict, key: str, default: float = 0.0) -> float:
+    try:
+        return float(d.get(key) or default)
+    except (TypeError, ValueError):
+        return default
 
 
 def _indicator_badge(label: str, value, pct, direction: str = "",
@@ -117,13 +144,17 @@ def _indicator_badge(label: str, value, pct, direction: str = "",
         direction = "up" if pct_num > 0 else "down" if pct_num < 0 else "flat"
     color_map = {"up": "#ff6b6b", "down": "#74c0fc", "flat": "#adb5bd"}
     arrow_map = {"up": "▲",       "down": "▼",        "flat": "━"}
+
+    # [4] IND-VAL: float 통일 후 정수 여부 판단으로 변환 로직 개선
     try:
-        val_str = (f"{float(value):,.2f}" if "." in str(value)
-                   else f"{int(str(value).replace(',', '').replace(' ', '')):,}")
+        num = float(str(value).replace(',', '').replace(' ', ''))
+        val_str = f"{num:,.0f}" if num == int(num) else f"{num:,.2f}"
     except Exception:
         val_str = str(value)
+
     pct_str   = f"{pct_num:+.2f}%"
-    pre_label = ' <span style="font-size:.65rem;color:#555;">(전일)</span>' if is_premarket else ""
+    pre_label = (' <span style="font-size:.65rem;color:#555;">(전일)</span>'
+                 if is_premarket else "")
     return (
         f'<div class="indicator-badge">'
         f'<span class="ind-label">{label}{pre_label}</span>'
@@ -135,7 +166,8 @@ def _indicator_badge(label: str, value, pct, direction: str = "",
 
 def _build_market_indicators(market_overview: dict) -> str:
     if not market_overview:
-        return '<div class="market-indicators"><p style="color:#666;font-size:.85em;">시장 데이터 없음</p></div>'
+        return ('<div class="market-indicators">'
+                '<p style="color:#666;font-size:.85em;">시장 데이터 없음</p></div>')
     badges = ""
     for label, key_candidates in _INDICATOR_DEFS:
         item = None
@@ -155,7 +187,8 @@ def _build_market_indicators(market_overview: dict) -> str:
         if badge:
             badges += badge
     if not badges:
-        return '<div class="market-indicators"><p style="color:#666;font-size:.85em;">시장 데이터 없음</p></div>'
+        return ('<div class="market-indicators">'
+                '<p style="color:#666;font-size:.85em;">시장 데이터 없음</p></div>')
     return f'<div class="market-indicators">{badges}</div>'
 
 
@@ -181,8 +214,9 @@ def _build_dawn_market_html(market_overview: dict) -> str:
     rows = ""
 
     if kospi_night:
-        pct   = float(kospi_night.get("change_pct", 0))
-        val   = float(kospi_night.get("value", 0))
+        # [5] DAWN-NONE: _safe_float으로 None 방어
+        pct   = _safe_float(kospi_night, "change_pct")
+        val   = _safe_float(kospi_night, "value")
         label, color, arrow = _direction_label(pct)
         rows += (
             f'<div class="dawn-row">'
@@ -194,8 +228,8 @@ def _build_dawn_market_html(market_overview: dict) -> str:
         )
 
     if kosdaq_night:
-        pct   = float(kosdaq_night.get("change_pct", 0))
-        val   = float(kosdaq_night.get("value", 0))
+        pct   = _safe_float(kosdaq_night, "change_pct")
+        val   = _safe_float(kosdaq_night, "value")
         label, color, arrow = _direction_label(pct)
         rows += (
             f'<div class="dawn-row">'
@@ -207,8 +241,8 @@ def _build_dawn_market_html(market_overview: dict) -> str:
         )
 
     if usd_krw:
-        usd_val = float(usd_krw.get("value", 0))
-        usd_pct = float(usd_krw.get("change_pct", 0))
+        usd_val = _safe_float(usd_krw, "value")
+        usd_pct = _safe_float(usd_krw, "change_pct")
         if usd_pct >= 0.1:
             usd_label, usd_color, usd_arrow = "원화 약세 (소폭 풋 방향)", "#74c0fc", "▲"
         elif usd_pct <= -0.1:
@@ -224,11 +258,12 @@ def _build_dawn_market_html(market_overview: dict) -> str:
             f'</div>'
         )
 
-    kospi_pct  = float(kospi_night.get("change_pct",  0)) if kospi_night  else 0.0
-    kosdaq_pct = float(kosdaq_night.get("change_pct", 0)) if kosdaq_night else 0.0
+    kospi_pct  = _safe_float(kospi_night,  "change_pct") if kospi_night  else 0.0
+    kosdaq_pct = _safe_float(kosdaq_night, "change_pct") if kosdaq_night else 0.0
     avg_pct    = (kospi_pct + kosdaq_pct) / max(
         sum(1 for x in [kospi_night, kosdaq_night] if x), 1
     )
+
     if avg_pct >= 0.3:
         summary_color = "#ff6b6b"
         summary_text  = "콜 방향이며, 갭 상승 출발 예상됩니다."
@@ -254,52 +289,62 @@ def _build_dawn_market_html(market_overview: dict) -> str:
 def _render_market_summary(market_summary: str) -> str:
     if not market_summary or not market_summary.strip():
         return '<p style="color:#666;">시장 요약 데이터 없음</p>'
-    paras = [p.strip() for p in re.split(r'\n\s*\n|\n(?=\d+\.)', market_summary.strip()) if p.strip()]
-    html  = ""
+    # [12] SUMMARY-SPLIT: 단락 분리 패턴 개선 — 빈 줄 또는 번호 목록 모두 처리
+    paras = [
+        p.strip()
+        for p in re.split(r'\n{2,}|\n(?=\d+[\.\)])', market_summary.strip())
+        if p.strip()
+    ]
+    html = ""
     for i, para in enumerate(paras):
-        clean = re.sub(r'^\d+\.\s*', '', para).strip()
+        clean = re.sub(r'^\d+[\.\)]\s*', '', para).strip()
         title = PARA_TITLES[i] if i < len(PARA_TITLES) else f"📎 포인트 {i + 1}"
         html += (
             f'<div class="summary-block">'
             f'<div class="summary-title">{title}</div>'
             f'<p class="summary-text">{clean}</p></div>'
         )
-    return html or f'<p style="color:#ccc;">{market_summary.strip()}</p>'
+    return html or f'<p style="color:#ccc;">{_he.escape(market_summary.strip())}</p>'
 
 
 def _build_analyst_html(all_data: list) -> str:
+
     def _report_card(r: dict) -> str:
         stock  = r.get("stock_name", "")
         title  = r.get("report_title") or r.get("title", "")
-        broker = r.get("brokers") or r.get("source_name", "")
+        # [11] BROKER-LIST: brokers가 리스트일 때 문자열로 변환
+        brokers_raw = r.get("brokers") or r.get("source_name", "")
+        broker = (", ".join(brokers_raw)
+                  if isinstance(brokers_raw, list) else str(brokers_raw))
         link   = r.get("link", "")
         is_new = r.get("new_coverage", False)
 
-        # FIX-RPT-1: summary/summary_short 제거 — ai_summary만 사용
+        # FIX-RPT-1: ai_summary만 사용
         if not link and stock:
             enc  = stock.replace(" ", "+")
             link = (f"https://finance.naver.com/research/company_list.naver"
                     f"?searchType=keyword&keyword={enc}")
-        new_badge = '<span class="new-coverage-badge">신규 커버리지</span>' if is_new else ""
+
+        new_badge = ('<span class="new-coverage-badge">신규 커버리지</span>'
+                     if is_new else "")
         if link:
             title_html = (f'<a href="{link}" target="_blank" rel="noopener" '
-                          f'class="analyst-title-link">{title}</a>')
+                          f'class="analyst-title-link">{_he.escape(title)}</a>')
         else:
-            title_html = f'<span class="analyst-title-text">{title}</span>'
+            title_html = f'<span class="analyst-title-text">{_he.escape(title)}</span>'
 
-        # FIX-RPT-1: Claude가 본문 읽고 추출한 핵심 1문장만 표시
         ai_summary   = r.get("ai_summary", "").strip()
         summary_html = (
             f'<p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;'
-            f'margin-top:.4rem;font-style:italic;">💬 {ai_summary}</p>'
+            f'margin-top:.4rem;font-style:italic;">💬 {_he.escape(ai_summary)}</p>'
             if ai_summary else ""
         )
 
         return (
             f'<div class="analyst-card">'
             f'<div class="analyst-card-meta">'
-            f'<span class="analyst-stock">{stock}</span>'
-            f'<span class="analyst-broker">{broker}</span>'
+            f'<span class="analyst-stock">{_he.escape(stock)}</span>'
+            f'<span class="analyst-broker">{_he.escape(broker)}</span>'
             f'{new_badge}'
             f'</div>'
             f'<div class="analyst-card-title">{title_html}</div>'
@@ -311,14 +356,13 @@ def _build_analyst_html(all_data: list) -> str:
     if not analyst_items:
         return '<p style="color:#666;">애널리스트 리포트 데이터 없음</p>'
 
-    simultaneous = [r for r in analyst_items if r.get("analyst_category") == "simultaneous"]
-    new_cov      = [r for r in analyst_items if r.get("analyst_category") == "new_coverage"]
-    # FIX-ANA-4: analyst_category=None 또는 미분류 항목은 single_broker 폴백으로 처리
+    # [2] ANA-SINGLE: category 기반으로만 분류 — 객체 동일성 비교 제거
+    simultaneous = [r for r in analyst_items
+                    if r.get("analyst_category") == "simultaneous"]
+    new_cov      = [r for r in analyst_items
+                    if r.get("analyst_category") == "new_coverage"]
     single       = [r for r in analyst_items
-                    if r.get("analyst_category") in
-                    ("single_broker", "first_in_6months", None)
-                    and r not in simultaneous
-                    and r not in new_cov]
+                    if r.get("analyst_category") not in ("simultaneous", "new_coverage")]
 
     html = ""
     if simultaneous:
@@ -351,6 +395,8 @@ def _render_star_rating(weighted_score, max_score: float = 5.0) -> str:
         score = float(weighted_score)
     except (TypeError, ValueError):
         score = 0.0
+    # [9] STAR-NEG: 음수 score 방어
+    score  = max(0.0, score)
     filled = max(1, round((score / max_score) * 5)) if score > 0 else 0
     filled = min(filled, 5)
     empty  = 5 - filled
@@ -385,15 +431,17 @@ def _render_reasons(reasons: list) -> str:
             source_html = (
                 f'<span class="reason-source" '
                 f'style="background:{meta["bg"]};color:{meta["color"]};">'
-                f'{rn}</span> '
+                f'{_he.escape(rn)}</span> '
             )
-        if rl:
+        # [7] RSN-URL: URL 프로토콜 검증 + rd html.escape
+        if rl and rl.startswith(("http://", "https://")):
             text_html = (
                 f'<a href="{rl}" target="_blank" rel="noopener" '
-                f'style="color:#adb5bd;text-decoration:none;">{rd}</a>'
+                f'style="color:#adb5bd;text-decoration:none;">'
+                f'{_he.escape(rd)}</a>'
             )
         else:
-            text_html = f'<span style="color:#adb5bd;">{rd}</span>'
+            text_html = f'<span style="color:#adb5bd;">{_he.escape(rd)}</span>'
         items += f'<li>{source_html}{text_html}</li>'
     return f'<ul class="reasons-list">{items}</ul>' if items else ""
 
@@ -408,7 +456,7 @@ def _is_positive_signal(sig) -> bool:
 def _render_stock_detail(stock: dict) -> str:
     """
     종목 카드 상세 렌더링.
-    FIX-DUP-1: channel_mentions만 렌더링, reasons는 여기서 처리하지 않음.
+    FIX-DUP-1: channel_mentions만 렌더링.
     """
     html = ""
 
@@ -417,7 +465,7 @@ def _render_stock_detail(stock: dict) -> str:
         html += (
             f'<div class="stock-section">'
             f'<span class="stock-section-label">📋 종목 요약</span>'
-            f'<p class="stock-section-text">{summary}</p></div>'
+            f'<p class="stock-section-text">{_he.escape(summary)}</p></div>'
         )
 
     catalyst = (stock.get("catalyst") or stock.get("price_trend") or "").strip()
@@ -425,7 +473,7 @@ def _render_stock_detail(stock: dict) -> str:
         html += (
             f'<div class="stock-section">'
             f'<span class="stock-section-label">🚀 상승 촉매</span>'
-            f'<p class="stock-section-text">{catalyst}</p></div>'
+            f'<p class="stock-section-text">{_he.escape(catalyst)}</p></div>'
         )
 
     risk = (stock.get("risk") or "").strip()
@@ -433,7 +481,7 @@ def _render_stock_detail(stock: dict) -> str:
         html += (
             f'<div class="stock-section">'
             f'<span class="stock-section-label">⚠️ 리스크</span>'
-            f'<p class="stock-section-text">{risk}</p></div>'
+            f'<p class="stock-section-text">{_he.escape(risk)}</p></div>'
         )
 
     cm_list = stock.get("channel_mentions", [])
@@ -447,16 +495,21 @@ def _render_stock_detail(stock: dict) -> str:
             meta    = _TAG_META.get(stype, {"bg": "#2d2d44", "color": "#adb5bd"})
             name_html = (
                 f'<span style="color:{meta["color"]};font-weight:600;">'
-                f'{sname}</span>'
+                f'{_he.escape(sname)}</span>'
             )
-            if url:
+            # [8] CM-ESC: content html.escape 적용
+            # [7] RSN-URL: URL 프로토콜 검증
+            if url and url.startswith(("http://", "https://")):
                 text_html = (
                     f'<a href="{url}" target="_blank" rel="noopener" '
                     f'style="color:#adb5bd;text-decoration:none;">'
-                    f'{content}</a>'
+                    f'{_he.escape(content)}</a>'
                 )
             else:
-                text_html = f'<span style="color:#8b949e;">{content}</span>'
+                text_html = (
+                    f'<span style="color:#8b949e;">'
+                    f'{_he.escape(content)}</span>'
+                )
             cm_items += f'<li>{name_html} {text_html}</li>'
         html += (
             f'<div class="stock-section">'
@@ -472,13 +525,13 @@ def _render_ai_strategy(ai_strategy: str) -> str:
     if not ai_strategy or not ai_strategy.strip():
         return '<p style="color:#666;">AI 전략 데이터 없음</p>'
 
-    # FIX-STRAT-4: ■ 로 시작하는 토큰만 처리, 빈 토큰 명시적 제거
+    # FIX-STRAT-4: ■ 로 시작하는 토큰만 처리
     raw_sections = re.split(r'\n(?=■ )', ai_strategy.strip())
     sections     = [s.strip() for s in raw_sections if s.strip().startswith("■")]
 
-    # ■ 로 시작하는 섹션이 없으면 원문을 그대로 출력
+    # [3] STRAT-XSS: ■ 없는 원문 폴백 시 html.escape 적용
     if not sections:
-        return f'<p style="color:#ccc;">{ai_strategy.strip()}</p>'
+        return f'<p style="color:#ccc;">{_he.escape(ai_strategy.strip())}</p>'
 
     icon_map = {
         "핵심 시나리오":        "🎯",
@@ -493,19 +546,19 @@ def _render_ai_strategy(ai_strategy: str) -> str:
         lines      = sec.split("\n")
         title_line = lines[0].replace("■ ", "").strip()
         body_lines = [l.strip() for l in lines[1:] if l.strip()]
-
-        icon = next((v for k, v in icon_map.items() if k in title_line), "📌")
+        icon       = next((v for k, v in icon_map.items() if k in title_line), "📌")
 
         body_html = ""
         for line in body_lines:
+            escaped = _he.escape(line)
             if line.startswith("•") or line.startswith("["):
-                body_html += f'<div class="strat-item">{line}</div>'
+                body_html += f'<div class="strat-item">{escaped}</div>'
             else:
-                body_html += f'<p class="strat-text">{line}</p>'
+                body_html += f'<p class="strat-text">{escaped}</p>'
 
         html += (
             f'<div class="strat-section">'
-            f'<div class="strat-title">{icon} {title_line}</div>'
+            f'<div class="strat-title">{icon} {_he.escape(title_line)}</div>'
             f'<div class="strat-body">{body_html}</div>'
             f'</div>'
         )
@@ -516,16 +569,15 @@ def _render_ai_strategy(ai_strategy: str) -> str:
 def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
     """
     1차: overlap_count >= 2 (서로 다른 채널타입 2종 이상)
-    2차: total_count >= 4  (채널타입 무관 4회 이상, 1차 미달 시 추가)
-    3차: total_count >= 2  (채널타입 무관 2회 이상, 2차 후도 미달 시 추가)
-    FIX-BUG-3   : channel_counts 값 타입 안전 처리 (None, 문자열 방어)
+    2차: total_count >= 4  (4회 이상)
+    3차: total_count >= 2  (2회 이상)
+    FIX-BUG-3   : channel_counts 값 타입 안전 처리
     FIX-H1      : name=None 방어 처리
-    FIX-FILTER-3: 3차 기준 3회↑ → 2회↑ (ai_analyzer.py FIX-FILTER-2와 동기화)
+    FIX-FILTER-3: 3차 기준 2회↑ (ai_analyzer.py 동기화)
     """
     selected       = []
     selected_names = set()
 
-    # overlap_count 재계산 — 원본 dict 수정은 최소화 (이미 값 있으면 덮어씀)
     for s in stocks:
         cc = s.get("channel_counts", {})
         if cc:
@@ -561,7 +613,7 @@ def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
                 selected.append(s)
                 selected_names.add(name)
 
-    # 3차 — FIX-FILTER-3: 3회↑ → 2회↑
+    # 3차 — FIX-FILTER-3
     if len(selected) < target:
         for s in stocks:
             if len(selected) >= target:
@@ -576,23 +628,27 @@ def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
     return selected
 
 
+# ──────────────────────────────────────────────
+# 메인 HTML 생성
+# ──────────────────────────────────────────────
+
 def generate_html(
     data,
     channels_data=None,
     gh_repo="",
+    gh_token="",          # [1] gh_token: 하위 호환 유지 (내부 미사용)
     market_overview=None,
     all_data=None,
 ) -> str:
-    # FIX-IMPORT-1: gh_token 파라미터 제거 (사용처 없음)
     data            = data or {}
     market_overview = market_overview or {}
     all_data        = all_data or []
 
-    stocks        = data.get("stocks",        [])
-    hidden_picks  = data.get("hidden_picks",  [])
+    stocks        = data.get("stocks",         [])
+    hidden_picks  = data.get("hidden_picks",   [])
     market_sum    = data.get("market_summary", "")
-    hot_sectors   = data.get("hot_sectors",   [])
-    ai_strategy   = data.get("ai_strategy",   "")
+    hot_sectors   = data.get("hot_sectors",    [])
+    ai_strategy   = data.get("ai_strategy",    "")
     briefing_date = data.get("briefing_date",  "")
 
     now_kst = datetime.now(KST)
@@ -602,7 +658,7 @@ def generate_html(
 
     filtered_stocks = _filter_stocks_tiered(stocks)
 
-    # FIX-H3: 조건 단순화 — signal 없거나 긍정이면 포함
+    # FIX-H3: signal 없거나 긍정이면 포함
     filtered_hidden = [
         h for h in hidden_picks
         if not h.get("signal") or _is_positive_signal(h.get("signal"))
@@ -612,18 +668,24 @@ def generate_html(
     market_summary_html    = _render_market_summary(market_sum)
     dawn_market_html       = _build_dawn_market_html(market_overview)
 
+    # [6] SECTOR-ESC: reason title 속성 따옴표 이스케이프
     sector_badges_html = ""
     for sector in hot_sectors:
         if isinstance(sector, dict):
+            reason_esc = sector.get("reason", "").replace('"', '&quot;')
+            name_esc   = _he.escape(sector.get("name", ""))
             sector_badges_html += (
-                f'<div class="sector-badge" title="{sector.get("reason", "")}">'
-                f'{sector.get("name", "")}</div>'
+                f'<div class="sector-badge" title="{reason_esc}">'
+                f'{name_esc}</div>'
             )
         elif sector:
-            sector_badges_html += f'<div class="sector-badge">{sector}</div>'
+            sector_badges_html += (
+                f'<div class="sector-badge">{_he.escape(str(sector))}</div>'
+            )
 
-    chart_data_entries = []
-    stocks_html        = ""
+    # [10] CHART-DUP: 중복 key 방지를 위해 dict 사용
+    chart_data_dict = {}
+    stocks_html     = ""
 
     for rank, stock in enumerate(filtered_stocks, 1):
         name         = stock.get("name", "")
@@ -637,7 +699,8 @@ def generate_html(
 
         if not naver_url:
             if naver_code:
-                naver_url = f"https://finance.naver.com/item/main.naver?code={naver_code}"
+                naver_url = (f"https://finance.naver.com/item/main.naver"
+                             f"?code={naver_code}")
             elif name:
                 naver_url = (f"https://finance.naver.com/search/searchResult.naver"
                              f"?query={name.replace(' ', '+')}")
@@ -655,23 +718,25 @@ def generate_html(
                 source_tags_html += (
                     f'<span class="source-tag" '
                     f'style="background:{meta["bg"]};color:{meta["color"]};">'
-                    f'{src_type} {cnt_int}</span>'
+                    f'{_he.escape(src_type)} {cnt_int}</span>'
                 )
 
         if isinstance(price, int):
             price_html = f'<span class="price-value">{price:,}원</span>'
         elif price and str(price).strip() not in ("None", "N/A", ""):
-            price_html = f'<span class="price-value">{price}</span>'
+            price_html = f'<span class="price-value">{_he.escape(str(price))}</span>'
         else:
-            price_html = '<span class="price-value" style="color:#666;">전일 종가 조회 중</span>'
+            price_html = ('<span class="price-value" style="color:#666;">'
+                          '전일 종가 조회 중</span>')
 
         if chart_b64:
             chart_key    = _safe_chart_key("chart", name)
-            safe_name_js = _safe_js_str(name)
-            chart_data_entries.append(f'"{chart_key}": "data:image/png;base64,{chart_b64}"')
+            safe_name_js = _safe_js_str(name)          # [13] JS-NEWLINE 포함
+            chart_data_dict[chart_key] = f"data:image/png;base64,{chart_b64}"
             chart_btn_html = (
                 f"<button class=\"chart-btn\" "
-                f"onclick=\"showChart('{chart_key}','{safe_name_js}')\">📈 차트 보기</button>"
+                f"onclick=\"showChart('{chart_key}','{safe_name_js}')\""
+                f">📈 차트 보기</button>"
             )
         elif naver_url:
             chart_btn_html = (
@@ -688,8 +753,10 @@ def generate_html(
   <div class="stock-card-header">
     <div class="stock-rank">#{rank}</div>
     <div class="stock-name-block">
-      <a href="{naver_url}" target="_blank" rel="noopener" class="stock-name">{name}</a>
-      <span class="signal-badge {sig_class}" style="border-color:{sig_color};color:{sig_color};">{signal_label}</span>
+      <a href="{naver_url}" target="_blank" rel="noopener"
+         class="stock-name">{_he.escape(name)}</a>
+      <span class="signal-badge {sig_class}"
+            style="border-color:{sig_color};color:{sig_color};">{signal_label}</span>
     </div>
     <div class="overlap-badge" title="채널 중복 언급 수">🔥 {overlap}개</div>
   </div>
@@ -717,7 +784,8 @@ def generate_html(
 
         if not naver_url:
             if naver_code:
-                naver_url = f"https://finance.naver.com/item/main.naver?code={naver_code}"
+                naver_url = (f"https://finance.naver.com/item/main.naver"
+                             f"?code={naver_code}")
             elif name:
                 naver_url = (f"https://finance.naver.com/search/searchResult.naver"
                              f"?query={name.replace(' ', '+')}")
@@ -729,17 +797,19 @@ def generate_html(
         if isinstance(price, int):
             price_html = f'<span class="price-value">{price:,}원</span>'
         elif price and str(price).strip() not in ("None", "N/A", ""):
-            price_html = f'<span class="price-value">{price}</span>'
+            price_html = f'<span class="price-value">{_he.escape(str(price))}</span>'
         else:
-            price_html = '<span class="price-value" style="color:#666;">전일 종가 조회 중</span>'
+            price_html = ('<span class="price-value" style="color:#666;">'
+                          '전일 종가 조회 중</span>')
 
         if chart_b64:
             chart_key    = _safe_chart_key("hpchart", name)
-            safe_name_js = _safe_js_str(name)
-            chart_data_entries.append(f'"{chart_key}": "data:image/png;base64,{chart_b64}"')
+            safe_name_js = _safe_js_str(name)          # [13] JS-NEWLINE 포함
+            chart_data_dict[chart_key] = f"data:image/png;base64,{chart_b64}"
             chart_btn_html = (
                 f"<button class=\"chart-btn\" "
-                f"onclick=\"showChart('{chart_key}','{safe_name_js}')\">📈 차트 보기</button>"
+                f"onclick=\"showChart('{chart_key}','{safe_name_js}')\""
+                f">📈 차트 보기</button>"
             )
         elif naver_url:
             chart_btn_html = (
@@ -756,7 +826,8 @@ def generate_html(
 <div class="hidden-pick-card">
   <div class="hp-card-header">
     <div class="hp-badges">{source_badge_html}{pick_badge_html}</div>
-    <a href="{naver_url}" target="_blank" rel="noopener" class="hp-stock-name">{name}</a>
+    <a href="{naver_url}" target="_blank" rel="noopener"
+       class="hp-stock-name">{_he.escape(name)}</a>
     {star_html}
   </div>
   <div class="hp-card-body">
@@ -770,9 +841,10 @@ def generate_html(
         hidden_html = ('<p style="color:#666;text-align:center;padding:1.5rem;">'
                        '오늘의 픽 없음</p>')
 
-    if chart_data_entries:
-        chart_data_js = ("const chartDataMap = {\n  "
-                         + ",\n  ".join(chart_data_entries) + "\n};")
+    # [10] CHART-DUP: dict → JS 객체 문자열 변환
+    if chart_data_dict:
+        entries       = [f'"{k}": "{v}"' for k, v in chart_data_dict.items()]
+        chart_data_js = "const chartDataMap = {\n  " + ",\n  ".join(entries) + "\n};"
     else:
         chart_data_js = "const chartDataMap = {};"
 
@@ -782,16 +854,16 @@ def generate_html(
     css = """
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg:        #0d1117;
-  --surface:   #161b22;
-  --surface2:  #21262d;
-  --border:    #30363d;
-  --text:      #e6edf3;
-  --text-muted:#8b949e;
-  --accent:    #58a6ff;
-  --up:        #ff6b6b;
-  --down:      #74c0fc;
-  --flat:      #adb5bd;
+  --bg:         #0d1117;
+  --surface:    #161b22;
+  --surface2:   #21262d;
+  --border:     #30363d;
+  --text:       #e6edf3;
+  --text-muted: #8b949e;
+  --accent:     #58a6ff;
+  --up:         #ff6b6b;
+  --down:       #74c0fc;
+  --flat:       #adb5bd;
 }
 html { font-size: 16px; }
 body {
@@ -873,7 +945,9 @@ a:hover { text-decoration: underline; }
   font-size: 1rem; font-weight: 800; color: var(--accent);
   min-width: 2rem; text-align: center;
 }
-.stock-name-block { display: flex; align-items: center; gap: .5rem; flex: 1; flex-wrap: wrap; }
+.stock-name-block {
+  display: flex; align-items: center; gap: .5rem; flex: 1; flex-wrap: wrap;
+}
 .stock-name { font-size: 1.05rem; font-weight: 700; color: var(--text); }
 .stock-name:hover { color: var(--accent); text-decoration: underline; }
 .signal-badge {
@@ -998,6 +1072,17 @@ a:hover { text-decoration: underline; }
   padding: .3rem .6rem; margin-bottom: .3rem; line-height: 1.5;
 }
 .strat-text { margin-bottom: .3rem; line-height: 1.55; }
+.disclaimer {
+  margin: 40px 0 20px;
+  padding: 16px 20px;
+  background: #13131f;
+  border: 1px solid #2d2d44;
+  border-radius: 10px;
+  text-align: center;
+  color: #6b6b88;
+  font-size: .8rem;
+  line-height: 1.9;
+}
 .modal-overlay {
   display: none; position: fixed; inset: 0;
   background: rgba(0,0,0,.85); z-index: 1000;
@@ -1016,17 +1101,6 @@ a:hover { text-decoration: underline; }
 }
 .modal-close:hover { color: var(--text); }
 #modal-chart-img { width: 100%; border-radius: 8px; margin-top: .5rem; }
-.disclaimer {
-  margin: 40px 0 20px;
-  padding: 16px 20px;
-  background: #13131f;
-  border: 1px solid #2d2d44;
-  border-radius: 10px;
-  text-align: center;
-  color: #6b6b88;
-  font-size: .8rem;
-  line-height: 1.9;
-}
 @media (max-width: 600px) {
   .briefing-header h1 { font-size: 1.4rem; }
   .stock-card-header  { padding: .7rem .9rem; }
@@ -1066,7 +1140,9 @@ a:hover { text-decoration: underline; }
 
   <div class="section">
     <div class="section-title">🔥 핫 섹터</div>
-    <div class="sector-list">{sector_badges_html or '<p style="color:#666;">데이터 없음</p>'}</div>
+    <div class="sector-list">
+      {sector_badges_html or '<p style="color:#666;">데이터 없음</p>'}
+    </div>
   </div>
 
   <div class="section">
