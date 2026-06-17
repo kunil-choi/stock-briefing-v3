@@ -35,6 +35,8 @@ AI 주식 브리핑 HTML 생성 엔진
 - FIX-SIG-3  : 관심종목 signal 뱃지를 긍정/중립/부정으로 변경
 - FIX-H1     : _filter_stocks_tiered name=None 방어 처리
 - FIX-H3     : filtered_hidden 필터 조건 단순화
+- FIX-RPT-1  : _report_card에서 ai_summary만 표시, 미사용 변수(summary/summary_short) 제거
+- FIX-FILTER-3: _filter_stocks_tiered 3차 기준 3회↑ → 2회↑ (ai_analyzer와 동기화)
 """
 
 import os
@@ -263,13 +265,14 @@ def _render_market_summary(market_summary: str) -> str:
 
 def _build_analyst_html(all_data: list) -> str:
     def _report_card(r: dict) -> str:
-        stock   = r.get("stock_name", "")
-        title   = r.get("report_title") or r.get("title", "")
-        broker  = r.get("brokers") or r.get("source_name", "")
-        link    = r.get("link", "")
-        is_new  = r.get("new_coverage", False)
-        summary = (r.get("summary") or r.get("content") or "").strip()
-        summary_short = summary[:150] + ("…" if len(summary) > 150 else "") if summary else ""
+        stock  = r.get("stock_name", "")
+        title  = r.get("report_title") or r.get("title", "")
+        broker = r.get("brokers") or r.get("source_name", "")
+        link   = r.get("link", "")
+        is_new = r.get("new_coverage", False)
+
+        # FIX-RPT-1: summary/summary_short 제거 — ai_summary만 사용
+        # 미사용 변수(summary, summary_short) 완전 삭제
 
         if not link and stock:
             enc  = stock.replace(" ", "+")
@@ -282,9 +285,9 @@ def _build_analyst_html(all_data: list) -> str:
         else:
             title_html = f'<span class="analyst-title-text">{title}</span>'
 
-                # FIX-RPT-1: ai_summary(Claude가 본문 읽고 추출한 핵심 1문장)만 표시
-        # 메타 조합 문자열은 표시하지 않음
-        ai_summary = r.get("ai_summary", "").strip()
+        # FIX-RPT-1: Claude가 본문 읽고 추출한 핵심 1문장만 표시
+        # 메타 조합 문자열은 표시하지 않음 / ai_summary 없으면 빈 문자열
+        ai_summary   = r.get("ai_summary", "").strip()
         summary_html = (
             f'<p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;'
             f'margin-top:.4rem;font-style:italic;">💬 {ai_summary}</p>'
@@ -505,9 +508,10 @@ def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
     """
     1차: overlap_count >= 2 (서로 다른 채널타입 2종 이상)
     2차: total_count >= 4  (채널타입 무관 4회 이상, 1차 미달 시 추가)
-    3차: total_count >= 3  (채널타입 무관 3회 이상, 2차 후도 미달 시 추가)
-    FIX-BUG-3: channel_counts 값 타입 안전 처리 (None, 문자열 방어)
-    FIX-H1   : name=None 방어 처리
+    3차: total_count >= 2  (채널타입 무관 2회 이상, 2차 후도 미달 시 추가)
+    FIX-BUG-3   : channel_counts 값 타입 안전 처리 (None, 문자열 방어)
+    FIX-H1      : name=None 방어 처리
+    FIX-FILTER-3: 3차 기준 3회↑ → 2회↑ (ai_analyzer.py FIX-FILTER-2와 동기화)
     """
     selected       = []
     selected_names = set()
@@ -530,7 +534,7 @@ def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
         if len(selected) >= target:
             break
         name = s.get("name")
-        if not name:          # FIX-H1: name 없는 항목 스킵
+        if not name:
             continue
         if s.get("overlap_count", 0) >= 2 and name not in selected_names:
             selected.append(s)
@@ -548,7 +552,7 @@ def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
                 selected.append(s)
                 selected_names.add(name)
 
-    # 3차
+    # 3차 — FIX-FILTER-3: 3회↑ → 2회↑ (ai_analyzer.py와 동기화)
     if len(selected) < target:
         for s in stocks:
             if len(selected) >= target:
@@ -556,7 +560,7 @@ def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
             name = s.get("name")
             if not name or name in selected_names:
                 continue
-            if s.get("total_count", 0) >= 3:
+            if s.get("total_count", 0) >= 2:
                 selected.append(s)
                 selected_names.add(name)
 
