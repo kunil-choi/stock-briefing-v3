@@ -1,8 +1,13 @@
 # main.py
+"""
+수정 이력:
+- FIX-RPT-1: collect_analyst에 api_key=ANTHROPIC_API_KEY 전달
+             리포트 본문 크롤링 + Claude 1문장 요약 기능 활성화
+"""
 import os
 import json
 import shutil
-import traceback                          # ← 추가
+import traceback
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -14,7 +19,7 @@ from collectors.news_collector    import collect_news
 from collectors.youtube_collector import (
     get_youtube_client,
     collect_section1_youtube,
-    collect_panelist_youtube,       # ← 신규 추가
+    collect_panelist_youtube,
 )
 from collectors.analyst_collector import collect_analyst
 from analyzer.ai_analyzer         import analyze_and_generate_html
@@ -91,7 +96,7 @@ def main():
     else:
         print("  → YouTube 클라이언트 없음, 스킵")
 
-    # 4. 패널리스트 이름 검색 수집 (섹션2) ← 신규
+    # 4. 패널리스트 이름 검색 수집 (섹션2)
     print("\n[3/4] 패널리스트 이름 검색 수집 (48h)...")
     if youtube:
         panelist_data = safe_collect(
@@ -103,8 +108,14 @@ def main():
         print("  → YouTube 클라이언트 없음, 스킵")
 
     # 5. 애널리스트 리포트
-    print("\n[4/4] 애널리스트 리포트 수집...")
-    analyst_data = safe_collect(collect_analyst, label="애널리스트")
+    # FIX-RPT-1: api_key 전달 → 리포트 본문 크롤링 + Claude 1문장 요약 활성화
+    # api_key가 없으면 ai_summary는 빈 문자열로 처리됨 (절대 추정 생성 안 함)
+    print("\n[4/4] 애널리스트 리포트 수집 (본문 크롤링 + Claude 요약 포함)...")
+    analyst_data = safe_collect(
+        collect_analyst,
+        api_key=ANTHROPIC_API_KEY,
+        label="애널리스트",
+    )
     all_data.extend(analyst_data)
     print(f"  → {len(analyst_data)}건")
 
@@ -148,7 +159,7 @@ def main():
         )
     except Exception as e:
         print(f"[AI 분석 실패] {e}")
-        print(traceback.format_exc())    # ← 추가: 정확한 오류 위치 출력
+        print(traceback.format_exc())
         html = f"<html><body><h1>분석 실패</h1><p>{e}</p></body></html>"
 
     # HTML 저장
