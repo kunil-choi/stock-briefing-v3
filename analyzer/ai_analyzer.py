@@ -20,6 +20,7 @@ AI 주식 브리핑 분석 엔진
 - FIX-APIKEY-1: call_claude_with_retry에 api_key 전달 누락 버그 수정
 - FIX-PRICE-1 : 관심종목 현재가 조회 후 Claude 프롬프트에 포함, 가격 임의 생성 방지
 - FIX-PRICE-3 : 프롬프트 price_str에 등락률 병기 추가
+- FIX-FILTER-2: 3차 필터 총 3회↑ → 총 2회↑로 완화 (관심종목 부족 문제 개선)
 """
 
 import json
@@ -233,7 +234,7 @@ def extract_mentions(all_data: list, stock_map: dict,
     return mentions
 
 
-# ── FIX-FILTER-1: 단계별 관심종목 필터링 ─────────────────────────────────────
+# ── FIX-FILTER-1/2: 단계별 관심종목 필터링 ───────────────────────────────────
 
 def filter_mentions(mentions: dict, target: int = 10) -> list:
     all_sorted = sorted(
@@ -266,17 +267,17 @@ def filter_mentions(mentions: dict, target: int = 10) -> list:
                 selected_names.add(name)
         print(f"[필터링] 2차(전체 4회↑) 추가 후: {len(selected)}개")
 
-    # 3차: 채널타입 무관 총 3회 이상
+    # 3차: 채널타입 무관 총 2회 이상 (FIX-FILTER-2: 기존 3회↑ → 2회↑로 완화)
     if len(selected) < target:
         for name, data in all_sorted:
             if len(selected) >= target:
                 break
             if name in selected_names:
                 continue
-            if data["total_count"] >= 3:
+            if data["total_count"] >= 2:
                 selected.append((name, data))
                 selected_names.add(name)
-        print(f"[필터링] 3차(전체 3회↑) 추가 후: {len(selected)}개")
+        print(f"[필터링] 3차(전체 2회↑) 추가 후: {len(selected)}개")
 
     print(f"[필터링] 최종 {len(selected)}개 선택")
     return selected
@@ -336,20 +337,18 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
     headlines      = headlines[:60]
     headlines_text = "\n".join(headlines)
 
-    top_stocks  = filtered_mentions[:15]
-    stocks_info = []
+    top_stocks   = filtered_mentions[:15]
+    stocks_info  = []
     stock_prices = stock_prices or {}
 
     for rank, (name, data) in enumerate(top_stocks, 1):
         price_info = stock_prices.get(name)
         if price_info and isinstance(price_info, dict) and price_info.get("price", 0) > 0:
-            # FIX-PRICE-3: 현재가 + 등락률 병기
             price_str = (
                 f"현재가:{price_info['price']:,}원 "
                 f"({price_info.get('change_pct', 0.0):+.2f}%)"
             )
         elif isinstance(price_info, int) and price_info > 0:
-            # 이전 버전 호환 (정수만 저장된 경우)
             price_str = f"현재가:{price_info:,}원"
         else:
             price_str = "현재가:미수집 — 구체적 가격 숫자 사용 금지"
@@ -683,7 +682,6 @@ def analyze_and_generate_html(
         if code:
             price_info = fetch_naver_stock_price(name, code_override=code)
             if price_info and price_info.get("price", 0) > 0:
-                # FIX-PRICE-3: dict 전체를 저장해 등락률도 활용
                 stock_prices[name] = price_info
     print(f"[주가조회] {len(stock_prices)}/{len(filtered)}개 종목 주가 수집 완료")
 
