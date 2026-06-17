@@ -2,7 +2,7 @@ name: Daily Stock Briefing v3
 
 on:
   schedule:
-    - cron: '0 23 * * 0-4'   # KST 월~금 08:00 (UTC 전날 23:00)
+    - cron: '30 0 * * 2-6'   # 백업용: KST 월~금 09:30 (UTC 00:30)
   workflow_dispatch:
     inputs:
       force_run:
@@ -30,12 +30,72 @@ jobs:
     timeout-minutes: 30
 
     steps:
+      - name: 🔁 중복 실행 체크
+        id: duplicate_check
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          python - <<'EOF'
+          import os, urllib.request, json
+          from datetime import datetime, timezone, timedelta
+
+          # 강제 실행이면 체크 스킵
+          force_run = os.getenv("FORCE_RUN", "false").lower() == "true"
+          if force_run:
+              print("⚡ force_run=true → 중복 체크 스킵")
+              print("duplicate=false")
+              with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                  f.write("duplicate=false\n")
+              exit(0)
+
+          KST = timezone(timedelta(hours=9))
+          today = datetime.now(KST).strftime("%Y-%m-%d")
+          current_run_id = os.getenv("GITHUB_RUN_ID", "")
+          token = os.getenv("GH_TOKEN", "")
+          repo = os.getenv("GITHUB_REPOSITORY", "")
+
+          url = f"https://api.github.com/repos/{repo}/actions/workflows/daily_briefing.yml/runs?status=success&per_page=10"
+          req = urllib.request.Request(url, headers={
+              "Authorization": f"token {token}",
+              "Accept": "application/vnd.github.v3+json"
+          })
+          try:
+              with urllib.request.urlopen(req) as res:
+                  data = json.loads(res.read())
+              runs = data.get("workflow_runs", [])
+              for run in runs:
+                  run_date = run["created_at"][:10]
+                  run_id = str(run["id"])
+                  if run_date == today and run_id != current_run_id:
+                      print(f"⚠️  오늘({today}) 이미 성공한 실행 발견 (run_id: {run_id}) → 중복 종료")
+                      with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                          f.write("duplicate=true\n")
+                      exit(0)
+              print(f"✅ 오늘({today}) 중복 실행 없음 → 계속 진행")
+              with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                  f.write("duplicate=false\n")
+          except Exception as e:
+              print(f"⚠️  중복 체크 실패 ({e}) → 안전하게 계속 진행")
+              with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                  f.write("duplicate=false\n")
+          EOF
+        env:
+          FORCE_RUN: ${{ github.event.inputs.force_run || 'false' }}
+
+      - name: 🛑 중복 실행 시 종료
+        if: steps.duplicate_check.outputs.duplicate == 'true'
+        run: |
+          echo "오늘 이미 브리핑이 생성되었습니다. 워크플로우를 종료합니다."
+          exit 0
+
       - name: 📥 저장소 체크아웃
+        if: steps.duplicate_check.outputs.duplicate != 'true'
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
       - name: 🐍 Python 환경 설정
+        if: steps.duplicate_check.outputs.duplicate != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -43,6 +103,7 @@ jobs:
           cache-dependency-path: 'requirements.txt'
 
       - name: 🖋️ 시스템 의존성 설치 (한글 폰트)
+        if: steps.duplicate_check.outputs.duplicate != 'true'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y \
@@ -54,11 +115,13 @@ jobs:
           fc-cache -fv || true
 
       - name: 📦 Python 패키지 설치
+        if: steps.duplicate_check.outputs.duplicate != 'true'
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
       - name: 🔍 API 키 점검
+        if: steps.duplicate_check.outputs.duplicate != 'true'
         run: |
           python - <<'EOF'
           import os, sys
@@ -81,11 +144,13 @@ jobs:
           GH_TOKEN:          ${{ secrets.GH_TOKEN }}
 
       - name: 🎨 Matplotlib 백엔드 설정
+        if: steps.duplicate_check.outputs.duplicate != 'true'
         run: |
           mkdir -p ~/.config/matplotlib
           echo "backend: Agg" > ~/.config/matplotlib/matplotlibrc
 
       - name: 📊 브리핑 생성 실행
+        if: steps.duplicate_check.outputs.duplicate != 'true'
         id: run_briefing
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -100,6 +165,7 @@ jobs:
           echo "briefing_generated=true" >> $GITHUB_OUTPUT
 
       - name: ✅ 결과물 검증
+        if: steps.duplicate_check.outputs.duplicate != 'true'
         run: |
           if [ ! -f docs/index.html ]; then
             echo "❌ docs/index.html 없음"
@@ -115,6 +181,7 @@ jobs:
           echo "📚 아카이브 파일 수: ${ARCHIVE_COUNT}"
 
       - name: 🚀 변경사항 커밋 및 푸시
+        if: steps.duplicate_check.outputs.duplicate != 'true'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
