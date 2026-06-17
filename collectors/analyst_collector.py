@@ -1,12 +1,12 @@
 # collectors/analyst_collector.py
 """
 애널리스트 리포트 수집기 - v3
-네이버 금융 리서치에서 최근 24시간 이내 리포트 수집
 
-분류 카테고리:
-  simultaneous  : 복수 증권사가 동일 종목을 같은 날 동시 언급
-  new_coverage  : 신규 커버리지 개시 리포트
-  single_broker : 단일 증권사 단독 언급
+수정 이력:
+- BUG-AC-4   : 종목당 1카테고리 보장 (classify_analyst_reports 개선)
+- FIX-ANA-4  : summary 메타데이터 중복 제거, 제목 링크로 원문 접근
+- FIX-RPT-1  : 리포트 본문 실제 크롤링 후 Claude 1문장 요약 → ai_summary 필드 저장
+               근거 없는 메타 요약 완전 제거, 방송 정확성 기준 준수
 
 네이버 금융 company_list.naver 컬럼 구조:
   cols[0]: 종목명
@@ -39,15 +39,12 @@ BROKERS = [
 NAVER_FINANCE_BASE  = "https://finance.naver.com"
 NAVER_RESEARCH_BASE = "https://finance.naver.com/research"
 
-# 신규 커버리지 감지 키워드
 COVERAGE_KEYWORDS = ["커버리지", "신규", "개시", "Coverage Initiation", "Initiation", "NDR"]
 
-# 투자의견 키워드 패턴
 _OPINION_PATTERN = re.compile(
     r'\b(BUY|SELL|HOLD|매수|매도|중립|시장수익률|비중확대|비중축소|Outperform|Underperform|Not Rated|NR)\b',
     re.IGNORECASE
 )
-# 목표주가 패턴: "목표주가 50,000" / "TP 50,000" / "TP↑50,000"
 _TARGET_PRICE_PATTERN = re.compile(
     r'(?:목표주가|목표가|TP|T\.P)[^\d]*?(\d[\d,]+)',
     re.IGNORECASE
@@ -62,8 +59,10 @@ _HEADERS = {
     "Accept-Language": "ko-KR,ko;q=0.9",
 }
 
-# 날짜 형식 패턴
 _DATE_PATTERN = re.compile(r"^\d{2,4}\.\d{2}\.\d{2}$")
+
+# FIX-RPT-1: 본문 크롤링 최대 길이 (Claude 토큰 절약)
+_MAX_BODY_CHARS = 3000
 
 
 def _build_link(href: str) -> str:
@@ -77,10 +76,6 @@ def _build_link(href: str) -> str:
 
 
 def is_within_days(date_str: str, days: int = REPORT_DAYS) -> bool:
-    """
-    KST 기준 날짜 비교.
-    형식: "26.05.22" (YY.MM.DD) 또는 "2026.05.22" (YYYY.MM.DD)
-    """
     try:
         date_str = date_str.strip().replace(" ", "")
         if len(date_str) == 10 and date_str.count(".") == 2:
@@ -94,10 +89,8 @@ def is_within_days(date_str: str, days: int = REPORT_DAYS) -> bool:
         else:
             print(f"  [날짜 파싱 불가] '{date_str}' → 포함 처리")
             return True
-
         cutoff_date = (datetime.now(KST) - timedelta(days=days)).date()
         return report_date.date() >= cutoff_date
-
     except Exception as e:
         print(f"  [날짜 파싱 오류] '{date_str}': {e} → 포함 처리")
         return True
@@ -108,7 +101,6 @@ def is_new_coverage(title: str) -> bool:
 
 
 def _extract_opinion(title: str) -> str:
-    """리포트 제목에서 투자의견 추출"""
     m = _OPINION_PATTERN.search(title)
     if m:
         raw = m.group(1)
@@ -122,7 +114,6 @@ def _extract_opinion(title: str) -> str:
 
 
 def _extract_target_price(title: str) -> str:
-    """리포트 제목에서 목표주가 추출 (쉼표 제거 후 반환)"""
     m = _TARGET_PRICE_PATTERN.search(title)
     if m:
         return m.group(1).replace(",", "")
@@ -130,10 +121,6 @@ def _extract_target_price(title: str) -> str:
 
 
 def _find_date_col(cols: list) -> str:
-    """
-    날짜 컬럼 자동 감지.
-    cols[4] 우선 → cols[3] → cols[5] → 전체 탐색
-    """
     check_order = [4, 3, 5] if len(cols) > 4 else [3]
     for idx in check_order:
         if idx >= len(cols):
@@ -148,10 +135,108 @@ def _find_date_col(cols: list) -> str:
     return ""
 
 
-def collect_naver_research() -> list:
+# ── FIX-RPT-1: 리포트 본문 크롤링 ───────────────────────────────────────────
+
+def _fetch_report_body(url: str) -> str:
+    """
+    네이버 금융 리포트 페이지에서 본문 텍스트 추출.
+    실패 시 빈 문자열 반환.
+    """
+    if not url:
+        return ""
+    try:
+        resp = requests.get(url, headers=_HEADERS, timeout=8)
+        resp.encoding = "utf-8"
+        soup = BeautifulSoup(resp.text, "html.parser")
+
+        # 네이버 리서치 리포트 본문 선택자 우선순위
+        for selector in [
+            "div.report_contents",
+            "div#content",
+            "div.view_cnt",
+            "td.view_cnt",
+            "div.research_cont",
+            "div.cont",
+        ]:
+            tag = soup.select_one(selector)
+            if tag:
+                text = tag.get_text(separator=" ", strip=True)
+                if len(text) > 100:
+                    return text[:_MAX_BODY_CHARS]
+
+        # 선택자 실패 시 p 태그 전체 수집
+        paragraphs = soup.select("p")
+        combined = " ".join(p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 20)
+        return combined[:_MAX_BODY_CHARS] if combined else ""
+
+    except Exception as e:
+        print(f"  [본문 크롤링 실패] {url}: {e}")
+        return ""
+
+
+def _summarize_report_with_claude(
+    stock_name: str,
+    report_title: str,
+    broker: str,
+    body_text: str,
+    opinion: str,
+    target_price: str,
+    api_key: str,
+) -> str:
+    """
+    리포트 본문을 Claude에게 전달해 핵심 1문장을 추출.
+    본문이 없거나 API 실패 시 빈 문자열 반환 (추정 문장 생성 금지).
+    """
+    if not body_text or len(body_text) < 50:
+        return ""
+    if not api_key:
+        return ""
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+
+        # 투자의견/목표가가 리포트 제목에서 추출된 경우 컨텍스트로 제공
+        context_parts = []
+        if opinion:
+            context_parts.append(f"투자의견: {opinion}")
+        if target_price:
+            context_parts.append(f"목표주가: {target_price}원")
+        context_str = (" (" + ", ".join(context_parts) + ")") if context_parts else ""
+
+        prompt = (
+            f"다음은 {broker}가 발간한 [{stock_name}] 종목 리포트입니다{context_str}.\n"
+            f"리포트 제목: {report_title}\n\n"
+            f"리포트 본문:\n{body_text}\n\n"
+            f"[지시]\n"
+            f"위 리포트 본문에서 투자자에게 가장 중요한 핵심 내용을 정확히 1문장으로 요약하세요.\n"
+            f"- 반드시 본문에 실제로 있는 내용만 사용하세요.\n"
+            f"- 본문에 없는 수치, 전망, 의견을 추가하지 마세요.\n"
+            f"- 문장은 50자 이내로 간결하게 작성하세요.\n"
+            f"- 요약 문장만 출력하고, 다른 설명은 쓰지 마세요."
+        )
+
+        msg = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=150,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        result = msg.content[0].text.strip()
+        # 따옴표 제거
+        result = result.strip('"').strip("'").strip()
+        return result if len(result) > 5 else ""
+
+    except Exception as e:
+        print(f"  [Claude 요약 실패] {stock_name} - {report_title}: {e}")
+        return ""
+
+
+# ── 수집 메인 ────────────────────────────────────────────────────────────────
+
+def collect_naver_research(api_key: str = "") -> list:
     """
     네이버 금융 리서치 company_list.naver 수집.
-    투자의견·목표주가 자동 추출 포함.
+    FIX-RPT-1: 리포트 본문 크롤링 + Claude 1문장 요약 → ai_summary 필드
     """
     results = []
 
@@ -203,13 +288,24 @@ def collect_naver_research() -> list:
                 target_price = _extract_target_price(report_title)
                 new_cov      = is_new_coverage(report_title)
 
-                summary_parts = [f"증권사: {broker}", f"종목: {stock_name}",
-                                 f"리포트: {report_title}"]
-                if opinion:
-                    summary_parts.append(f"투자의견: {opinion}")
-                if target_price:
-                    summary_parts.append(f"목표주가: {target_price}원")
-                summary = " | ".join(summary_parts)
+                # FIX-RPT-1: 본문 크롤링 및 Claude 요약
+                # summary 필드는 더 이상 메타 조합 문자열로 채우지 않음
+                ai_summary = ""
+                if link and api_key:
+                    print(f"  [리포트 본문 크롤링] {stock_name} - {report_title[:30]}...")
+                    body_text  = _fetch_report_body(link)
+                    time.sleep(0.3)  # 과부하 방지
+                    if body_text:
+                        ai_summary = _summarize_report_with_claude(
+                            stock_name, report_title, broker,
+                            body_text, opinion, target_price, api_key
+                        )
+                        if ai_summary:
+                            print(f"  [요약 완료] {stock_name}: {ai_summary}")
+                        else:
+                            print(f"  [요약 없음] {stock_name}: 본문 크롤링 성공, 요약 실패")
+                    else:
+                        print(f"  [본문 없음] {stock_name}: 본문 크롤링 실패")
 
                 results.append({
                     "source_type":      "애널리스트",
@@ -222,10 +318,15 @@ def collect_naver_research() -> list:
                     "date":             date_str,
                     "new_coverage":     new_cov,
                     "analyst_category": "",
-                    "title":   f"[{broker}] {stock_name} - {report_title}",
-                    "summary": summary,
-                    "link":    link or pdf_link,
-                    "section": "section3",
+                    # FIX-RPT-1: ai_summary = Claude가 본문 읽고 추출한 핵심 1문장
+                    #             없으면 빈 문자열 (절대 추정 문장 생성 안 함)
+                    "ai_summary":       ai_summary,
+                    "title":            f"[{broker}] {stock_name} - {report_title}",
+                    # summary 필드: 더 이상 메타 조합 사용 안 함
+                    # ai_summary가 있으면 사용, 없으면 빈 문자열
+                    "summary":          ai_summary,
+                    "link":             link or pdf_link,
+                    "section":          "section3",
                 })
 
             if not page_has_recent and page > 1:
@@ -243,18 +344,8 @@ def collect_naver_research() -> list:
 def classify_analyst_reports(reports: list) -> dict:
     """
     수집된 리포트를 3가지 카테고리로 분류.
-
-    분류 우선순위:
-    1. simultaneous  : 복수 증권사(≥2)가 동일 종목을 같은 날 언급
-    2. new_coverage  : simultaneous에 해당하지 않는 신규 커버리지 (종목당 1건)
-    3. single_broker : 위 두 카테고리에 해당하지 않는 단일 증권사 단독 언급
-
-    BUG-AC-4 FIX:
-    - 각 종목은 세 카테고리 중 정확히 하나에만 배정
-    - 단독 증권사인 경우 new_coverage 여부로 2/3단계 결정
-    - 종목당 대표 리포트 1건만 배정 (동일 종목 중복 방지)
+    (로직 동일, BUG-AC-4 유지)
     """
-    # 종목별로 리포트 그룹화
     stock_groups: dict[str, list] = defaultdict(list)
     for r in reports:
         sn = r.get("stock_name", "")
@@ -266,13 +357,11 @@ def classify_analyst_reports(reports: list) -> dict:
     single_broker_out = []
 
     for stock_name, stock_reports in stock_groups.items():
-        # 고유 증권사 수 계산
         unique_brokers = list(dict.fromkeys(
             r.get("source_name", "") for r in stock_reports
             if r.get("source_name", "")
         ))
 
-        # ── 1단계: 복수 증권사 동시 언급 ────────────────────────────────────
         if len(unique_brokers) >= 2:
             primary = stock_reports[0].copy()
             brokers_str = " / ".join(unique_brokers)
@@ -287,12 +376,15 @@ def classify_analyst_reports(reports: list) -> dict:
                 f"[동시언급 {len(unique_brokers)}사] {stock_name} - "
                 f"{stock_reports[0].get('report_title', '')}"
             )
-            primary["summary"] = (
-                f"증권사: {brokers_str} | 종목: {stock_name} | "
-                f"리포트: {stock_reports[0].get('report_title', '')}"
-            )
 
-            # 투자의견이 여러 개면 가장 강한 의견 우선 표시
+            # FIX-RPT-1: 동시언급 시 ai_summary가 있는 리포트의 요약 우선 사용
+            best_summary = next(
+                (r.get("ai_summary", "") for r in stock_reports if r.get("ai_summary")),
+                ""
+            )
+            primary["ai_summary"] = best_summary
+            primary["summary"]    = best_summary
+
             opinions = [r.get("opinion", "") for r in stock_reports if r.get("opinion")]
             opinion_priority = ["매수", "BUY", "비중확대", "중립", "HOLD", "비중축소", "매도"]
             for op in opinion_priority:
@@ -301,24 +393,16 @@ def classify_analyst_reports(reports: list) -> dict:
                     break
 
             simultaneous_out.append(primary)
-            # 이 종목은 1단계 처리 완료 → 2/3단계 진행하지 않음
             continue
 
-        # ── 2단계 vs 3단계: 단독 증권사 ─────────────────────────────────────
-        # BUG-AC-4 FIX: 종목 전체를 하나의 카테고리에만 배정
-        # 리포트 중 하나라도 new_coverage=True이면 → new_coverage (대표 1건)
-        # 모두 new_coverage=False이면 → single_broker (대표 1건)
         has_new_cov = any(r.get("new_coverage", False) for r in stock_reports)
-
         if has_new_cov:
-            # new_coverage 리포트 중 첫 번째를 대표로 선택
             representative = next(
                 (r for r in stock_reports if r.get("new_coverage", False)),
                 stock_reports[0]
             )
             new_coverage_out.append(representative)
         else:
-            # 동일 증권사가 같은 종목 여러 건 올린 경우도 대표 1건만 추가
             single_broker_out.append(stock_reports[0])
 
     return {
@@ -328,18 +412,17 @@ def classify_analyst_reports(reports: list) -> dict:
     }
 
 
-def collect_analyst() -> list:
+def collect_analyst(api_key: str = "") -> list:
     """애널리스트 리포트 수집 메인 함수"""
     print("\n=== 섹션 3: 애널리스트 리포트 수집 ===")
 
-    reports = collect_naver_research()
+    reports = collect_naver_research(api_key=api_key)
     print(f"  → 원시 수집: {len(reports)}건")
 
     if not reports:
         print("  → 수집된 리포트 없음")
         return []
 
-    # 원시 데이터 중복 제거 (동일 종목+증권사+날짜)
     seen_raw = set()
     deduped  = []
     for r in reports:
@@ -351,7 +434,6 @@ def collect_analyst() -> list:
 
     classified = classify_analyst_reports(deduped)
 
-    # analyst_category 필드 설정
     for r in classified["simultaneous"]:
         r["analyst_category"] = "simultaneous"
     for r in classified["new_coverage"]:
@@ -359,8 +441,6 @@ def collect_analyst() -> list:
     for r in classified["single_broker"]:
         r["analyst_category"] = "single_broker"
 
-    # BUG-AC-4 FIX: classify_analyst_reports()에서 이미 종목당 1카테고리
-    # 보장되므로 단순 합산만 수행
     all_classified = (
         classified["simultaneous"]
         + classified["new_coverage"]
