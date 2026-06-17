@@ -282,9 +282,13 @@ def _build_analyst_html(all_data: list) -> str:
         else:
             title_html = f'<span class="analyst-title-text">{title}</span>'
 
+                # FIX-RPT-1: ai_summary(Claude가 본문 읽고 추출한 핵심 1문장)만 표시
+        # 메타 조합 문자열은 표시하지 않음
+        ai_summary = r.get("ai_summary", "").strip()
         summary_html = (
-            f'<p class="analyst-summary">{summary_short}</p>'
-            if summary_short else ""
+            f'<p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;'
+            f'margin-top:.4rem;font-style:italic;">💬 {ai_summary}</p>'
+            if ai_summary else ""
         )
 
         return (
@@ -471,13 +475,13 @@ def _render_ai_strategy(ai_strategy: str) -> str:
         body_lines = [l.strip() for l in lines[1:] if l.strip()]
 
         icon_map = {
-            "핵심 시나리오":    "🎯",
-            "포트폴리오 배분":  "📊",
-            "종목별 매매 계획": "📋",
-            "현금 정책":        "💵",
-            "리스크 시나리오":  "⚠️",
-            "테마 상관관계":    "🔗",
+            "핵심 시나리오":        "🎯",
+            "섹터 로테이션":        "🔄",
+            "오늘의 주목 포인트":   "📌",
+            "리스크 시나리오":      "⚠️",
+            "애널리스트 종합 시각": "📊",
         }
+
         icon = next((v for k, v in icon_map.items() if k in title_line), "📌")
 
         body_html = ""
