@@ -7,6 +7,9 @@
 - FIX-ANA-4  : summary 메타데이터 중복 제거, 제목 링크로 원문 접근
 - FIX-RPT-1  : 리포트 본문 실제 크롤링 후 Claude 1문장 요약 → ai_summary 필드 저장
                근거 없는 메타 요약 완전 제거, 방송 정확성 기준 준수
+- FIX-COST-1 : Claude 호출 순서 변경 — 분류 후 대표 리포트에만 요약 호출
+               (기존: 수집 시 전건 호출 → 폐기 낭비 제거)
+               불필요한 import(OrderedDict) 제거
 
 네이버 금융 company_list.naver 컬럼 구조:
   cols[0]: 종목명
@@ -149,7 +152,6 @@ def _fetch_report_body(url: str) -> str:
         resp.encoding = "utf-8"
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        # 네이버 리서치 리포트 본문 선택자 우선순위
         for selector in [
             "div.report_contents",
             "div#content",
@@ -164,9 +166,11 @@ def _fetch_report_body(url: str) -> str:
                 if len(text) > 100:
                     return text[:_MAX_BODY_CHARS]
 
-        # 선택자 실패 시 p 태그 전체 수집
         paragraphs = soup.select("p")
-        combined = " ".join(p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 20)
+        combined = " ".join(
+            p.get_text(strip=True) for p in paragraphs
+            if len(p.get_text(strip=True)) > 20
+        )
         return combined[:_MAX_BODY_CHARS] if combined else ""
 
     except Exception as e:
@@ -196,7 +200,6 @@ def _summarize_report_with_claude(
         import anthropic
         client = anthropic.Anthropic(api_key=api_key)
 
-        # 투자의견/목표가가 리포트 제목에서 추출된 경우 컨텍스트로 제공
         context_parts = []
         if opinion:
             context_parts.append(f"투자의견: {opinion}")
@@ -221,9 +224,7 @@ def _summarize_report_with_claude(
             max_tokens=150,
             messages=[{"role": "user", "content": prompt}],
         )
-        result = msg.content[0].text.strip()
-        # 따옴표 제거
-        result = result.strip('"').strip("'").strip()
+        result = msg.content[0].text.strip().strip('"').strip("'").strip()
         return result if len(result) > 5 else ""
 
     except Exception as e:
@@ -231,12 +232,13 @@ def _summarize_report_with_claude(
         return ""
 
 
-# ── 수집 메인 ────────────────────────────────────────────────────────────────
+# ── 수집 메인 (FIX-COST-1: Claude 호출 없이 메타데이터만 수집) ───────────────
 
-def collect_naver_research(api_key: str = "") -> list:
+def collect_naver_research() -> list:
     """
     네이버 금융 리서치 company_list.naver 수집.
-    FIX-RPT-1: 리포트 본문 크롤링 + Claude 1문장 요약 → ai_summary 필드
+    FIX-COST-1: 이 단계에서는 Claude 호출 없이 메타데이터만 수집.
+                Claude 요약은 classify 후 대표 리포트에만 호출함.
     """
     results = []
 
@@ -288,25 +290,6 @@ def collect_naver_research(api_key: str = "") -> list:
                 target_price = _extract_target_price(report_title)
                 new_cov      = is_new_coverage(report_title)
 
-                # FIX-RPT-1: 본문 크롤링 및 Claude 요약
-                # summary 필드는 더 이상 메타 조합 문자열로 채우지 않음
-                ai_summary = ""
-                if link and api_key:
-                    print(f"  [리포트 본문 크롤링] {stock_name} - {report_title[:30]}...")
-                    body_text  = _fetch_report_body(link)
-                    time.sleep(0.3)  # 과부하 방지
-                    if body_text:
-                        ai_summary = _summarize_report_with_claude(
-                            stock_name, report_title, broker,
-                            body_text, opinion, target_price, api_key
-                        )
-                        if ai_summary:
-                            print(f"  [요약 완료] {stock_name}: {ai_summary}")
-                        else:
-                            print(f"  [요약 없음] {stock_name}: 본문 크롤링 성공, 요약 실패")
-                    else:
-                        print(f"  [본문 없음] {stock_name}: 본문 크롤링 실패")
-
                 results.append({
                     "source_type":      "애널리스트",
                     "source_name":      broker,
@@ -318,13 +301,10 @@ def collect_naver_research(api_key: str = "") -> list:
                     "date":             date_str,
                     "new_coverage":     new_cov,
                     "analyst_category": "",
-                    # FIX-RPT-1: ai_summary = Claude가 본문 읽고 추출한 핵심 1문장
-                    #             없으면 빈 문자열 (절대 추정 문장 생성 안 함)
-                    "ai_summary":       ai_summary,
+                    # FIX-COST-1: ai_summary는 classify 후 대표 리포트에만 채움
+                    "ai_summary":       "",
                     "title":            f"[{broker}] {stock_name} - {report_title}",
-                    # summary 필드: 더 이상 메타 조합 사용 안 함
-                    # ai_summary가 있으면 사용, 없으면 빈 문자열
-                    "summary":          ai_summary,
+                    "summary":          "",
                     "link":             link or pdf_link,
                     "section":          "section3",
                 })
@@ -344,7 +324,7 @@ def collect_naver_research(api_key: str = "") -> list:
 def classify_analyst_reports(reports: list) -> dict:
     """
     수집된 리포트를 3가지 카테고리로 분류.
-    (로직 동일, BUG-AC-4 유지)
+    BUG-AC-4 유지 — 종목당 1카테고리 보장.
     """
     stock_groups: dict[str, list] = defaultdict(list)
     for r in reports:
@@ -376,14 +356,9 @@ def classify_analyst_reports(reports: list) -> dict:
                 f"[동시언급 {len(unique_brokers)}사] {stock_name} - "
                 f"{stock_reports[0].get('report_title', '')}"
             )
-
-            # FIX-RPT-1: 동시언급 시 ai_summary가 있는 리포트의 요약 우선 사용
-            best_summary = next(
-                (r.get("ai_summary", "") for r in stock_reports if r.get("ai_summary")),
-                ""
-            )
-            primary["ai_summary"] = best_summary
-            primary["summary"]    = best_summary
+            # ai_summary는 아직 빈 문자열 — 이후 _enrich_with_summaries에서 채움
+            primary["ai_summary"] = ""
+            primary["summary"]    = ""
 
             opinions = [r.get("opinion", "") for r in stock_reports if r.get("opinion")]
             opinion_priority = ["매수", "BUY", "비중확대", "중립", "HOLD", "비중축소", "매도"]
@@ -412,17 +387,65 @@ def classify_analyst_reports(reports: list) -> dict:
     }
 
 
+def _enrich_with_summaries(all_classified: list, api_key: str) -> None:
+    """
+    FIX-COST-1: 분류 완료된 대표 리포트에만 본문 크롤링 + Claude 요약 실행.
+    all_classified 리스트를 직접 수정(in-place).
+    Claude 호출 횟수 = 최종 표시 리포트 수와 동일 — 낭비 없음.
+    """
+    if not api_key:
+        print("  [요약 스킵] api_key 없음")
+        return
+
+    total = len(all_classified)
+    print(f"  [요약 시작] 대표 리포트 {total}건에 대해 Claude 요약 실행")
+
+    for i, r in enumerate(all_classified, 1):
+        link         = r.get("link", "")
+        stock_name   = r.get("stock_name", "")
+        report_title = r.get("report_title") or r.get("title", "")
+        broker       = r.get("source_name", "")
+        opinion      = r.get("opinion", "")
+        target_price = r.get("target_price", "")
+
+        if not link:
+            print(f"  [{i}/{total}] {stock_name}: 링크 없음 → 스킵")
+            continue
+
+        print(f"  [{i}/{total}] 크롤링: {stock_name} - {report_title[:30]}...")
+        body_text = _fetch_report_body(link)
+        time.sleep(0.3)  # 과부하 방지
+
+        if not body_text:
+            print(f"  [{i}/{total}] {stock_name}: 본문 없음 → 스킵")
+            continue
+
+        ai_summary = _summarize_report_with_claude(
+            stock_name, report_title, broker,
+            body_text, opinion, target_price, api_key
+        )
+
+        if ai_summary:
+            r["ai_summary"] = ai_summary
+            r["summary"]    = ai_summary
+            print(f"  [{i}/{total}] 완료: {stock_name} → {ai_summary}")
+        else:
+            print(f"  [{i}/{total}] {stock_name}: 요약 실패 → 빈 문자열 유지")
+
+
 def collect_analyst(api_key: str = "") -> list:
     """애널리스트 리포트 수집 메인 함수"""
     print("\n=== 섹션 3: 애널리스트 리포트 수집 ===")
 
-    reports = collect_naver_research(api_key=api_key)
+    # 1단계: 메타데이터만 수집 (Claude 호출 없음)
+    reports = collect_naver_research()
     print(f"  → 원시 수집: {len(reports)}건")
 
     if not reports:
         print("  → 수집된 리포트 없음")
         return []
 
+    # 2단계: 중복 제거
     seen_raw = set()
     deduped  = []
     for r in reports:
@@ -432,6 +455,7 @@ def collect_analyst(api_key: str = "") -> list:
             deduped.append(r)
     print(f"  → 중복 제거 후: {len(deduped)}건")
 
+    # 3단계: 분류 — 종목당 대표 리포트 1건 확정
     classified = classify_analyst_reports(deduped)
 
     for r in classified["simultaneous"]:
@@ -462,5 +486,8 @@ def collect_analyst(api_key: str = "") -> list:
     if classified["simultaneous"]:
         names = [r.get("stock_name", "") for r in classified["simultaneous"]]
         print(f"  → 동시언급 종목: {', '.join(names)}")
+
+    # 4단계: 대표 리포트에만 Claude 요약 실행 (FIX-COST-1)
+    _enrich_with_summaries(all_classified, api_key)
 
     return all_classified
