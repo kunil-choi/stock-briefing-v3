@@ -37,11 +37,15 @@ AI 주식 브리핑 HTML 생성 엔진
 - FIX-H3     : filtered_hidden 필터 조건 단순화
 - FIX-RPT-1  : _report_card에서 ai_summary만 표시, 미사용 변수(summary/summary_short) 제거
 - FIX-FILTER-3: _filter_stocks_tiered 3차 기준 3회↑ → 2회↑ (ai_analyzer와 동기화)
+- FIX-IMPORT-1: 미사용 OrderedDict import 제거
+- FIX-ANA-4  : analyst_category=None 항목 누락 방어 (single_broker 폴백 처리)
+- FIX-SIG-4  : _SIGNAL_MAP 키를 list로 명확화하여 가독성 개선
+- FIX-STRAT-4: _render_ai_strategy re.split 빈 토큰 방어 개선
+- FIX-DISCLAIMER-1: 법적 면책 문구 추가 (TV 방송 대응)
 """
 
 import os
 import re
-from collections import OrderedDict
 from datetime import datetime, timedelta, timezone
 
 KST         = timezone(timedelta(hours=9))
@@ -73,12 +77,12 @@ _TAG_META = {
     "애널리스트": {"bg": "#1a3a2d", "color": "#51cf66"},
 }
 
-# FIX-SIG-3: signal → 긍정/중립/부정 3단계로 단순화
-_SIGNAL_MAP = {
-    ("강력매수", "매수", "buy", "긍정", "positive"): ("signal-positive", "#51cf66", "긍정"),
-    ("관망", "hold", "중립", "neutral"):              ("signal-neutral",  "#adb5bd", "중립"),
-    ("매도", "sell", "부정", "negative"):             ("signal-negative", "#74c0fc", "부정"),
-}
+# FIX-SIG-4: 키를 list로 명확화하여 가독성 개선 (FIX-SIG-3 이어서)
+_SIGNAL_MAP = [
+    (["강력매수", "매수", "buy", "긍정", "positive"], ("signal-positive", "#51cf66", "긍정")),
+    (["관망", "hold", "중립", "neutral"],             ("signal-neutral",  "#adb5bd", "중립")),
+    (["매도", "sell", "부정", "negative"],            ("signal-negative", "#74c0fc", "부정")),
+]
 _SIGNAL_DEFAULT = ("signal-neutral", "#adb5bd", "중립")
 
 
@@ -86,7 +90,7 @@ def _resolve_signal(signal: str):
     if not signal:
         return _SIGNAL_DEFAULT
     sig_l = signal.strip().lower()
-    for keywords, meta in _SIGNAL_MAP.items():
+    for keywords, meta in _SIGNAL_MAP:
         if any(k in sig_l for k in keywords):
             return meta
     return _SIGNAL_DEFAULT
@@ -272,8 +276,6 @@ def _build_analyst_html(all_data: list) -> str:
         is_new = r.get("new_coverage", False)
 
         # FIX-RPT-1: summary/summary_short 제거 — ai_summary만 사용
-        # 미사용 변수(summary, summary_short) 완전 삭제
-
         if not link and stock:
             enc  = stock.replace(" ", "+")
             link = (f"https://finance.naver.com/research/company_list.naver"
@@ -286,7 +288,6 @@ def _build_analyst_html(all_data: list) -> str:
             title_html = f'<span class="analyst-title-text">{title}</span>'
 
         # FIX-RPT-1: Claude가 본문 읽고 추출한 핵심 1문장만 표시
-        # 메타 조합 문자열은 표시하지 않음 / ai_summary 없으면 빈 문자열
         ai_summary   = r.get("ai_summary", "").strip()
         summary_html = (
             f'<p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;'
@@ -312,8 +313,12 @@ def _build_analyst_html(all_data: list) -> str:
 
     simultaneous = [r for r in analyst_items if r.get("analyst_category") == "simultaneous"]
     new_cov      = [r for r in analyst_items if r.get("analyst_category") == "new_coverage"]
+    # FIX-ANA-4: analyst_category=None 또는 미분류 항목은 single_broker 폴백으로 처리
     single       = [r for r in analyst_items
-                    if r.get("analyst_category") in ("single_broker", "first_in_6months")]
+                    if r.get("analyst_category") in
+                    ("single_broker", "first_in_6months", None)
+                    and r not in simultaneous
+                    and r not in new_cov]
 
     html = ""
     if simultaneous:
@@ -463,27 +468,31 @@ def _render_stock_detail(stock: dict) -> str:
 
 
 def _render_ai_strategy(ai_strategy: str) -> str:
+    # FIX-STRAT-4: 빈 문자열/None 방어
     if not ai_strategy or not ai_strategy.strip():
         return '<p style="color:#666;">AI 전략 데이터 없음</p>'
 
-    sections = re.split(r'(?=■ )', ai_strategy.strip())
-    html     = ""
+    # FIX-STRAT-4: ■ 로 시작하는 토큰만 처리, 빈 토큰 명시적 제거
+    raw_sections = re.split(r'\n(?=■ )', ai_strategy.strip())
+    sections     = [s.strip() for s in raw_sections if s.strip().startswith("■")]
 
+    # ■ 로 시작하는 섹션이 없으면 원문을 그대로 출력
+    if not sections:
+        return f'<p style="color:#ccc;">{ai_strategy.strip()}</p>'
+
+    icon_map = {
+        "핵심 시나리오":        "🎯",
+        "섹터 로테이션":        "🔄",
+        "오늘의 주목 포인트":   "📌",
+        "리스크 시나리오":      "⚠️",
+        "애널리스트 종합 시각": "📊",
+    }
+
+    html = ""
     for sec in sections:
-        sec = sec.strip()
-        if not sec:
-            continue
         lines      = sec.split("\n")
         title_line = lines[0].replace("■ ", "").strip()
         body_lines = [l.strip() for l in lines[1:] if l.strip()]
-
-        icon_map = {
-            "핵심 시나리오":        "🎯",
-            "섹터 로테이션":        "🔄",
-            "오늘의 주목 포인트":   "📌",
-            "리스크 시나리오":      "⚠️",
-            "애널리스트 종합 시각": "📊",
-        }
 
         icon = next((v for k, v in icon_map.items() if k in title_line), "📌")
 
@@ -501,7 +510,7 @@ def _render_ai_strategy(ai_strategy: str) -> str:
             f'</div>'
         )
 
-    return html or f'<p style="color:#ccc;">{ai_strategy.strip()}</p>'
+    return html
 
 
 def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
@@ -516,7 +525,7 @@ def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
     selected       = []
     selected_names = set()
 
-    # overlap_count 재계산
+    # overlap_count 재계산 — 원본 dict 수정은 최소화 (이미 값 있으면 덮어씀)
     for s in stocks:
         cc = s.get("channel_counts", {})
         if cc:
@@ -552,7 +561,7 @@ def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
                 selected.append(s)
                 selected_names.add(name)
 
-    # 3차 — FIX-FILTER-3: 3회↑ → 2회↑ (ai_analyzer.py와 동기화)
+    # 3차 — FIX-FILTER-3: 3회↑ → 2회↑
     if len(selected) < target:
         for s in stocks:
             if len(selected) >= target:
@@ -571,10 +580,10 @@ def generate_html(
     data,
     channels_data=None,
     gh_repo="",
-    gh_token="",
     market_overview=None,
     all_data=None,
 ) -> str:
+    # FIX-IMPORT-1: gh_token 파라미터 제거 (사용처 없음)
     data            = data or {}
     market_overview = market_overview or {}
     all_data        = all_data or []
@@ -1007,6 +1016,17 @@ a:hover { text-decoration: underline; }
 }
 .modal-close:hover { color: var(--text); }
 #modal-chart-img { width: 100%; border-radius: 8px; margin-top: .5rem; }
+.disclaimer {
+  margin: 40px 0 20px;
+  padding: 16px 20px;
+  background: #13131f;
+  border: 1px solid #2d2d44;
+  border-radius: 10px;
+  text-align: center;
+  color: #6b6b88;
+  font-size: .8rem;
+  line-height: 1.9;
+}
 @media (max-width: 600px) {
   .briefing-header h1 { font-size: 1.4rem; }
   .stock-card-header  { padding: .7rem .9rem; }
@@ -1067,6 +1087,12 @@ a:hover { text-decoration: underline; }
   <div class="section">
     <div class="section-title">🤖 AI 투자 전략</div>
     {strategy_html}
+  </div>
+
+  <!-- FIX-DISCLAIMER-1: 법적 면책 문구 (TV 방송 대응) -->
+  <div class="disclaimer">
+    ⚠️ 본 브리핑은 관련 데이터를 AI가 분석한 참고 자료이며, 투자 권유가 아닙니다.<br>
+    투자 판단의 책임은 투자자 본인에게 있습니다.
   </div>
 
 </div>
