@@ -19,6 +19,7 @@ AI 주식 브리핑 분석 엔진
 - FIX-PROMPT-1: rules 문자열 끝 손상 복구 및 stock_plans 규칙 명시 (BUG-A2)
 - FIX-APIKEY-1: call_claude_with_retry에 api_key 전달 누락 버그 수정
 - FIX-PRICE-1 : 관심종목 현재가 조회 후 Claude 프롬프트에 포함, 가격 임의 생성 방지
+- FIX-PRICE-3 : 프롬프트 price_str에 등락률 병기 추가
 """
 
 import json
@@ -337,16 +338,27 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
 
     top_stocks  = filtered_mentions[:15]
     stocks_info = []
+    stock_prices = stock_prices or {}
+
     for rank, (name, data) in enumerate(top_stocks, 1):
-        price_str = ""
-        if stock_prices and name in stock_prices:
-            price_str = f", 현재가:{stock_prices[name]:,}원"
+        price_info = stock_prices.get(name)
+        if price_info and isinstance(price_info, dict) and price_info.get("price", 0) > 0:
+            # FIX-PRICE-3: 현재가 + 등락률 병기
+            price_str = (
+                f"현재가:{price_info['price']:,}원 "
+                f"({price_info.get('change_pct', 0.0):+.2f}%)"
+            )
+        elif isinstance(price_info, int) and price_info > 0:
+            # 이전 버전 호환 (정수만 저장된 경우)
+            price_str = f"현재가:{price_info:,}원"
         else:
-            price_str = ", 현재가:미수집"
+            price_str = "현재가:미수집 — 구체적 가격 숫자 사용 금지"
+
         line = (f"{rank}. {name} (코드:{data['code']}, "
                 f"언급:{data['total_count']}회, "
                 f"가중점수:{data['weighted_score']:.1f}, "
-                f"채널유형:{','.join(data['channel_types'])}{price_str})")
+                f"채널유형:{','.join(data['channel_types'])}, "
+                f"{price_str})")
         stocks_info.append(line)
         for ch_type, items in data["channels"].items():
             for item in items[:5]:
@@ -440,7 +452,7 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         '        "trigger": "매수 트리거 조건",\n'
         '        "initial_weight_pct": 10,\n'
         '        "target_price": "1차 목표: +8~10% / 2차 목표: 조건부 추가 보유",\n'
-        '        "stop_loss": "52주 고점 대비 -12~15%"\n'
+        '        "stop_loss": "진입가 대비 -12~15%"\n'
         '      }\n'
         '    ],\n'
         '    "cash_policy": {\n'
@@ -665,12 +677,14 @@ def analyze_and_generate_html(
 
     # ── 3-1. 관심종목 현재가 조회 (FIX-PRICE-1) ──────────────────────────────
     stock_prices = {}
+    print(f"[주가조회] 관심종목 {len(filtered)}개 현재가 조회 시작")
     for name, data in filtered:
         code = data.get("code", "")
         if code:
             price_info = fetch_naver_stock_price(name, code_override=code)
-            if price_info and price_info.get("price"):
-                stock_prices[name] = price_info["price"]
+            if price_info and price_info.get("price", 0) > 0:
+                # FIX-PRICE-3: dict 전체를 저장해 등락률도 활용
+                stock_prices[name] = price_info
     print(f"[주가조회] {len(stock_prices)}/{len(filtered)}개 종목 주가 수집 완료")
 
     # ── 4. 히든픽 후보 ────────────────────────────────────────────────────────
