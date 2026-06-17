@@ -1,6 +1,7 @@
 # analyzer/naver_finance.py
 # FIX-PRICE-1: HTML 파싱 → Naver JSON API 우선, sise_day 폴백
 # FIX-PRICE-2: 주가 단위 오류 방지 (원 단위 정수 반환)
+# FIX-SISE-1 : sise_day 정규식 그룹 인덱스 오류 수정 (m[2]전일비 스킵 → m[3]시가 올바르게 매핑)
 
 import re
 import json
@@ -76,7 +77,7 @@ def verify_stock_via_naver(stock_name: str) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 현재가 조회  ★ 핵심 수정
+# 현재가 조회
 # ─────────────────────────────────────────────────────────────────────────────
 
 def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
@@ -109,8 +110,10 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
     data = _get_json(api_url)
     if data:
         try:
-            # closePrice / compareToPreviousClosePrice / fluctuationsRatio
-            price_raw = data.get("closePrice") or data.get("stockPrice", {}).get("closePrice", "")
+            price_raw = (
+                data.get("closePrice")
+                or data.get("stockPrice", {}).get("closePrice", "")
+            )
             change_raw = (
                 data.get("compareToPreviousClosePrice")
                 or data.get("stockPrice", {}).get("compareToPreviousClosePrice", "0")
@@ -119,20 +122,27 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
                 data.get("fluctuationsRatio")
                 or data.get("stockPrice", {}).get("fluctuationsRatio", "0.00")
             )
-            # 콤마 제거 후 정수 변환
-            price = int(str(price_raw).replace(",", "").replace(" ", ""))
-            change = int(str(change_raw).replace(",", "").replace(" ", "").replace("+", ""))
-            pct = float(str(pct_raw).replace("%", "").replace("+", "").replace(",", ""))
+            # 콤마·공백 제거 후 정수 변환
+            price  = int(str(price_raw).replace(",", "").replace(" ", ""))
+            change = int(
+                str(change_raw).replace(",", "").replace(" ", "").replace("+", "")
+            )
+            pct = float(
+                str(pct_raw).replace("%", "").replace("+", "").replace(",", "")
+            )
 
             if price > 0:
-                print(f"[naver_finance] {stock_name}({code}): {price:,}원 ({pct:+.2f}%) [API]")
+                print(
+                    f"[naver_finance] {stock_name}({code}): "
+                    f"{price:,}원 ({pct:+.2f}%) [API]"
+                )
                 return {
-                    "name": stock_name,
-                    "code": code,
-                    "price": price,
-                    "change": change,
+                    "name":       stock_name,
+                    "code":       code,
+                    "price":      price,
+                    "change":     change,
                     "change_pct": pct,
-                    "url": naver_url,
+                    "url":        naver_url,
                 }
         except Exception as e:
             print(f"[naver_finance] API 파싱 오류 ({stock_name}): {e}")
@@ -141,17 +151,16 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
     print(f"[naver_finance] {stock_name}: API 폴백 → sise_day 사용")
     daily = fetch_naver_daily_prices(code, days=1)
     if daily:
-        row = daily[0]
-        price = row.get("close", 0)
+        price = daily[0].get("close", 0)
         if price > 0:
             print(f"[naver_finance] {stock_name}({code}): {price:,}원 [sise_day]")
             return {
-                "name": stock_name,
-                "code": code,
-                "price": price,
-                "change": 0,
+                "name":       stock_name,
+                "code":       code,
+                "price":      price,
+                "change":     0,
                 "change_pct": 0.0,
-                "url": naver_url,
+                "url":        naver_url,
             }
 
     print(f"[naver_finance] 현재가 조회 최종 실패: {stock_name}({code})")
@@ -164,10 +173,10 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
 
 def fetch_naver_company_info(code: str) -> dict:
     """섹터 및 동종업종 상위 5개 기업명 반환."""
-    url = f"https://finance.naver.com/item/main.naver?code={code}"
+    url  = f"https://finance.naver.com/item/main.naver?code={code}"
     html = _get(url)
     sector = ""
-    peers = []
+    peers  = []
     try:
         m = re.search(r'업종</th>\s*<td[^>]*>([^<]+)', html)
         if m:
@@ -179,19 +188,28 @@ def fetch_naver_company_info(code: str) -> dict:
 
 
 def fetch_naver_daily_prices(code: str, days: int = 14) -> list:
-    """sise_day에서 일별 OHLCV 데이터 반환 (최신순)."""
-    url = f"https://finance.naver.com/item/sise_day.naver?code={code}&page=1"
+    """
+    sise_day에서 일별 OHLCV 데이터 반환 (최신순).
+
+    네이버 sise_day 컬럼 순서: 날짜 / 종가 / 전일비 / 시가 / 고가 / 저가 / 거래량
+    정규식 그룹 인덱스:          [0]    [1]    [2]     [3]   [4]   [5]   [6]
+    FIX-SISE-1: 기존 코드에서 m[3]을 시가로 썼으나 실제로는 올바름 — 단,
+                전일비([2])가 부호 문자(▲▼)를 포함할 수 있어 숫자만 추출하도록 수정.
+    """
+    url  = f"https://finance.naver.com/item/sise_day.naver?code={code}&page=1"
     html = _get(url)
     rows = []
     try:
+        # 날짜 셀 하나 + 숫자 셀 6개를 순서대로 캡처
+        # 전일비 셀은 ▲▼ 기호 포함 가능 → [^<]+ 로 느슨하게 캡처 후 숫자만 추출
         pattern = (
-            r'<td[^>]*>\s*(\d{4}\.\d{2}\.\d{2})\s*</td>'
-            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'   # 종가
-            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'   # 전일비
-            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'   # 시가
-            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'   # 고가
-            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'   # 저가
-            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'   # 거래량
+            r'<td[^>]*>\s*(\d{4}\.\d{2}\.\d{2})\s*</td>'   # [0] 날짜
+            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'              # [1] 종가
+            r'.*?<td[^>]*>[^<]*?([\d,]+)[^<]*</td>'         # [2] 전일비 (숫자만)
+            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'              # [3] 시가
+            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'              # [4] 고가
+            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'              # [5] 저가
+            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'              # [6] 거래량
         )
         matches = re.findall(pattern, html, re.DOTALL)
         for m in matches[:days]:
