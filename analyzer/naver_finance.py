@@ -7,6 +7,10 @@
 - generate_candlestick_base64  : 캔들스틱 차트 생성
 - search_code_by_autocomplete  : 자동완성으로 종목코드 검색
 - verify_stock_via_naver       : 종목 존재 여부 확인
+
+수정 이력:
+- FIX-PRICE-2 : fetch_naver_stock_price HTML 파싱 → JSON API 방식으로 교체
+                1차: 네이버 금융 실시간 API, 2차: 일별시세 API 폴백
 """
 
 import re
@@ -30,7 +34,9 @@ _HEADERS = {
 
 def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict | None:
     """
-    네이버 금융에서 종목 현재가 조회.
+    네이버 금융 JSON API로 종목 현재가 조회.
+    1차: 네이버 금융 실시간 시세 API
+    2차: 일별시세 API (폴백)
     반환: {"name":str, "code":str, "price":int, "change":str,
            "change_pct":str, "naver_url":str}
     실패 시 None 반환.
@@ -43,51 +49,63 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict | 
 
     naver_url = f"https://finance.naver.com/item/main.naver?code={code}"
 
+    # ── 1차: 네이버 금융 실시간 시세 JSON API ─────────────────────────────────
     try:
-        resp = requests.get(naver_url, headers=_HEADERS, timeout=10)
+        api_url = f"https://polling.finance.naver.com/api/realtime/domestic/stock/{code}"
+        resp = requests.get(api_url, headers=_HEADERS, timeout=10)
         resp.raise_for_status()
+        data = resp.json()
+
+        datas = data.get("datas", [])
+        if datas:
+            item      = datas[0]
+            price_str = item.get("closePrice", "").replace(",", "").replace("+", "")
+            change_str = item.get("fluctuation", "").replace(",", "").replace("+", "")
+            pct_str   = item.get("fluctuationsRatio", "").replace(",", "").replace("+", "")
+
+            if price_str and price_str.lstrip("-").isdigit():
+                price_int = int(price_str)
+                print(f"  [PRICE-API] {stock_name}({code}): {price_int:,}원")
+                return {
+                    "name":       stock_name,
+                    "code":       code,
+                    "price":      price_int,
+                    "change":     change_str,
+                    "change_pct": pct_str,
+                    "naver_url":  naver_url,
+                }
+    except Exception as e:
+        print(f"  [PRICE-API] {stock_name}({code}) 실시간 API 실패: {e}")
+
+    # ── 2차: 일별시세 API 폴백 ────────────────────────────────────────────────
+    try:
+        daily_url = f"https://finance.naver.com/item/sise_day.naver?code={code}&page=1"
+        resp = requests.get(daily_url, headers=_HEADERS, timeout=10)
+        resp.encoding = "euc-kr"
         text = resp.text
 
-        # 현재가 파싱 (여러 패턴 순차 시도)
-        price_int = None
-        patterns = [
-            r'<p[^>]+class="[^"]*no_today[^"]*"[^>]*>.*?<span[^>]+class="[^"]*blind[^"]*"[^>]*>([\d,]+)',
-            r'<strong[^>]+id="stock_price"[^>]*>([\d,]+)',
-            r'"현재가"\s*:\s*"?([\d,]+)',
-            r'<dd[^>]*>\s*현재가\s*</dd>\s*<dd[^>]*>([\d,]+)',
-            r'<strong[^>]*>([\d]{3,6}(?:,[\d]{3})*)</strong>',
-        ]
-        for pattern in patterns:
-            m = re.search(pattern, text, re.DOTALL)
-            if m:
-                raw = m.group(1).replace(",", "")
-                if raw.isdigit():
-                    price_int = int(raw)
-                    break
-
-        if price_int is None:
-            print(f"  [PRICE] {stock_name}({code}) 가격 파싱 실패")
-            return None
-
-        m_change   = re.search(r'<em[^>]+id="changeContents"[^>]*>.*?([\d,]+)', text, re.DOTALL)
-        change_str = m_change.group(1).replace(",", "") if m_change else ""
-
-        m_pct   = re.search(r'<span[^>]+class="[^"]*rate[^"]*"[^>]*>.*?([\d\.]+)%', text, re.DOTALL)
-        pct_str = m_pct.group(1) if m_pct else ""
-
-        print(f"  [PRICE] {stock_name}({code}): {price_int:,}원")
-        return {
-            "name":       stock_name,
-            "code":       code,
-            "price":      price_int,
-            "change":     change_str,
-            "change_pct": pct_str,
-            "naver_url":  naver_url,
-        }
-
+        # 일별시세 첫 번째 행의 종가를 현재가로 사용
+        m = re.search(
+            r'<tr[^>]*>\s*<td[^>]*>[\d\.]+</td>'
+            r'\s*<td[^>]*><span[^>]*>([\d,]+)</span></td>',
+            text, re.DOTALL
+        )
+        if m:
+            price_int = int(m.group(1).replace(",", ""))
+            print(f"  [PRICE-DAILY] {stock_name}({code}): {price_int:,}원 (전일종가)")
+            return {
+                "name":       stock_name,
+                "code":       code,
+                "price":      price_int,
+                "change":     "",
+                "change_pct": "",
+                "naver_url":  naver_url,
+            }
     except Exception as e:
-        print(f"  [PRICE] {stock_name}({code}) 예외: {e}")
-        return None
+        print(f"  [PRICE-DAILY] {stock_name}({code}) 일별시세 폴백 실패: {e}")
+
+    print(f"  [PRICE] {stock_name}({code}) 모든 조회 방법 실패")
+    return None
 
 
 # ── 2. 기업 정보 조회 ─────────────────────────────────────────────────────────
@@ -160,14 +178,14 @@ def fetch_naver_daily_prices(code: str, days: int = 14) -> list[dict]:
         text = resp.text
 
         rows = re.findall(
-            r'<tr[^>]*>\s*<td[^>]*>([\d\.]+)</td>'   # 날짜
-            r'\s*<td[^>]*><span[^>]*>([\d,]+)</span></td>'  # 종가
-            r'\s*<td[^>]*>.*?</td>'                  # 전일비
-            r'\s*<td[^>]*>.*?</td>'                  # 등락률
-            r'\s*<td[^>]*><span[^>]*>([\d,]+)</span></td>'  # 시가
-            r'\s*<td[^>]*><span[^>]*>([\d,]+)</span></td>'  # 고가
-            r'\s*<td[^>]*><span[^>]*>([\d,]+)</span></td>'  # 저가
-            r'\s*<td[^>]*><span[^>]*>([\d,]+)</span></td>', # 거래량
+            r'<tr[^>]*>\s*<td[^>]*>([\d\.]+)</td>'
+            r'\s*<td[^>]*><span[^>]*>([\d,]+)</span></td>'
+            r'\s*<td[^>]*>.*?</td>'
+            r'\s*<td[^>]*>.*?</td>'
+            r'\s*<td[^>]*><span[^>]*>([\d,]+)</span></td>'
+            r'\s*<td[^>]*><span[^>]*>([\d,]+)</span></td>'
+            r'\s*<td[^>]*><span[^>]*>([\d,]+)</span></td>'
+            r'\s*<td[^>]*><span[^>]*>([\d,]+)</span></td>',
             text, re.DOTALL
         )
 
@@ -218,7 +236,6 @@ def generate_candlestick_base64(daily_prices: list[dict], stock_name: str = "") 
         return None
 
     try:
-        # 날짜 오름차순 정렬
         prices = list(reversed(daily_prices))
 
         fig, ax = plt.subplots(figsize=(8, 4))
@@ -232,9 +249,7 @@ def generate_candlestick_base64(daily_prices: list[dict], stock_name: str = "") 
             c = d["close"]
             color = "#ff6b6b" if c >= o else "#74c0fc"
 
-            # 심지 (고가-저가)
             ax.plot([i, i], [l, h], color=color, linewidth=0.8, zorder=1)
-            # 몸통 (시가-종가)
             body_bottom = min(o, c)
             body_height = abs(c - o) or 1
             rect = mpatches.Rectangle(
@@ -243,7 +258,6 @@ def generate_candlestick_base64(daily_prices: list[dict], stock_name: str = "") 
             )
             ax.add_patch(rect)
 
-        # 날짜 레이블 (5개만)
         tick_step  = max(1, len(prices) // 5)
         tick_pos   = list(range(0, len(prices), tick_step))
         tick_label = [prices[i]["date"][-5:] for i in tick_pos]
@@ -284,11 +298,11 @@ def search_code_by_autocomplete(stock_name: str) -> dict | None:
 
     url = "https://ac.finance.naver.com/ac"
     params = {
-        "q":    stock_name,
+        "q":     stock_name,
         "q_enc": "UTF-8",
-        "st":   "111",
-        "sug":  "all",
-        "frm":  "stock",
+        "st":    "111",
+        "sug":   "all",
+        "frm":   "stock",
     }
     try:
         resp = requests.get(url, params=params, headers=_HEADERS, timeout=5)
@@ -299,7 +313,6 @@ def search_code_by_autocomplete(stock_name: str) -> dict | None:
         if not items:
             return None
 
-        # items[0] = [[code, name, ...], ...]
         for group in items:
             for item in group:
                 if not isinstance(item, list) or len(item) < 2:
