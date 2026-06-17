@@ -18,6 +18,7 @@ AI 주식 브리핑 분석 엔진
 - FIX-SIG-4   : 프롬프트 signal 지시를 긍정/중립/부정으로 통일 (BUG-A1)
 - FIX-PROMPT-1: rules 문자열 끝 손상 복구 및 stock_plans 규칙 명시 (BUG-A2)
 - FIX-APIKEY-1: call_claude_with_retry에 api_key 전달 누락 버그 수정
+- FIX-PRICE-1 : 관심종목 현재가 조회 후 Claude 프롬프트에 포함, 가격 임의 생성 방지
 """
 
 import json
@@ -312,7 +313,7 @@ def extract_hidden_picks(mentions: dict, filtered_names: set,
 
 def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
                           all_data: list, today_date: str,
-                          now_kst: str) -> str:
+                          now_kst: str, stock_prices: dict = None) -> str:
 
     headlines = []
     for item in all_data[:150]:
@@ -337,10 +338,15 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
     top_stocks  = filtered_mentions[:15]
     stocks_info = []
     for rank, (name, data) in enumerate(top_stocks, 1):
+        price_str = ""
+        if stock_prices and name in stock_prices:
+            price_str = f", 현재가:{stock_prices[name]:,}원"
+        else:
+            price_str = ", 현재가:미수집"
         line = (f"{rank}. {name} (코드:{data['code']}, "
                 f"언급:{data['total_count']}회, "
                 f"가중점수:{data['weighted_score']:.1f}, "
-                f"채널유형:{','.join(data['channel_types'])})")
+                f"채널유형:{','.join(data['channel_types'])}{price_str})")
         stocks_info.append(line)
         for ch_type, items in data["channels"].items():
             for item in items[:5]:
@@ -434,7 +440,7 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         '        "trigger": "매수 트리거 조건",\n'
         '        "initial_weight_pct": 10,\n'
         '        "target_price": "1차 목표: +8~10% / 2차 목표: 조건부 추가 보유",\n'
-        '        "stop_loss": "52주 고점 대비 -12~15% 또는 구체적 가격"\n'
+        '        "stop_loss": "52주 고점 대비 -12~15%"\n'
         '      }\n'
         '    ],\n'
         '    "cash_policy": {\n'
@@ -471,6 +477,9 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         "   - stock_plans: 관심종목 + 중소형 수혜주 1~2개 포함 권장\n"
         "8. 모든 URL은 출처 데이터에 있는 것만 사용, 없으면 빈 문자열\n"
         "9. JSON 외 설명문·마크다운 코드블록 없이 순수 JSON만 출력\n"
+        "10. stock_plans의 target_price·stop_loss는 반드시 현재가 기준 비율(%)로 표현할 것\n"
+        "    현재가가 제공된 종목은 실제 가격도 병기 가능\n"
+        "    현재가가 '미수집'인 종목은 구체적인 가격 숫자를 절대 임의로 만들지 말 것\n"
     )
 
     return (
@@ -487,14 +496,12 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
 # ── JSON 파싱 헬퍼 ────────────────────────────────────────────────────────────
 
 def _try_parse_json(text: str) -> Optional[dict]:
-    # 1차: 코드블록 내 JSON 추출
     m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
     if m:
         try:
             return json.loads(m.group(1))
         except json.JSONDecodeError:
             pass
-    # 2차: 첫 번째 { ... } 추출
     m = re.search(r'\{.*\}', text, re.DOTALL)
     if m:
         try:
@@ -507,7 +514,6 @@ def _try_parse_json(text: str) -> Optional[dict]:
 # ── ai_strategy dict → HTML 문자열 변환 ──────────────────────────────────────
 
 def _format_ai_strategy(strategy: dict) -> str:
-    """ai_strategy JSON 객체를 ■ 섹션 구분 텍스트로 변환."""
     if not isinstance(strategy, dict):
         return str(strategy)
 
@@ -576,7 +582,6 @@ def _format_ai_strategy(strategy: dict) -> str:
 # ── URL 복원 헬퍼 ─────────────────────────────────────────────────────────────
 
 def _restore_source_url(item: dict, all_data: list) -> None:
-    """source_url/url이 빈 경우 all_data에서 동일 source_name으로 복원."""
     for field in ("channel_mentions", "reasons"):
         entries = item.get(field, [])
         if not isinstance(entries, list):
@@ -636,7 +641,8 @@ def analyze_and_generate_html(
     market_overview: dict = None,
 ) -> str:
     from .html_generator import generate_html
-    from config import ANTHROPIC_API_KEY  # FIX-APIKEY-1
+    from .naver_finance import fetch_naver_stock_price
+    from config import ANTHROPIC_API_KEY
 
     now_kst       = datetime.now(KST)
     today_date    = now_kst.strftime("%Y년 %m월 %d일")
@@ -657,18 +663,28 @@ def analyze_and_generate_html(
     filtered = filter_mentions(mentions)
     filtered_names = {name for name, _ in filtered}
 
+    # ── 3-1. 관심종목 현재가 조회 (FIX-PRICE-1) ──────────────────────────────
+    stock_prices = {}
+    for name, data in filtered:
+        code = data.get("code", "")
+        if code:
+            price_info = fetch_naver_stock_price(name, code_override=code)
+            if price_info and price_info.get("price"):
+                stock_prices[name] = price_info["price"]
+    print(f"[주가조회] {len(stock_prices)}/{len(filtered)}개 종목 주가 수집 완료")
+
     # ── 4. 히든픽 후보 ────────────────────────────────────────────────────────
     hidden_candidates = extract_hidden_picks(mentions, filtered_names)
 
     # ── 5. Claude 프롬프트 생성 및 API 호출 ──────────────────────────────────
     prompt = build_analysis_prompt(
-        filtered, hidden_candidates, all_data, today_date, now_kst_str
+        filtered, hidden_candidates, all_data, today_date, now_kst_str,
+        stock_prices=stock_prices
     )
 
     print(f"[Claude] 프롬프트 길이: {len(prompt)}자")
 
     try:
-        # FIX-APIKEY-1: api_key 전달 추가
         response_text = call_claude_with_retry(prompt, api_key=ANTHROPIC_API_KEY)
     except Exception as e:
         print(f"[Claude] API 호출 실패: {e}")
@@ -698,7 +714,7 @@ def analyze_and_generate_html(
             stock["total_count"]     = data["total_count"]
             stock["weighted_score"]  = round(data["weighted_score"], 2)
             stock["overlap_count"]   = len(data["channel_types"])
-            stock["reasons"]         = []  # FIX-DUP-1: channel_mentions만 사용
+            stock["reasons"]         = []
 
     # ── 9. 히든픽 weighted_score 동기화 ──────────────────────────────────────
     hidden_lookup = {p["name"]: p for p in hidden_candidates}
