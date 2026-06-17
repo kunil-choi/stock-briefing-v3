@@ -14,13 +14,16 @@ AI 주식 브리핑 분석 엔진
 - FIX-STRAT   : ai_strategy 구조화 JSON 객체 전환
 - FIX-MAX-1   : 관심종목 최대 10개로 확대
 - FIX-STRAT-2 : ai_strategy dict → HTML 렌더링 전 문자열 변환 버그 수정
-- FIX-FILTER-1: 관심종목 단계별 선정 로직 (1차: 채널타입 2종↑, 2차: 전체 4회↑, 3차: 전체 3회↑)
-- FIX-SIG-4   : 프롬프트 signal 지시를 긍정/중립/부정으로 통일 (BUG-A1)
-- FIX-PROMPT-1: rules 문자열 끝 손상 복구 및 stock_plans 규칙 명시 (BUG-A2)
+- FIX-FILTER-1: 관심종목 단계별 선정 로직
+- FIX-SIG-4   : 프롬프트 signal 지시를 긍정/중립/부정으로 통일
+- FIX-PROMPT-1: rules 문자열 끝 손상 복구 및 stock_plans 규칙 명시
 - FIX-APIKEY-1: call_claude_with_retry에 api_key 전달 누락 버그 수정
-- FIX-PRICE-1 : 관심종목 현재가 조회 후 Claude 프롬프트에 포함, 가격 임의 생성 방지
+- FIX-PRICE-1 : 관심종목 현재가 조회 후 Claude 프롬프트에 포함
 - FIX-PRICE-3 : 프롬프트 price_str에 등락률 병기 추가
-- FIX-FILTER-2: 3차 필터 총 3회↑ → 총 2회↑로 완화 (관심종목 부족 문제 개선)
+- FIX-FILTER-2: 3차 필터 총 3회↑ → 총 2회↑로 완화
+- FIX-ACC-1   : 근거 없는 수치(목표가/손절가/배분비율) 프롬프트 및 렌더링에서 완전 제거
+               애널리스트 ai_summary를 프롬프트에 포함, signal은 리포트 opinion 우선
+               "그럴듯해 보이는 부정확한 수치" 생성 원천 차단
 """
 
 import json
@@ -234,7 +237,7 @@ def extract_mentions(all_data: list, stock_map: dict,
     return mentions
 
 
-# ── FIX-FILTER-1/2: 단계별 관심종목 필터링 ───────────────────────────────────
+# ── 단계별 관심종목 필터링 ────────────────────────────────────────────────────
 
 def filter_mentions(mentions: dict, target: int = 10) -> list:
     all_sorted = sorted(
@@ -246,7 +249,6 @@ def filter_mentions(mentions: dict, target: int = 10) -> list:
     selected       = []
     selected_names = set()
 
-    # 1차: 서로 다른 채널타입 2종 이상
     for name, data in all_sorted:
         if len(selected) >= target:
             break
@@ -255,7 +257,6 @@ def filter_mentions(mentions: dict, target: int = 10) -> list:
             selected_names.add(name)
     print(f"[필터링] 1차(채널타입 2종↑): {len(selected)}개")
 
-    # 2차: 채널타입 무관 총 4회 이상
     if len(selected) < target:
         for name, data in all_sorted:
             if len(selected) >= target:
@@ -267,7 +268,6 @@ def filter_mentions(mentions: dict, target: int = 10) -> list:
                 selected_names.add(name)
         print(f"[필터링] 2차(전체 4회↑) 추가 후: {len(selected)}개")
 
-    # 3차: 채널타입 무관 총 2회 이상 (FIX-FILTER-2: 기존 3회↑ → 2회↑로 완화)
     if len(selected) < target:
         for name, data in all_sorted:
             if len(selected) >= target:
@@ -311,11 +311,44 @@ def extract_hidden_picks(mentions: dict, filtered_names: set,
     return result
 
 
+# ── FIX-ACC-1: 애널리스트 리포트 요약 맵 구성 ────────────────────────────────
+
+def _build_analyst_summary_map(all_data: list) -> dict:
+    """
+    all_data에서 애널리스트 리포트의 ai_summary와 opinion을 종목명 기준으로 수집.
+    프롬프트에 실제 근거 있는 정보만 포함하기 위해 사용.
+    """
+    summary_map = {}
+    for item in all_data:
+        if item.get("source_type") != "애널리스트":
+            continue
+        stock_name = item.get("stock_name", "")
+        if not stock_name:
+            continue
+        ai_summary   = item.get("ai_summary", "").strip()
+        opinion      = item.get("opinion", "").strip()
+        target_price = item.get("target_price", "").strip()
+        broker       = item.get("source_name", "").strip()
+
+        if stock_name not in summary_map:
+            summary_map[stock_name] = []
+        summary_map[stock_name].append({
+            "broker":       broker,
+            "opinion":      opinion,
+            "target_price": target_price,
+            "ai_summary":   ai_summary,
+        })
+    return summary_map
+
+
 # ── Claude 프롬프트 생성 ──────────────────────────────────────────────────────
 
 def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
                           all_data: list, today_date: str,
                           now_kst: str, stock_prices: dict = None) -> str:
+
+    # FIX-ACC-1: 애널리스트 요약 맵 구성
+    analyst_summary_map = _build_analyst_summary_map(all_data)
 
     headlines = []
     for item in all_data[:150]:
@@ -351,7 +384,7 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         elif isinstance(price_info, int) and price_info > 0:
             price_str = f"현재가:{price_info:,}원"
         else:
-            price_str = "현재가:미수집 — 구체적 가격 숫자 사용 금지"
+            price_str = "현재가:미수집"
 
         line = (f"{rank}. {name} (코드:{data['code']}, "
                 f"언급:{data['total_count']}회, "
@@ -359,6 +392,22 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
                 f"채널유형:{','.join(data['channel_types'])}, "
                 f"{price_str})")
         stocks_info.append(line)
+
+        # FIX-ACC-1: 애널리스트 리포트 실제 요약 포함
+        if name in analyst_summary_map:
+            for rpt in analyst_summary_map[name]:
+                rpt_parts = []
+                if rpt["broker"]:
+                    rpt_parts.append(f"증권사:{rpt['broker']}")
+                if rpt["opinion"]:
+                    rpt_parts.append(f"의견:{rpt['opinion']}")
+                if rpt["target_price"]:
+                    rpt_parts.append(f"목표가:{rpt['target_price']}원")
+                if rpt["ai_summary"]:
+                    rpt_parts.append(f"요약:{rpt['ai_summary']}")
+                if rpt_parts:
+                    stocks_info.append(f"   [애널리스트리포트] {' | '.join(rpt_parts)}")
+
         for ch_type, items in data["channels"].items():
             for item in items[:5]:
                 w_str   = f"[가중치:{item.get('weight', 1.0):.1f}]"
@@ -387,6 +436,10 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
     stocks_text = "\n".join(stocks_info)
     hidden_text = "\n".join(hidden_info) if hidden_info else "해당 없음"
 
+    # FIX-ACC-1: ai_strategy에서 근거 없는 수치 필드 완전 제거
+    # stock_plans에서 target_price / stop_loss 제거
+    # allocation에서 weight_pct 제거
+    # cash_policy에서 current_pct 제거
     prompt_json_structure = (
         '{\n'
         f'  "briefing_date": "{today_date}",\n'
@@ -441,33 +494,20 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         '    }\n'
         '  ],\n'
         '  "ai_strategy": {\n'
-        '    "core_scenario": "핵심 시나리오 1문장",\n'
-        '    "allocation": [\n'
-        '      {"sector": "섹터명", "weight_pct": 30, "note": "편입 근거 1문장"}\n'
+        '    "core_scenario": "오늘 수집된 데이터 기반 핵심 시나리오 2~3문장",\n'
+        '    "sector_rotation": "섹터 로테이션 방향 및 근거 — 수집된 뉴스/리포트 기반",\n'
+        '    "watch_points": [\n'
+        '      "오늘 주목해야 할 포인트 1",\n'
+        '      "오늘 주목해야 할 포인트 2"\n'
         '    ],\n'
-        '    "stock_plans": [\n'
-        '      {\n'
-        '        "name": "종목명",\n'
-        '        "trigger": "매수 트리거 조건",\n'
-        '        "initial_weight_pct": 10,\n'
-        '        "target_price": "1차 목표: +8~10% / 2차 목표: 조건부 추가 보유",\n'
-        '        "stop_loss": "진입가 대비 -12~15%"\n'
-        '      }\n'
-        '    ],\n'
-        '    "cash_policy": {\n'
-        '      "current_pct": 15,\n'
-        '      "deploy_trigger": "현금 투입 조건",\n'
-        '      "raise_trigger": "현금 비중 확대 조건"\n'
-        '    },\n'
         '    "risk_scenarios": [\n'
         '      {\n'
         '        "scenario": "리스크 시나리오명",\n'
         '        "probability": "높음|보통|낮음",\n'
-        '        "impact": "포트폴리오 영향",\n'
-        '        "response": "대응 방안"\n'
+        '        "response": "대응 방향 (구체적 수치 없이 방향성만)"\n'
         '      }\n'
         '    ],\n'
-        '    "theme_correlation": "테마 간 상관관계 및 섹터 로테이션 방향"\n'
+        '    "analyst_consensus": "애널리스트 리포트 종합 시각 — 리포트가 있는 경우만 작성, 없으면 빈 문자열"\n'
         '  }\n'
         '}'
     )
@@ -475,22 +515,24 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
     rules = (
         "[작성 규칙]\n"
         "1. stocks: 유의미한 관심종목만 선별, 최대 10개\n"
-        "2. signal: 긍정|중립|부정 중 택1 (긍정=매수 우호적, 중립=관망, 부정=매도 우호적)\n"
-        "3. summary / catalyst / risk: 빈 문자열 없이 내용 기입\n"
+        "2. signal: 긍정|중립|부정 중 택1\n"
+        "   - 애널리스트 리포트에 매수 의견이 있으면 → 긍정 우선\n"
+        "   - 매도/부정 의견이 있으면 → 부정 우선\n"
+        "   - 리포트 없이 헤드라인만 있으면 → 중립 기본\n"
+        "3. summary / catalyst / risk: 수집된 데이터 기반으로만 작성, 빈 문자열 없이 기입\n"
         "4. channel_mentions: 실제 언급된 채널/기사 내용 최대 4개\n"
-        "   ※ channel_mentions와 reasons에 동일 출처를 중복 기재하지 말 것\n"
         "   ※ reasons는 빈 배열 []로 두고 channel_mentions만 채울 것\n"
         "5. hidden_picks: 반드시 [히든픽 후보] 목록에서만 선택, 없으면 []\n"
         "6. market_summary: 5단락, \\n\\n 구분, 각 단락 3~4문장, 400자 이상\n"
-        "7. ai_strategy: 반드시 위 JSON 구조 그대로 출력 (문자열 아닌 객체)\n"
-        "   - allocation 비중 합 + cash_policy.current_pct = 100%\n"
-        "   - risk_scenarios: 최소 2개\n"
-        "   - stock_plans: 관심종목 + 중소형 수혜주 1~2개 포함 권장\n"
+        "7. ai_strategy 작성 원칙 (FIX-ACC-1 — 핵심 규칙):\n"
+        "   - core_scenario: 오늘 수집된 헤드라인과 리포트 내용만 근거로 작성\n"
+        "   - sector_rotation: 수집된 데이터에서 확인된 섹터 흐름만 서술\n"
+        "   - watch_points: 오늘 데이터에서 도출된 구체적 관찰 포인트\n"
+        "   - analyst_consensus: [애널리스트리포트] 데이터가 있는 종목만 서술\n"
+        "   - 목표주가·손절가·배분비율·현금비중 등 수치는 절대 임의로 생성하지 말 것\n"
+        "   - 재무 데이터 없이 숫자를 만들어내는 것은 방송 사고에 해당함\n"
         "8. 모든 URL은 출처 데이터에 있는 것만 사용, 없으면 빈 문자열\n"
         "9. JSON 외 설명문·마크다운 코드블록 없이 순수 JSON만 출력\n"
-        "10. stock_plans의 target_price·stop_loss는 반드시 현재가 기준 비율(%)로 표현할 것\n"
-        "    현재가가 제공된 종목은 실제 가격도 병기 가능\n"
-        "    현재가가 '미수집'인 종목은 구체적인 가격 숫자를 절대 임의로 만들지 말 것\n"
     )
 
     return (
@@ -522,7 +564,7 @@ def _try_parse_json(text: str) -> Optional[dict]:
     return None
 
 
-# ── ai_strategy dict → HTML 문자열 변환 ──────────────────────────────────────
+# ── ai_strategy dict → HTML 문자열 변환 (FIX-ACC-1: 수치 필드 제거) ──────────
 
 def _format_ai_strategy(strategy: dict) -> str:
     if not isinstance(strategy, dict):
@@ -534,41 +576,17 @@ def _format_ai_strategy(strategy: dict) -> str:
     if core:
         lines.append(f"■ 핵심 시나리오\n{core}")
 
-    allocation = strategy.get("allocation", [])
-    if allocation:
-        alloc_lines = ["■ 포트폴리오 배분"]
-        for a in allocation:
-            sector = a.get("sector", "")
-            pct    = a.get("weight_pct", "")
-            note   = a.get("note", "")
-            alloc_lines.append(f"• {sector} {pct}% — {note}")
-        lines.append("\n".join(alloc_lines))
+    sector_rotation = strategy.get("sector_rotation", "")
+    if sector_rotation:
+        lines.append(f"■ 섹터 로테이션\n{sector_rotation}")
 
-    stock_plans = strategy.get("stock_plans", [])
-    if stock_plans:
-        plan_lines = ["■ 종목별 매매 계획"]
-        for p in stock_plans:
-            name    = p.get("name", "")
-            trigger = p.get("trigger", "")
-            weight  = p.get("initial_weight_pct", "")
-            target  = p.get("target_price", "")
-            stop    = p.get("stop_loss", "")
-            plan_lines.append(
-                f"• {name} [{weight}%] 진입: {trigger} / 목표: {target} / 손절: {stop}"
-            )
-        lines.append("\n".join(plan_lines))
-
-    cash = strategy.get("cash_policy", {})
-    if cash:
-        c_pct    = cash.get("current_pct", "")
-        c_deploy = cash.get("deploy_trigger", "")
-        c_raise  = cash.get("raise_trigger", "")
-        lines.append(
-            f"■ 현금 정책\n"
-            f"• 현재 현금 비중: {c_pct}%\n"
-            f"• 투입 조건: {c_deploy}\n"
-            f"• 확대 조건: {c_raise}"
-        )
+    watch_points = strategy.get("watch_points", [])
+    if watch_points:
+        wp_lines = ["■ 오늘의 주목 포인트"]
+        for wp in watch_points:
+            if wp:
+                wp_lines.append(f"• {wp}")
+        lines.append("\n".join(wp_lines))
 
     risk_scenarios = strategy.get("risk_scenarios", [])
     if risk_scenarios:
@@ -576,16 +594,17 @@ def _format_ai_strategy(strategy: dict) -> str:
         for r in risk_scenarios:
             scenario = r.get("scenario", "")
             prob     = r.get("probability", "")
-            impact   = r.get("impact", "")
             response = r.get("response", "")
-            risk_lines.append(
-                f"• [{prob}] {scenario} → 영향: {impact} / 대응: {response}"
-            )
+            if scenario:
+                risk_lines.append(f"• [{prob}] {scenario} → {response}")
         lines.append("\n".join(risk_lines))
 
-    theme = strategy.get("theme_correlation", "")
-    if theme:
-        lines.append(f"■ 테마 상관관계\n{theme}")
+    analyst_consensus = strategy.get("analyst_consensus", "")
+    if analyst_consensus:
+        lines.append(f"■ 애널리스트 종합 시각\n{analyst_consensus}")
+
+    # FIX-ACC-1: allocation / stock_plans / cash_policy 렌더링 완전 제거
+    # 재무 데이터 없이 임의 생성된 수치이므로 방송에서 표시하지 않음
 
     return "\n\n".join(lines)
 
@@ -660,21 +679,16 @@ def analyze_and_generate_html(
     now_kst_str   = now_kst.strftime("%H:%M")
     briefing_date = today_date
 
-    # ── 1. 종목명 로드 ────────────────────────────────────────────────────────
     stock_map = load_stock_names()
-
-    # ── 2. 언급 추출 ──────────────────────────────────────────────────────────
-    mentions = extract_mentions(all_data, stock_map, channels_data)
+    mentions  = extract_mentions(all_data, stock_map, channels_data)
 
     if not mentions:
         print("[분석] 언급 종목 없음 → fallback")
         return _fallback_html("수집된 종목 언급이 없습니다.", briefing_date)
 
-    # ── 3. 관심종목 필터링 ────────────────────────────────────────────────────
-    filtered = filter_mentions(mentions)
+    filtered       = filter_mentions(mentions)
     filtered_names = {name for name, _ in filtered}
 
-    # ── 3-1. 관심종목 현재가 조회 (FIX-PRICE-1) ──────────────────────────────
     stock_prices = {}
     print(f"[주가조회] 관심종목 {len(filtered)}개 현재가 조회 시작")
     for name, data in filtered:
@@ -685,10 +699,8 @@ def analyze_and_generate_html(
                 stock_prices[name] = price_info
     print(f"[주가조회] {len(stock_prices)}/{len(filtered)}개 종목 주가 수집 완료")
 
-    # ── 4. 히든픽 후보 ────────────────────────────────────────────────────────
     hidden_candidates = extract_hidden_picks(mentions, filtered_names)
 
-    # ── 5. Claude 프롬프트 생성 및 API 호출 ──────────────────────────────────
     prompt = build_analysis_prompt(
         filtered, hidden_candidates, all_data, today_date, now_kst_str,
         stock_prices=stock_prices
@@ -702,18 +714,15 @@ def analyze_and_generate_html(
         print(f"[Claude] API 호출 실패: {e}")
         return _fallback_html(f"Claude API 오류: {e}", briefing_date)
 
-    # ── 6. JSON 파싱 ──────────────────────────────────────────────────────────
     result = _try_parse_json(response_text)
     if not result:
         print("[Claude] JSON 파싱 실패 → fallback")
         return _fallback_html("AI 응답 파싱 실패. 잠시 후 다시 시도하세요.", briefing_date)
 
-    # ── 7. ai_strategy dict → 문자열 변환 (FIX-STRAT-2) ─────────────────────
     ai_strat = result.get("ai_strategy")
     if isinstance(ai_strat, dict):
         result["ai_strategy"] = _format_ai_strategy(ai_strat)
 
-    # ── 8. channel_counts / overlap_count 재계산 (V2-SYNC) ───────────────────
     mention_lookup = dict(filtered)
     for stock in result.get("stocks", []):
         name = stock.get("name", "")
@@ -728,7 +737,6 @@ def analyze_and_generate_html(
             stock["overlap_count"]   = len(data["channel_types"])
             stock["reasons"]         = []
 
-    # ── 9. 히든픽 weighted_score 동기화 ──────────────────────────────────────
     hidden_lookup = {p["name"]: p for p in hidden_candidates}
     for hp in result.get("hidden_picks", []):
         name = hp.get("name", "")
@@ -736,13 +744,11 @@ def analyze_and_generate_html(
             hp["weighted_score"] = hidden_lookup[name]["weighted_score"]
             hp["channel_type"]   = hidden_lookup[name]["channel_type"]
 
-    # ── 10. URL 복원 ──────────────────────────────────────────────────────────
     for stock in result.get("stocks", []):
         _restore_source_url(stock, all_data)
     for hp in result.get("hidden_picks", []):
         _restore_source_url(hp, all_data)
 
-    # ── 11. 결과 저장 ─────────────────────────────────────────────────────────
     os.makedirs("data", exist_ok=True)
     try:
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
@@ -751,7 +757,6 @@ def analyze_and_generate_html(
     except Exception as e:
         print(f"[저장] 실패: {e}")
 
-    # ── 12. HTML 생성 ─────────────────────────────────────────────────────────
     return generate_html(
         result, channels_data, gh_repo, gh_token, market_overview, all_data
     )
