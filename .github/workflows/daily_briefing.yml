@@ -123,6 +123,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           YOUTUBE_API_KEY:   ${{ secrets.YOUTUBE_API_KEY }}
           GH_TOKEN:          ${{ secrets.GH_TOKEN }}
+          GEMINI_API_KEY:    ${{ secrets.GEMINI_API_KEY }}
         run: |
           python - <<'EOF'
           import os, sys
@@ -154,6 +155,7 @@ jobs:
           YOUTUBE_API_KEY:   ${{ secrets.YOUTUBE_API_KEY }}
           GH_TOKEN:          ${{ secrets.GH_TOKEN }}
           ADMIN_PASSWORD:    ${{ secrets.ADMIN_PASSWORD }}
+          GEMINI_API_KEY:    ${{ secrets.GEMINI_API_KEY }}
           SKIP_YOUTUBE:      ${{ github.event.inputs.skip_youtube || 'false' }}
           SKIP_ANALYST:      ${{ github.event.inputs.skip_analyst || 'false' }}
           MPLBACKEND:        Agg
