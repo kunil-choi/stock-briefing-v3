@@ -28,6 +28,10 @@ AI 주식 브리핑 분석 엔진
                pre-market(8시대) 종목은 현재가, 정규장 전(9시 전) 종목은 전일 종가 표시
 - FIX-STOCK-COUNT-1: Claude rules에서 "유의미한 종목만 선별" 지시 제거
                      → 프롬프트로 넘긴 종목 전체를 반드시 포함하도록 강제
+- GEMINI-VAL-1: Gemini 검수 파이프라인 연결
+               JSON 파싱 직후 run_full_validation() 호출
+               코드 룰 검수 → 누락 종목 보충 → Gemini 내용 검수(조건부) → PDF 검수
+               GEMINI_API_KEY 없으면 코드 룰 검수 + 누락 보충만 실행
 """
 
 import json
@@ -191,11 +195,22 @@ def extract_mentions(all_data: list, stock_map: dict,
         text      = f"{title} {summary}"
         weight    = weight_map.get(src_name, default_weights.get(ch_type, 1.0))
 
+        # GEMINI-VAL-1: Gemini가 추출한 발언은 confidence 낮음일 때 가중치 절반
+        if item.get("_from_gemini") and item.get("gemini_confidence") == "낮음":
+            weight *= 0.5
+
         for name, code in stock_map.items():
             if not _is_valid_stock_name(name):
                 continue
-            if name not in text:
-                continue
+
+            # GEMINI-VAL-1: stock_name 힌트 필드 활용 — 직접 매칭 우선
+            gemini_stock = item.get("stock_name", "")
+            if gemini_stock:
+                if name != gemini_stock:
+                    continue
+            else:
+                if name not in text:
+                    continue
 
             content_id = f"{src_name}_{link}_{name}"
 
@@ -223,6 +238,10 @@ def extract_mentions(all_data: list, stock_map: dict,
 
             idx     = text.find(name)
             snippet = text[max(0, idx - 50): idx + 150].strip()
+
+            # GEMINI-VAL-1: Gemini 발언 항목은 statement 원문을 snippet으로 우선 사용
+            if item.get("_from_gemini") and item.get("content"):
+                snippet = item["content"][:200]
 
             entry["channels"][ch_type].append({
                 "source_name":  src_name,
@@ -351,7 +370,6 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
                           all_data: list, today_date: str,
                           now_kst: str, stock_prices: dict = None) -> str:
 
-    # FIX-ACC-1: 애널리스트 요약 맵 구성
     analyst_summary_map = _build_analyst_summary_map(all_data)
 
     headlines = []
@@ -362,6 +380,12 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         stock   = item.get("stock_name", "")
         url     = item.get("link") or item.get("url", "")
         summary = (item.get("summary") or item.get("content") or "")[:120]
+
+        # GEMINI-VAL-1: Gemini 발언 항목은 발언자 정보 포함하여 헤드라인 품질 강화
+        if item.get("_from_gemini") and item.get("gemini_speaker"):
+            speaker = item["gemini_speaker"]
+            title   = f"[{speaker} 발언] {title}" if title else f"[{speaker} 발언]"
+
         if title:
             line = f"[{stype}/{src}] {title}"
             if stock:
@@ -378,7 +402,6 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
     stocks_info  = []
     stock_prices = stock_prices or {}
 
-    # FIX-STOCK-COUNT-1: 프롬프트에 종목 수 명시 (Claude가 임의로 줄이지 못하게)
     stock_name_list = [name for name, _ in top_stocks]
 
     for rank, (name, data) in enumerate(top_stocks, 1):
@@ -400,7 +423,6 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
                 f"{price_str})")
         stocks_info.append(line)
 
-        # FIX-ACC-1: 애널리스트 리포트 실제 요약 포함
         if name in analyst_summary_map:
             for rpt in analyst_summary_map[name]:
                 rpt_parts = []
@@ -443,7 +465,6 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
     stocks_text = "\n".join(stocks_info)
     hidden_text = "\n".join(hidden_info) if hidden_info else "해당 없음"
 
-    # FIX-ACC-1: ai_strategy에서 근거 없는 수치 필드 완전 제거
     prompt_json_structure = (
         '{\n'
         f'  "briefing_date": "{today_date}",\n'
@@ -516,7 +537,6 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         '}'
     )
 
-    # FIX-STOCK-COUNT-1: 종목 목록을 명시하여 Claude가 임의 축소 불가하도록 강제
     stock_list_str = ", ".join(stock_name_list)
 
     rules = (
@@ -572,7 +592,7 @@ def _try_parse_json(text: str) -> Optional[dict]:
     return None
 
 
-# ── ai_strategy dict → HTML 문자열 변환 (FIX-ACC-1: 수치 필드 제거) ──────────
+# ── ai_strategy dict → HTML 문자열 변환 ──────────────────────────────────────
 
 def _format_ai_strategy(strategy: dict) -> str:
     if not isinstance(strategy, dict):
@@ -611,7 +631,6 @@ def _format_ai_strategy(strategy: dict) -> str:
     if analyst_consensus:
         lines.append(f"■ 애널리스트 종합 시각\n{analyst_consensus}")
 
-    # FIX-ACC-1: allocation / stock_plans / cash_policy 렌더링 완전 제거
     return "\n\n".join(lines)
 
 
@@ -678,7 +697,7 @@ def analyze_and_generate_html(
 ) -> str:
     from .html_generator import generate_html
     from .naver_finance import fetch_naver_stock_price
-    from config import ANTHROPIC_API_KEY
+    from config import ANTHROPIC_API_KEY, GEMINI_API_KEY   # GEMINI-VAL-1
 
     now_kst       = datetime.now(KST)
     today_date    = now_kst.strftime("%Y년 %m월 %d일")
@@ -695,15 +714,12 @@ def analyze_and_generate_html(
     filtered       = filter_mentions(mentions)
     filtered_names = {name for name, _ in filtered}
 
-    # ── FIX-PRICE-4: 주가 조회 및 pre-market 여부 함께 수집 ──────────────────
-    stock_prices = {}
-    now_hour = now_kst.hour
-    now_minute = now_kst.minute
-    # 08:00~08:59 → pre-market(K-OTC·야간선물 거래 시간대): 현재가 표시 가능
-    # 09:00 이전이면서 08:00 이전 → 전일 종가
-    # 09:00 이후 → 정규장 현재가
-    is_regular_market = (now_hour > 9) or (now_hour == 9 and now_minute >= 0)
-    is_premarket_window = (now_hour == 8)  # 08:00~08:59
+    # ── FIX-PRICE-4: 주가 조회 ───────────────────────────────────────────────
+    stock_prices        = {}
+    now_hour            = now_kst.hour
+    now_minute          = now_kst.minute
+    is_regular_market   = (now_hour > 9) or (now_hour == 9 and now_minute >= 0)
+    is_premarket_window = (now_hour == 8)
 
     print(f"[주가조회] 현재 시각 {now_kst_str} KST — "
           f"{'정규장' if is_regular_market else ('프리마켓' if is_premarket_window else '장전')}")
@@ -716,14 +732,9 @@ def analyze_and_generate_html(
         price_info = fetch_naver_stock_price(name, code_override=code)
         if not price_info or price_info.get("price", 0) <= 0:
             continue
-
-        # pre-market 창(08:xx)이거나 정규장이면 현재가 그대로 표시
-        # 그 외(07:xx 이전)에는 전일 종가임을 명시
-        if is_regular_market or is_premarket_window:
-            price_info["price_label"] = "현재가"
-        else:
-            price_info["price_label"] = "전일종가"
-
+        price_info["price_label"] = (
+            "현재가" if (is_regular_market or is_premarket_window) else "전일종가"
+        )
         stock_prices[name] = price_info
 
     print(f"[주가조회] {len(stock_prices)}/{len(filtered)}개 종목 주가 수집 완료")
@@ -732,7 +743,7 @@ def analyze_and_generate_html(
 
     prompt = build_analysis_prompt(
         filtered, hidden_candidates, all_data, today_date, now_kst_str,
-        stock_prices=stock_prices
+        stock_prices=stock_prices,
     )
 
     print(f"[Claude] 프롬프트 길이: {len(prompt)}자")
@@ -748,38 +759,50 @@ def analyze_and_generate_html(
         print("[Claude] JSON 파싱 실패 → fallback")
         return _fallback_html("AI 응답 파싱 실패. 잠시 후 다시 시도하세요.", briefing_date)
 
+    # ── GEMINI-VAL-1: 검수 파이프라인 ────────────────────────────────────────
+    # 순서: 코드 룰 검수 → 누락 종목 보충 → Gemini 내용 검수(조건부) → PDF 검수
+    # GEMINI_API_KEY 없어도 코드 룰 검수 + 누락 보충은 항상 실행
+    try:
+        from .gemini_validator import run_full_validation
+        result = run_full_validation(
+            result,
+            filtered,
+            all_data,
+            GEMINI_API_KEY,   # 없으면 "" → Gemini 단계만 스킵
+        )
+    except Exception as e:
+        print(f"[검수] 파이프라인 오류 (브리핑은 계속 진행): {e}")
+    # ── GEMINI-VAL-1 끝 ──────────────────────────────────────────────────────
+
     ai_strat = result.get("ai_strategy")
     if isinstance(ai_strat, dict):
         result["ai_strategy"] = _format_ai_strategy(ai_strat)
 
     mention_lookup = dict(filtered)
 
-    # ── FIX-PRICE-4: result["stocks"]에 주가 정보 병합 ───────────────────────
+    # ── FIX-PRICE-4: result["stocks"]에 주가 병합 ────────────────────────────
     for stock in result.get("stocks", []):
-        name = stock.get("name", "")
-
-        # 주가 병합
+        name       = stock.get("name", "")
         price_info = stock_prices.get(name)
-        if price_info and isinstance(price_info, dict) and price_info.get("price", 0) > 0:
-            stock["price"]        = price_info["price"]
-            stock["change_pct"]   = price_info.get("change_pct", 0.0)
-            stock["price_label"]  = price_info.get("price_label", "현재가")
-        else:
-            stock["price"]        = 0
-            stock["change_pct"]   = 0.0
-            stock["price_label"]  = "전일종가"
 
-        # 언급 통계 병합
+        if price_info and isinstance(price_info, dict) and price_info.get("price", 0) > 0:
+            stock["price"]       = price_info["price"]
+            stock["change_pct"]  = price_info.get("change_pct", 0.0)
+            stock["price_label"] = price_info.get("price_label", "현재가")
+        else:
+            stock["price"]       = 0
+            stock["change_pct"]  = 0.0
+            stock["price_label"] = "전일종가"
+
         if name in mention_lookup:
             data = mention_lookup[name]
-            cc   = {}
-            for ch_type, items in data["channels"].items():
-                cc[ch_type] = len(items)
-            stock["channel_counts"]  = cc
-            stock["total_count"]     = data["total_count"]
-            stock["weighted_score"]  = round(data["weighted_score"], 2)
-            stock["overlap_count"]   = len(data["channel_types"])
-            stock["reasons"]         = []
+            cc   = {ch_type: len(items)
+                    for ch_type, items in data["channels"].items()}
+            stock["channel_counts"] = cc
+            stock["total_count"]    = data["total_count"]
+            stock["weighted_score"] = round(data["weighted_score"], 2)
+            stock["overlap_count"]  = len(data["channel_types"])
+            stock["reasons"]        = []
 
     hidden_lookup = {p["name"]: p for p in hidden_candidates}
     for hp in result.get("hidden_picks", []):
