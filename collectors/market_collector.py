@@ -10,6 +10,8 @@
 - BUG-8 FIX : 야간선물 수집 전면 재작성
 - FIX-MKT-5 : 장 시작 전(09:00 KST 이전)에는 전일 종가 + "전일종가" 라벨 표시
 - FIX-MKT-6 : _is_premarket() 주말(토·일) 처리 추가 (BUG-M1)
+- FIX-MKT-7 : 나스닥/S&P500/다우존스/달러원은 is_premarket=False 고정
+              (당일 오전 마감 지표 또는 실시간 환율 — (전일) 라벨 불필요)
 """
 
 import re
@@ -193,6 +195,7 @@ def collect_market_overview() -> dict:
         print("  [장전/주말] 전일 종가 기준으로 표시")
 
     # ── KOSPI ─────────────────────────────────────────────────────────────────
+    # FIX-MKT-7: KOSPI/KOSDAQ만 is_premarket 플래그 적용
     val, pct = _fetch_yf("^KS11")
     if val is None:
         val, pct = _fetch_naver_index("KOSPI")
@@ -201,6 +204,7 @@ def collect_market_overview() -> dict:
         print(f"  KOSPI: {val:,.2f} ({pct:+.2f}%)" + (" [전일종가]" if premarket else ""))
 
     # ── KOSDAQ ────────────────────────────────────────────────────────────────
+    # FIX-MKT-7: KOSPI/KOSDAQ만 is_premarket 플래그 적용
     val, pct = _fetch_yf("^KQ11")
     if val is None:
         val, pct = _fetch_naver_index("KOSDAQ")
@@ -209,21 +213,24 @@ def collect_market_overview() -> dict:
         print(f"  KOSDAQ: {val:,.2f} ({pct:+.2f}%)" + (" [전일종가]" if premarket else ""))
 
     # ── NASDAQ ────────────────────────────────────────────────────────────────
+    # FIX-MKT-7: 당일 오전 마감 지표 — is_premarket=False 고정
     val, pct = _fetch_yf("^IXIC")
     if val is not None:
-        result["nasdaq"] = _make_indicator(val, pct, is_premarket=premarket)
+        result["nasdaq"] = _make_indicator(val, pct, is_premarket=False)
         print(f"  NASDAQ: {val:,.2f} ({pct:+.2f}%)")
 
     # ── S&P 500 ───────────────────────────────────────────────────────────────
+    # FIX-MKT-7: 당일 오전 마감 지표 — is_premarket=False 고정
     val, pct = _fetch_yf("^GSPC")
     if val is not None:
-        result["sp500"] = _make_indicator(val, pct, is_premarket=premarket)
+        result["sp500"] = _make_indicator(val, pct, is_premarket=False)
         print(f"  S&P500: {val:,.2f} ({pct:+.2f}%)")
 
     # ── 다우존스 ──────────────────────────────────────────────────────────────
+    # FIX-MKT-7: 당일 오전 마감 지표 — is_premarket=False 고정
     val, pct = _fetch_yf("^DJI")
     if val is not None:
-        result["dow"] = _make_indicator(val, pct, is_premarket=premarket)
+        result["dow"] = _make_indicator(val, pct, is_premarket=False)
         print(f"  DOW: {val:,.2f} ({pct:+.2f}%)")
 
     # ── KOSPI200 야간선물 ──────────────────────────────────────────────────────
@@ -243,11 +250,12 @@ def collect_market_overview() -> dict:
         print("  KOSDAQ150 야간선물: 거래 시간 외 또는 데이터 없음 → 스킵")
 
     # ── USD/KRW ───────────────────────────────────────────────────────────────
+    # FIX-MKT-7: 생성 시점 환율 — is_premarket=False 고정
     val, pct = _fetch_yf("KRW=X")
     if val is None:
         val, pct = _fetch_naver_forex()
     if val is not None:
-        result["usd_krw"] = _make_indicator(val, pct, is_premarket=premarket)
+        result["usd_krw"] = _make_indicator(val, pct, is_premarket=False)
         print(f"  USD/KRW: {val:,.2f} ({pct:+.2f}%)")
 
     if not result:
