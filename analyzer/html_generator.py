@@ -72,8 +72,8 @@ _HP_SOURCE_META = {
 _HP_SOURCE_DEFAULT = {"color": "#adb5bd", "icon": "📌", "label": "단독 언급"}
 
 _INDICATOR_DEFS = [
-    ("전일 코스피",        ["kospi",           "KOSPI"]),
-    ("전일 코스닥",        ["kosdaq",          "KOSDAQ"]),
+    ("코스피",             ["kospi",           "KOSPI"]),
+    ("코스닥",             ["kosdaq",          "KOSDAQ"]),
     ("나스닥",             ["nasdaq",          "NASDAQ"]),
     ("S&P500",             ["sp500",           "SP500", "s&p500"]),
     ("다우존스",           ["dow",             "DOW",   "dow_jones"]),
@@ -153,7 +153,7 @@ def _indicator_badge(label: str, value, pct, direction: str = "",
         val_str = str(value)
 
     pct_str   = f"{pct_num:+.2f}%"
-    pre_label = (' <span style="font-size:.65rem;color:#555;">(전일)</span>'
+    pre_label = (' <span style="font-size:.65rem;color:#adb5bd;">(전일 종가)</span>'
                  if is_premarket else "")
     return (
         f'<div class="indicator-badge">'
