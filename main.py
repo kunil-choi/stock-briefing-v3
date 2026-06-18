@@ -1,8 +1,9 @@
 # main.py
 """
 수정 이력:
-- FIX-RPT-1: collect_analyst에 api_key=ANTHROPIC_API_KEY 전달
-             리포트 본문 크롤링 + Claude 1문장 요약 기능 활성화
+- FIX-RPT-1  : collect_analyst에 api_key=ANTHROPIC_API_KEY 전달
+- GEMINI-MAIN: Gemini 유튜브 영상 분석 파이프라인 추가
+               수집 후 → Gemini 영상 분석 → 발언 확장 → Claude 분석 순서
 """
 import os
 import json
@@ -13,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from config import (
     ANTHROPIC_API_KEY, YOUTUBE_API_KEY, GH_TOKEN, GITHUB_REPO,
+    GEMINI_API_KEY,
     NEWS_RSS_FEEDS, REPORT_DAYS, load_channels,
 )
 from collectors.news_collector    import collect_news
@@ -47,6 +49,7 @@ def main():
         "ANTHROPIC": ANTHROPIC_API_KEY,
         "YOUTUBE":   YOUTUBE_API_KEY,
         "GH_TOKEN":  GH_TOKEN,
+        "GEMINI":    GEMINI_API_KEY,     # GEMINI-MAIN
     }
     all_ok = True
     for name, val in keys.items():
@@ -54,7 +57,8 @@ def main():
             print(f"  {name}: ✅")
         else:
             print(f"  {name}: ❌ 없음")
-            all_ok = False
+            if name != "GEMINI":   # Gemini는 선택적 — 없어도 중단하지 않음
+                all_ok = False
     print(f"  {'정상 동작' if all_ok else '일부 키 없음'}")
 
     # 채널 로드
@@ -77,40 +81,63 @@ def main():
         market_overview = {}
 
     # 2. 뉴스 RSS
-    print("\n[1/4] 뉴스 RSS 수집...")
+    print("\n[1/5] 뉴스 RSS 수집...")
     news_data = safe_collect(collect_news, NEWS_RSS_FEEDS, label="뉴스")
     all_data.extend(news_data)
     print(f"  → {len(news_data)}건")
 
-    # YouTube 클라이언트 (섹션1·2 공용)
+    # YouTube 클라이언트
     youtube = get_youtube_client(YOUTUBE_API_KEY)
 
-    # 3. 등록 채널 플레이리스트 수집 (섹션1)
-    print("\n[2/4] 유튜브 수집 (경제방송/유튜버/증권사 24h)...")
+    # 3. 등록 채널 플레이리스트 수집
+    print("\n[2/5] 유튜브 수집 (경제방송/유튜버/증권사 24h)...")
+    yt_data = []
     if youtube:
         yt_data = safe_collect(
             collect_section1_youtube, youtube, channels, label="유튜브"
         )
-        all_data.extend(yt_data)
         print(f"  → {len(yt_data)}건")
     else:
         print("  → YouTube 클라이언트 없음, 스킵")
 
-    # 4. 패널리스트 이름 검색 수집 (섹션2)
-    print("\n[3/4] 패널리스트 이름 검색 수집 (48h)...")
+    # 4. 패널리스트 이름 검색 수집
+    print("\n[3/5] 패널리스트 이름 검색 수집 (48h)...")
+    panelist_data = []
     if youtube:
         panelist_data = safe_collect(
             collect_panelist_youtube, youtube, label="패널리스트검색"
         )
-        all_data.extend(panelist_data)
         print(f"  → {len(panelist_data)}건")
     else:
         print("  → YouTube 클라이언트 없음, 스킵")
 
+    # ── GEMINI-MAIN: 유튜브 영상 Gemini 직접 분석 ────────────────────────────
+    # 수집된 유튜브 항목을 Gemini 1.5 Pro로 분석하여
+    # 발언자/타임스탬프/실제 발언 원문을 추출하고 all_data에 확장 추가
+    youtube_raw = yt_data + panelist_data
+    if GEMINI_API_KEY and youtube_raw:
+        print(f"\n[GEMINI] 유튜브 영상 분석 시작 ({len(youtube_raw)}개 영상)...")
+        try:
+            from collectors.gemini_youtube_analyzer import (
+                analyze_youtube_items,
+                expand_gemini_mentions,
+            )
+            enriched     = analyze_youtube_items(youtube_raw, GEMINI_API_KEY)
+            expanded     = expand_gemini_mentions(enriched)
+            all_data.extend(expanded)
+            print(f"  → Gemini 분석 완료: {len(expanded)}건 (원본+발언 확장 포함)")
+        except Exception as e:
+            print(f"  [GEMINI] 유튜브 분석 실패 (기존 데이터로 계속 진행): {e}")
+            all_data.extend(youtube_raw)   # 실패 시 원본 그대로 추가
+    else:
+        # Gemini 없으면 기존 방식 그대로
+        all_data.extend(youtube_raw)
+        if not GEMINI_API_KEY:
+            print("\n[GEMINI] API 키 없음 → 유튜브 영상 분석 스킵")
+    # ── GEMINI-MAIN 끝 ────────────────────────────────────────────────────────
+
     # 5. 애널리스트 리포트
-    # FIX-RPT-1: api_key 전달 → 리포트 본문 크롤링 + Claude 1문장 요약 활성화
-    # api_key가 없으면 ai_summary는 빈 문자열로 처리됨 (절대 추정 생성 안 함)
-    print("\n[4/4] 애널리스트 리포트 수집 (본문 크롤링 + Claude 요약 포함)...")
+    print("\n[5/5] 애널리스트 리포트 수집 (본문 크롤링 + Claude 요약 포함)...")
     analyst_data = safe_collect(
         collect_analyst,
         api_key=ANTHROPIC_API_KEY,
@@ -148,8 +175,8 @@ def main():
             shutil.copy2(existing_index, archive_path)
             print(f"[아카이브] 저장: {archive_path}")
 
-    # AI 분석
-    print("\n[AI 분석] Claude API로 분석 시작...")
+    # AI 분석 (Claude + Gemini 검수 포함)
+    print("\n[AI 분석] Claude 분석 + Gemini 검수 시작...")
     try:
         html = analyze_and_generate_html(
             all_data,
@@ -169,7 +196,8 @@ def main():
 
     elapsed = datetime.now(KST).timestamp() - start_time
     print(f"\n✅ 브리핑 완성 → docs/index.html")
-    print(f"=== 완료: {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S KST')} (소요: {elapsed:.0f}초) ===")
+    print(f"=== 완료: {datetime.now(KST).strftime('%Y-%m-%d %H:%M:%S KST')} "
+          f"(소요: {elapsed:.0f}초) ===")
 
 
 if __name__ == "__main__":
