@@ -24,6 +24,10 @@ AI 주식 브리핑 분석 엔진
 - FIX-ACC-1   : 근거 없는 수치(목표가/손절가/배분비율) 프롬프트 및 렌더링에서 완전 제거
                애널리스트 ai_summary를 프롬프트에 포함, signal은 리포트 opinion 우선
                "그럴듯해 보이는 부정확한 수치" 생성 원천 차단
+- FIX-PRICE-4 : stock_prices를 result["stocks"]에 병합 — HTML "전일 종가 조회중" 버그 수정
+               pre-market(8시대) 종목은 현재가, 정규장 전(9시 전) 종목은 전일 종가 표시
+- FIX-STOCK-COUNT-1: Claude rules에서 "유의미한 종목만 선별" 지시 제거
+                     → 프롬프트로 넘긴 종목 전체를 반드시 포함하도록 강제
 """
 
 import json
@@ -374,6 +378,9 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
     stocks_info  = []
     stock_prices = stock_prices or {}
 
+    # FIX-STOCK-COUNT-1: 프롬프트에 종목 수 명시 (Claude가 임의로 줄이지 못하게)
+    stock_name_list = [name for name, _ in top_stocks]
+
     for rank, (name, data) in enumerate(top_stocks, 1):
         price_info = stock_prices.get(name)
         if price_info and isinstance(price_info, dict) and price_info.get("price", 0) > 0:
@@ -437,9 +444,6 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
     hidden_text = "\n".join(hidden_info) if hidden_info else "해당 없음"
 
     # FIX-ACC-1: ai_strategy에서 근거 없는 수치 필드 완전 제거
-    # stock_plans에서 target_price / stop_loss 제거
-    # allocation에서 weight_pct 제거
-    # cash_policy에서 current_pct 제거
     prompt_json_structure = (
         '{\n'
         f'  "briefing_date": "{today_date}",\n'
@@ -512,9 +516,13 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         '}'
     )
 
+    # FIX-STOCK-COUNT-1: 종목 목록을 명시하여 Claude가 임의 축소 불가하도록 강제
+    stock_list_str = ", ".join(stock_name_list)
+
     rules = (
         "[작성 규칙]\n"
-        "1. stocks: 유의미한 관심종목만 선별, 최대 10개\n"
+        f"1. stocks: 아래 종목 목록 전체를 반드시 포함하여 작성. 임의로 제외하지 말 것.\n"
+        f"   → 필수 포함 종목({len(stock_name_list)}개): {stock_list_str}\n"
         "2. signal: 긍정|중립|부정 중 택1\n"
         "   - 애널리스트 리포트에 매수 의견이 있으면 → 긍정 우선\n"
         "   - 매도/부정 의견이 있으면 → 부정 우선\n"
@@ -604,8 +612,6 @@ def _format_ai_strategy(strategy: dict) -> str:
         lines.append(f"■ 애널리스트 종합 시각\n{analyst_consensus}")
 
     # FIX-ACC-1: allocation / stock_plans / cash_policy 렌더링 완전 제거
-    # 재무 데이터 없이 임의 생성된 수치이므로 방송에서 표시하지 않음
-
     return "\n\n".join(lines)
 
 
@@ -689,14 +695,37 @@ def analyze_and_generate_html(
     filtered       = filter_mentions(mentions)
     filtered_names = {name for name, _ in filtered}
 
+    # ── FIX-PRICE-4: 주가 조회 및 pre-market 여부 함께 수집 ──────────────────
     stock_prices = {}
+    now_hour = now_kst.hour
+    now_minute = now_kst.minute
+    # 08:00~08:59 → pre-market(K-OTC·야간선물 거래 시간대): 현재가 표시 가능
+    # 09:00 이전이면서 08:00 이전 → 전일 종가
+    # 09:00 이후 → 정규장 현재가
+    is_regular_market = (now_hour > 9) or (now_hour == 9 and now_minute >= 0)
+    is_premarket_window = (now_hour == 8)  # 08:00~08:59
+
+    print(f"[주가조회] 현재 시각 {now_kst_str} KST — "
+          f"{'정규장' if is_regular_market else ('프리마켓' if is_premarket_window else '장전')}")
     print(f"[주가조회] 관심종목 {len(filtered)}개 현재가 조회 시작")
+
     for name, data in filtered:
         code = data.get("code", "")
-        if code:
-            price_info = fetch_naver_stock_price(name, code_override=code)
-            if price_info and price_info.get("price", 0) > 0:
-                stock_prices[name] = price_info
+        if not code:
+            continue
+        price_info = fetch_naver_stock_price(name, code_override=code)
+        if not price_info or price_info.get("price", 0) <= 0:
+            continue
+
+        # pre-market 창(08:xx)이거나 정규장이면 현재가 그대로 표시
+        # 그 외(07:xx 이전)에는 전일 종가임을 명시
+        if is_regular_market or is_premarket_window:
+            price_info["price_label"] = "현재가"
+        else:
+            price_info["price_label"] = "전일종가"
+
+        stock_prices[name] = price_info
+
     print(f"[주가조회] {len(stock_prices)}/{len(filtered)}개 종목 주가 수집 완료")
 
     hidden_candidates = extract_hidden_picks(mentions, filtered_names)
@@ -724,8 +753,23 @@ def analyze_and_generate_html(
         result["ai_strategy"] = _format_ai_strategy(ai_strat)
 
     mention_lookup = dict(filtered)
+
+    # ── FIX-PRICE-4: result["stocks"]에 주가 정보 병합 ───────────────────────
     for stock in result.get("stocks", []):
         name = stock.get("name", "")
+
+        # 주가 병합
+        price_info = stock_prices.get(name)
+        if price_info and isinstance(price_info, dict) and price_info.get("price", 0) > 0:
+            stock["price"]        = price_info["price"]
+            stock["change_pct"]   = price_info.get("change_pct", 0.0)
+            stock["price_label"]  = price_info.get("price_label", "현재가")
+        else:
+            stock["price"]        = 0
+            stock["change_pct"]   = 0.0
+            stock["price_label"]  = "전일종가"
+
+        # 언급 통계 병합
         if name in mention_lookup:
             data = mention_lookup[name]
             cc   = {}
