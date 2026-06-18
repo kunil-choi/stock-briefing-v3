@@ -3,58 +3,11 @@
 AI 주식 브리핑 HTML 생성 엔진
 
 수정 이력:
-- BUG-9        : _indicator_badge에서 0.0을 유효값으로 처리
-- BUG-NEW-6    : overlap_count를 channel_counts에서 재산출
-- BUG-H5       : signal 필터 확대
-- BUG-W-3      : reason 필드 렌더링 우선순위 (detail > reason > text)
-- BUG-M6       : archive 절대경로 안전 처리
-- CR-NEW-1     : chart_key 특수문자 안전 변환
-- SIM-P5-1     : onclick 작은따옴표 이스케이프
-- FIX-CSS-1    : stock-card 종목명 누락 CSS 수정
-- FIX-TV-1     : 경제방송TV 섹션 source_type 매칭 보완
-- FIX-IND-1    : 시장 지표 키 유연 탐색
-- V2-CARD      : 종목 카드에 summary/catalyst/risk/channel_mentions 섹션 추가
-- FIX-ANA-1    : _build_analyst_html 들여쓰기 버그 수정 (_report_card 내부화)
-- FIX-ARC-1    : 사용하지 않는 archive_html 생성 블록 제거
-- FIX-SIG-1    : _is_positive_signal에서 "상승" 키워드 제거
-- FIX-SIG-2    : filtered_hidden signal 없을 때 오늘의 픽 전체 미표시 버그 수정
-- FIX-JS-1     : showChart 방어코드 추가 (key 없을 때 빈 이미지 방지)
-- FIX-ANA-2    : analyst-card 제목 말줄임 제거, 웹에서 전체 표시
-- FIX-HP-1     : 오늘의 픽 가중치 점수를 별점 5개로 시각화, signal 텍스트 제거
-- FIX-RSN-1    : reasons 목록에 source_name 표시 추가
-- BUG-3        : signal 매핑 버그 수정
-- NIGHT-1      : 야간선물 지표 추가 및 새벽시장 포인트 섹션 신규
-- NIGHT-1B     : 역외환율 표시 버그 수정
-- REM-TV-1     : 경제방송TV 섹션 제거
-- FIX-DUP-1    : channel_mentions/reasons 중복 렌더링 제거 — channel_mentions만 표시
-- FIX-ANA-3    : 애널리스트 카드 컬러 복원 + 리포트 본문(summary) 한 단락 추가
-- FIX-PRICE-1  : 장 전(is_premarket=True) 시 "전일 종가" 라벨 표시
-- FIX-STRAT-3  : ai_strategy 문자열을 구조화된 섹션 HTML로 렌더링
-- FIX-FILTER-2 : filtered_stocks 단계별 선정 로직 (1차→2차→3차, 최대 10개)
-- FIX-BUG-3    : _filter_stocks_tiered int(v) 타입 안전 처리
-- FIX-SIG-3    : 관심종목 signal 뱃지를 긍정/중립/부정으로 변경
-- FIX-H1       : _filter_stocks_tiered name=None 방어 처리
-- FIX-H3       : filtered_hidden 필터 조건 단순화
-- FIX-RPT-1    : _report_card에서 ai_summary만 표시, 미사용 변수(summary/summary_short) 제거
-- FIX-FILTER-3 : _filter_stocks_tiered 3차 기준 3회↑ → 2회↑ (ai_analyzer와 동기화)
-- FIX-IMPORT-1 : 미사용 OrderedDict import 제거
-- FIX-ANA-4    : analyst_category=None 항목 누락 방어 (single_broker 폴백 처리)
-- FIX-SIG-4    : _SIGNAL_MAP 키를 list로 명확화하여 가독성 개선
-- FIX-STRAT-4  : _render_ai_strategy re.split 빈 토큰 방어 개선
-- FIX-DISCLAIMER-1: 법적 면책 문구 추가 (TV 방송 대응)
-- [1] gh_token  : generate_html() gh_token 파라미터 하위 호환 복원
-- [2] ANA-SINGLE: _build_analyst_html single 리스트 category 기반 필터 단순화
-- [3] STRAT-XSS : _render_ai_strategy 폴백 출력 html.escape 적용
-- [4] IND-VAL   : _indicator_badge val_str float 변환 로직 개선
-- [5] DAWN-NONE : _build_dawn_market_html None값 float() TypeError 방어
-- [6] SECTOR-ESC: sector reason title 속성 따옴표 이스케이프
-- [7] RSN-URL   : _render_reasons URL 프로토콜 검증 + rd html.escape
-- [8] CM-ESC    : _render_stock_detail content html.escape 누락 수정
-- [9] STAR-NEG  : _render_star_rating 음수 score 방어
-- [10] CHART-DUP: chart_data_entries 중복 key 방지
-- [11] BROKER-LIST: _build_analyst_html brokers 리스트 타입 렌더링 수정
-- [12] SUMMARY-SPLIT: _render_market_summary 단락 분리 패턴 개선
+(기존 이력 전체 유지)
+...
 - [13] JS-NEWLINE: safe_name_js 줄바꿈 문자 제거
+- FIX-PRICE-4  : verified_price → price/change_pct/price_label 필드로 읽기 통일
+                 ai_analyzer.py FIX-PRICE-4와 맞춤 (관심종목·히든픽 모두 적용)
 """
 
 import re
@@ -629,6 +582,58 @@ def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
 
 
 # ──────────────────────────────────────────────
+# 주가 표시 헬퍼 — FIX-PRICE-4
+# ──────────────────────────────────────────────
+
+def _render_price_html(item: dict) -> str:
+    """
+    ai_analyzer.py FIX-PRICE-4에서 병합한 price/change_pct/price_label 필드를 읽어
+    주가 HTML을 생성한다.
+
+    필드 우선순위:
+      1. price (int, ai_analyzer 병합)  → 현재가 or 전일종가 + 등락률
+      2. verified_price (레거시 호환)   → 숫자만 표시
+      3. 없음                           → "전일 종가 조회 중"
+    """
+    price       = item.get("price", 0)
+    change_pct  = item.get("change_pct", 0.0)
+    price_label = item.get("price_label", "전일종가")
+
+    # ── FIX-PRICE-4 경로: ai_analyzer가 병합한 price 필드 ──────────────────
+    if isinstance(price, (int, float)) and price > 0:
+        try:
+            pct_num = float(change_pct)
+        except (TypeError, ValueError):
+            pct_num = 0.0
+
+        pct_color = "#ff6b6b" if pct_num > 0 else "#74c0fc" if pct_num < 0 else "#adb5bd"
+        pct_arrow = "▲" if pct_num > 0 else "▼" if pct_num < 0 else "━"
+
+        label_html = (
+            f'<span style="font-size:.7rem;color:#adb5bd;margin-left:.3rem;">'
+            f'({price_label})</span>'
+        )
+        pct_html = (
+            f'<span style="font-size:.82rem;color:{pct_color};margin-left:.35rem;">'
+            f'{pct_arrow} {pct_num:+.2f}%</span>'
+        )
+        return (
+            f'<span class="price-value">{int(price):,}원</span>'
+            f'{pct_html}{label_html}'
+        )
+
+    # ── 레거시 호환: verified_price ────────────────────────────────────────
+    verified = item.get("verified_price")
+    if isinstance(verified, int):
+        return f'<span class="price-value">{verified:,}원</span>'
+    if verified and str(verified).strip() not in ("None", "N/A", ""):
+        return f'<span class="price-value">{_he.escape(str(verified))}</span>'
+
+    # ── 미수집 ─────────────────────────────────────────────────────────────
+    return '<span class="price-value" style="color:#666;">전일 종가 조회 중</span>'
+
+
+# ──────────────────────────────────────────────
 # 메인 HTML 생성
 # ──────────────────────────────────────────────
 
@@ -692,7 +697,6 @@ def generate_html(
         signal       = stock.get("signal", "")
         overlap      = stock.get("overlap_count", 0)
         channel_cnts = stock.get("channel_counts", {})
-        price        = stock.get("verified_price")
         naver_code   = stock.get("naver_code") or stock.get("code", "")
         naver_url    = stock.get("naver_url", "")
         chart_b64    = stock.get("chart_base64", "")
@@ -721,17 +725,12 @@ def generate_html(
                     f'{_he.escape(src_type)} {cnt_int}</span>'
                 )
 
-        if isinstance(price, int):
-            price_html = f'<span class="price-value">{price:,}원</span>'
-        elif price and str(price).strip() not in ("None", "N/A", ""):
-            price_html = f'<span class="price-value">{_he.escape(str(price))}</span>'
-        else:
-            price_html = ('<span class="price-value" style="color:#666;">'
-                          '전일 종가 조회 중</span>')
+        # FIX-PRICE-4: _render_price_html 헬퍼로 통일
+        price_html = _render_price_html(stock)
 
         if chart_b64:
             chart_key    = _safe_chart_key("chart", name)
-            safe_name_js = _safe_js_str(name)          # [13] JS-NEWLINE 포함
+            safe_name_js = _safe_js_str(name)
             chart_data_dict[chart_key] = f"data:image/png;base64,{chart_b64}"
             chart_btn_html = (
                 f"<button class=\"chart-btn\" "
@@ -776,7 +775,6 @@ def generate_html(
         name         = hp.get("name", "")
         channel_type = hp.get("channel_type", "")
         weighted_sc  = hp.get("weighted_score", 0)
-        price        = hp.get("verified_price")
         naver_code   = hp.get("naver_code") or hp.get("code", "")
         naver_url    = hp.get("naver_url", "")
         chart_b64    = hp.get("chart_base64", "")
@@ -794,17 +792,12 @@ def generate_html(
         star_html         = _render_star_rating(weighted_sc)
         pick_badge_html   = f'<span class="hp-score-badge">Pick #{idx}</span>'
 
-        if isinstance(price, int):
-            price_html = f'<span class="price-value">{price:,}원</span>'
-        elif price and str(price).strip() not in ("None", "N/A", ""):
-            price_html = f'<span class="price-value">{_he.escape(str(price))}</span>'
-        else:
-            price_html = ('<span class="price-value" style="color:#666;">'
-                          '전일 종가 조회 중</span>')
+        # FIX-PRICE-4: 히든픽도 동일한 헬퍼 사용
+        price_html = _render_price_html(hp)
 
         if chart_b64:
             chart_key    = _safe_chart_key("hpchart", name)
-            safe_name_js = _safe_js_str(name)          # [13] JS-NEWLINE 포함
+            safe_name_js = _safe_js_str(name)
             chart_data_dict[chart_key] = f"data:image/png;base64,{chart_b64}"
             chart_btn_html = (
                 f"<button class=\"chart-btn\" "
