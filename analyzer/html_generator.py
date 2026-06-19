@@ -6,8 +6,12 @@ AI 주식 브리핑 HTML 생성 엔진
 ...
 - [13] JS-NEWLINE: safe_name_js 줄바꿈 문자 제거
 - FIX-PRICE-4  : verified_price → price/change_pct/price_label 필드로 읽기 통일
-                 ai_analyzer.py FIX-PRICE-4와 맞춤 (관심종목·히든픽 모두 적용)
 - TIER-FILTER-1: _HP_SOURCE_META, _TAG_META에 증권사 항목 추가
+- FIX-PRICE-5  : 미수집 시 "전일 종가 조회 중" 문구 제거 → "-" 표시
+- FIX-OVERLAP-1: _filter_stocks_tiered() overlap_count 재계산 조건
+                 overlap_count==0 → "overlap_count" not in s 로 변경
+                 (ai_analyzer에서 설정한 0값을 덮어쓰지 않도록)
+- FIX-STAR-1   : _render_star_rating() max_score 5.0 → 20.0 으로 상향
 """
 
 import re
@@ -45,7 +49,7 @@ _TAG_META = {
     "증권사":     {"bg": "#2d1a3a", "color": "#cc5de8"},  # TIER-FILTER-1
 }
 
-# FIX-SIG-4: 키를 list of tuples로 명확화
+# FIX-SIG-4
 _SIGNAL_MAP = [
     (["강력매수", "매수", "buy", "긍정", "positive"], ("signal-positive", "#51cf66", "긍정")),
     (["관망", "hold", "중립", "neutral"],             ("signal-neutral",  "#adb5bd", "중립")),
@@ -74,12 +78,11 @@ def _safe_chart_key(prefix: str, name: str) -> str:
 
 
 def _safe_js_str(s: str) -> str:
-    # [13] JS-NEWLINE: 줄바꿈 문자 제거 후 JS 이스케이프
+    # [13] JS-NEWLINE
     s = s.replace('\r', '').replace('\n', ' ')
     return s.replace("\\", "\\\\").replace("'", "\\'")
 
 
-# [5] DAWN-NONE: None 값 float() 변환 TypeError 방어용 헬퍼
 def _safe_float(d: dict, key: str, default: float = 0.0) -> float:
     try:
         return float(d.get(key) or default)
@@ -100,7 +103,6 @@ def _indicator_badge(label: str, value, pct, direction: str = "",
     color_map = {"up": "#ff6b6b", "down": "#74c0fc", "flat": "#adb5bd"}
     arrow_map = {"up": "▲",       "down": "▼",        "flat": "━"}
 
-    # [4] IND-VAL: float 통일 후 정수 여부 판단으로 변환 로직 개선
     try:
         num = float(str(value).replace(',', '').replace(' ', ''))
         val_str = f"{num:,.0f}" if num == int(num) else f"{num:,.2f}"
@@ -243,7 +245,6 @@ def _build_dawn_market_html(market_overview: dict) -> str:
 def _render_market_summary(market_summary: str) -> str:
     if not market_summary or not market_summary.strip():
         return '<p style="color:#666;">시장 요약 데이터 없음</p>'
-    # [12] SUMMARY-SPLIT: 단락 분리 패턴 개선
     paras = [
         p.strip()
         for p in re.split(r'\n{2,}|\n(?=\d+[\.\)])', market_summary.strip())
@@ -264,13 +265,13 @@ def _render_market_summary(market_summary: str) -> str:
 def _build_analyst_html(all_data: list) -> str:
 
     def _report_card(r: dict) -> str:
-        stock  = r.get("stock_name", "")
-        title  = r.get("report_title") or r.get("title", "")
+        stock       = r.get("stock_name", "")
+        title       = r.get("report_title") or r.get("title", "")
         brokers_raw = r.get("brokers") or r.get("source_name", "")
-        broker = (", ".join(brokers_raw)
-                  if isinstance(brokers_raw, list) else str(brokers_raw))
-        link   = r.get("link", "")
-        is_new = r.get("new_coverage", False)
+        broker      = (", ".join(brokers_raw)
+                       if isinstance(brokers_raw, list) else str(brokers_raw))
+        link        = r.get("link", "")
+        is_new      = r.get("new_coverage", False)
 
         if not link and stock:
             enc  = stock.replace(" ", "+")
@@ -341,7 +342,16 @@ def _hidden_pick_source_badge(channel_type: str) -> str:
     )
 
 
-def _render_star_rating(weighted_score, max_score: float = 5.0) -> str:
+def _render_star_rating(weighted_score, max_score: float = 20.0) -> str:
+    """
+    FIX-STAR-1: max_score를 5.0 → 20.0으로 상향.
+    weighted_score 범위에 맞게 별점 분포 조정:
+      ~4점  → ★☆☆☆☆
+      ~8점  → ★★☆☆☆
+      ~12점 → ★★★☆☆
+      ~16점 → ★★★★☆
+      20점↑ → ★★★★★
+    """
     try:
         score = float(weighted_score)
     except (TypeError, ValueError):
@@ -509,11 +519,12 @@ def _render_ai_strategy(ai_strategy: str) -> str:
 
 def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
     """
-    TIER-FILTER-1과 동기화:
-    overlap_count는 ai_analyzer에서 non_news_channel_types 기준으로 이미 설정됨.
-    html_generator에서는 그 값을 그대로 사용하여 필터링.
+    FIX-OVERLAP-1:
+    ai_analyzer.py에서 overlap_count = len(non_news_channel_types)로
+    이미 설정해서 넘어온다. "overlap_count" 키가 없을 때만 하위호환 재계산.
+    overlap_count=0으로 명시된 경우(뉴스만 언급)는 재계산하지 않음.
 
-    1차: overlap_count >= 2 (비뉴스 채널타입 2종 이상)
+    1차: overlap_count >= 2
     2차: total_count >= 4
     3차: total_count >= 2
     """
@@ -521,9 +532,9 @@ def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
     selected_names = set()
 
     for s in stocks:
-        cc = s.get("channel_counts", {})
-        if cc and s.get("overlap_count", 0) == 0:
-            # overlap_count가 아직 0이면 channel_counts 기반으로 재계산 (하위호환)
+        # FIX-OVERLAP-1: 키 자체가 없을 때만 하위호환 재계산
+        if "overlap_count" not in s:
+            cc         = s.get("channel_counts", {})
             safe_count = 0
             for v in cc.values():
                 try:
@@ -577,19 +588,16 @@ def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
 
 def _render_price_html(item: dict) -> str:
     """
-    ai_analyzer.py에서 병합한 price/change_pct/price_label 필드를 읽어
-    주가 HTML을 생성한다.
-
-    FIX-PRICE-5: 한국 주식시장은 프리마켓 없음.
+    FIX-PRICE-5: 한국 주식시장 프리마켓 없음.
     - price_label = "현재가"  → 09:00 이후 정규장
-    - price_label = "전일종가" → 09:00 이전 (Naver API 반환값이 전일종가)
-    - price = 0 또는 없음     → "전일 종가 조회 중" 표시 제거, 빈 상태로 처리
+    - price_label = "전일종가" → 09:00 이전
+    - price = 0 또는 없음     → "-" 표시 (FIX-PRICE-5: "전일 종가 조회 중" 제거)
     """
     price       = item.get("price", 0)
     change_pct  = item.get("change_pct", 0.0)
     price_label = item.get("price_label", "전일종가")
 
-    # FIX-PRICE-4 경로: ai_analyzer가 병합한 price 필드
+    # FIX-PRICE-4: ai_analyzer가 병합한 price 필드
     if isinstance(price, (int, float)) and price > 0:
         try:
             pct_num = float(change_pct)
@@ -619,8 +627,7 @@ def _render_price_html(item: dict) -> str:
     if verified and str(verified).strip() not in ("None", "N/A", ""):
         return f'<span class="price-value">{_he.escape(str(verified))}</span>'
 
-    # FIX-PRICE-5: 미수집 시 "전일 종가 조회 중" 문구 제거
-    # → 주가 미수집 상태를 조용히 처리 (빈 span)
+    # FIX-PRICE-5: 미수집 시 조용히 "-" 표시
     return '<span class="price-value" style="color:#666;">-</span>'
 
 
@@ -664,7 +671,6 @@ def generate_html(
     market_summary_html    = _render_market_summary(market_sum)
     dawn_market_html       = _build_dawn_market_html(market_overview)
 
-    # [6] SECTOR-ESC
     sector_badges_html = ""
     for sector in hot_sectors:
         if isinstance(sector, dict):
@@ -679,7 +685,6 @@ def generate_html(
                 f'<div class="sector-badge">{_he.escape(str(sector))}</div>'
             )
 
-    # [10] CHART-DUP: 중복 key 방지를 위해 dict 사용
     chart_data_dict = {}
     stocks_html     = ""
 
@@ -823,7 +828,6 @@ def generate_html(
         hidden_html = ('<p style="color:#666;text-align:center;padding:1.5rem;">'
                        '오늘의 픽 없음</p>')
 
-    # [10] CHART-DUP: dict → JS 객체 문자열 변환
     if chart_data_dict:
         entries       = [f'"{k}": "{v}"' for k, v in chart_data_dict.items()]
         chart_data_js = "const chartDataMap = {\n  " + ",\n  ".join(entries) + "\n};"
@@ -932,17 +936,14 @@ a:hover { text-decoration: underline; }
   min-width: 28px;
 }
 .stock-name-block { display: flex; align-items: center; gap: .5rem; flex: 1; }
-.stock-name {
-  font-size: 1.05rem; font-weight: 700; color: var(--text);
-}
+.stock-name { font-size: 1.05rem; font-weight: 700; color: var(--text); }
 .stock-name:hover { color: var(--accent); }
 .signal-badge {
   font-size: .72rem; padding: .15rem .5rem;
   border-radius: 4px; border: 1px solid; font-weight: 600;
 }
 .overlap-badge {
-  font-size: .78rem; color: #ffa94d; font-weight: 600;
-  white-space: nowrap;
+  font-size: .78rem; color: #ffa94d; font-weight: 600; white-space: nowrap;
 }
 .stock-card-body { padding: .85rem 1rem; }
 .source-tags { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .6rem; }
@@ -980,8 +981,8 @@ a:hover { text-decoration: underline; }
 }
 .hidden-pick-card {
   background: linear-gradient(135deg, var(--surface) 0%, #1a1f2e 100%);
-  border: 1px solid #3d4f6e; border-radius: 12px; margin-bottom: 1rem;
-  overflow: hidden;
+  border: 1px solid #3d4f6e; border-radius: 12px;
+  margin-bottom: 1rem; overflow: hidden;
 }
 .hp-card-header {
   display: flex; align-items: center; gap: .75rem;
@@ -1030,10 +1031,7 @@ a:hover { text-decoration: underline; }
   border-left: 3px solid var(--accent);
 }
 .strat-section { margin-bottom: 1.2rem; }
-.strat-title {
-  font-size: .9rem; font-weight: 700; color: var(--accent);
-  margin-bottom: .4rem;
-}
+.strat-title { font-size: .9rem; font-weight: 700; color: var(--accent); margin-bottom: .4rem; }
 .strat-body { font-size: .88rem; color: var(--text-muted); }
 .strat-text { margin-bottom: .3rem; line-height: 1.6; }
 .strat-item { margin-bottom: .25rem; line-height: 1.55; }
