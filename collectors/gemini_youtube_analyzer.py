@@ -9,9 +9,12 @@ Gemini를 활용한 유튜브 영상 직접 분석 모듈
   - transcript(자막) 기반 분석을 병행하여 API 비용 절감
 
 수정 이력:
-- GEMINI-YT-1 : 최초 작성 — 영상 직접 분석 + transcript 폴백
-- GEMINI-YT-2 : 배치 처리 추가 — 영상 수가 많을 때 병렬 처리 방지용 순차 처리
-- GEMINI-YT-3 : 비용 제어 — 조회수/길이 기준으로 분석 대상 선별
+- GEMINI-YT-1  : 최초 작성 — 영상 직접 분석 + transcript 폴백
+- GEMINI-YT-2  : 배치 처리 추가 — 순차 처리
+- GEMINI-YT-3  : 비용 제어 — 조회수/길이 기준으로 분석 대상 선별
+- GEMINI-YT-4  : Content 구조 오류 수정
+                 {"video_url": url} → parts 리스트 구조로 변경
+                 YouTube URL은 file_data가 아닌 직접 url 방식 사용
 """
 
 import json
@@ -29,10 +32,9 @@ except ImportError:
 
 
 # ── 분석 대상 선별 기준 ───────────────────────────────────────────────────────
-# 비용 제어: 모든 영상을 분석하지 않고 아래 기준으로 우선순위 선별
-_MAX_VIDEOS_PER_RUN   = 20    # 1회 실행당 최대 분석 영상 수
-_MIN_TRANSCRIPT_CHARS = 200   # transcript가 이 길이 이상일 때만 분석 (너무 짧으면 의미 없음)
-_ANALYSIS_SLEEP_SEC   = 1.0   # 영상 간 API 호출 간격 (rate limit 방지)
+_MAX_VIDEOS_PER_RUN   = 20
+_MIN_TRANSCRIPT_CHARS = 200
+_ANALYSIS_SLEEP_SEC   = 1.5   # rate limit 방지 (1.0 → 1.5로 여유 확보)
 
 # ── 프롬프트 템플릿 ───────────────────────────────────────────────────────────
 _PROMPT_VIDEO = """
@@ -70,20 +72,20 @@ _PROMPT_TRANSCRIPT = """
 - 자막에 없는 내용은 절대 추가하지 말 것
 
 JSON 형식으로만 응답하세요:
-{
+{{
   "video_summary": "영상 전체 주제 1~2문장",
   "main_speaker": "주요 발언자 이름 (자막에서 확인된 경우만, 아니면 빈 문자열)",
   "mentions": [
-    {
+    {{
       "stock_name": "종목명",
       "timestamp": "",
       "speaker": "발언자 이름 (확인된 경우만)",
       "statement": "자막 원문에서 해당 발언 발췌",
       "sentiment": "긍정|중립|부정 중 택1",
       "confidence": "높음|보통|낮음"
-    }
+    }}
   ]
-}
+}}
 
 [자막 원문]
 {transcript}
@@ -94,14 +96,12 @@ JSON 형식으로만 응답하세요:
 
 def _parse_gemini_response(text: str) -> Optional[dict]:
     """Gemini 응답에서 JSON 추출."""
-    # 코드블록 안 JSON 우선 시도
     m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
     if m:
         try:
             return json.loads(m.group(1))
         except json.JSONDecodeError:
             pass
-    # 코드블록 없이 순수 JSON
     m = re.search(r'\{.*\}', text, re.DOTALL)
     if m:
         try:
@@ -125,15 +125,19 @@ def _analyze_via_transcript(model, transcript: str, video_url: str) -> Optional[
 
 
 def _analyze_via_video_url(model, video_url: str) -> Optional[dict]:
-    """YouTube URL을 Gemini에 직접 전달하여 영상 분석."""
+    """
+    GEMINI-YT-4:
+    YouTube URL을 Gemini에 전달할 때 올바른 Content 구조 사용.
+    Gemini 1.5 Pro는 YouTube URL을 parts 안의 문자열로 직접 전달 가능.
+    {"video_url": url} 딕셔너리 형식은 잘못된 구조 → parts 리스트로 수정.
+    """
     try:
         response = model.generate_content([
-            {"video_url": video_url},
             _PROMPT_VIDEO,
+            video_url,   # YouTube URL을 문자열로 직접 전달
         ])
         return _parse_gemini_response(response.text)
     except Exception as e:
-        # 영상 접근 불가(비공개/지역 제한 등) 시 None 반환 → transcript로 폴백
         print(f"    [GeminiYT] 영상 직접 분석 실패 ({video_url}): {e}")
         return None
 
@@ -169,20 +173,19 @@ def analyze_youtube_items(
     # 분석 대상 선별 — transcript가 있는 항목 우선, 최대 max_videos개
     candidates = []
     for item in youtube_items:
-        transcript = item.get("summary", "") or ""
-        # summary 필드에 transcript가 저장돼 있음 (youtube_collector 참고)
+        transcript     = item.get("summary", "") or ""
         has_transcript = len(transcript) >= _MIN_TRANSCRIPT_CHARS
         candidates.append((item, transcript, has_transcript))
 
     # transcript 있는 항목 우선 정렬
     candidates.sort(key=lambda x: x[2], reverse=True)
-    to_analyze  = candidates[:max_videos]
-    skip_count  = len(candidates) - len(to_analyze)
+    to_analyze = candidates[:max_videos]
+    skip_count = len(candidates) - len(to_analyze)
 
     print(f"[GeminiYT] 분석 대상: {len(to_analyze)}개 "
           f"(전체 {len(youtube_items)}개 중, {skip_count}개 스킵)")
 
-    enriched = []
+    enriched       = []
     analyzed_count = 0
     failed_count   = 0
 
@@ -192,12 +195,13 @@ def analyze_youtube_items(
 
         result = None
 
-        # 1차 시도: YouTube URL 직접 분석 (Gemini 1.5 Pro 기능)
+        # 1차 시도: YouTube URL 직접 분석
         if video_url:
             result = _analyze_via_video_url(model, video_url)
 
         # 2차 시도: transcript 폴백
         if result is None and has_transcript:
+            print(f"    [GeminiYT] transcript 폴백 시도: {title[:30]}")
             result = _analyze_via_transcript(model, transcript, video_url)
 
         if result:
@@ -240,8 +244,6 @@ def expand_gemini_mentions(enriched_items: list) -> list:
     ai_analyzer.py의 extract_mentions()가 읽을 수 있는 형태로 변환.
 
     기존 항목은 유지하고, 각 mention을 추가 항목으로 append.
-    이렇게 하면 Claude 프롬프트에 "홍길동: 삼성전자 단기 조정 예상" 같은
-    실제 발언이 snippet으로 포함됨.
     """
     expanded = list(enriched_items)  # 기존 항목 유지
 
@@ -250,11 +252,11 @@ def expand_gemini_mentions(enriched_items: list) -> list:
         if not mentions:
             continue
 
-        base_url     = item.get("link", "")
-        source_name  = item.get("source_name", "")
-        source_type  = item.get("source_type", "유튜브")
-        published    = item.get("published", "")
-        speaker      = item.get("gemini_speaker", "")
+        base_url    = item.get("link", "")
+        source_name = item.get("source_name", "")
+        source_type = item.get("source_type", "유튜브")
+        published   = item.get("published", "")
+        speaker     = item.get("gemini_speaker", "")
 
         for mention in mentions:
             stock_name = mention.get("stock_name", "")
@@ -267,32 +269,30 @@ def expand_gemini_mentions(enriched_items: list) -> list:
             if not stock_name or not statement:
                 continue
 
-            # confidence 낮음은 포함하되 가중치 조정을 위해 플래그 표시
             timestamp_url = f"{base_url}&t={timestamp}" if timestamp else base_url
 
-            # 발언 원문을 summary/content로 저장 → extract_mentions가 읽음
             summary = f"[{m_speaker}] {statement}" if m_speaker else statement
             if sentiment != "중립":
                 summary += f" (감성:{sentiment})"
 
             expanded.append({
-                "source_type":    source_type,
-                "source_name":    source_name,
-                "title":          f"{m_speaker or source_name}: {stock_name} 언급",
-                "summary":        summary,
-                "content":        statement,
-                "link":           timestamp_url,
-                "url":            timestamp_url,
-                "published":      published,
-                "stock_name":     stock_name,   # extract_mentions 직접 힌트
-                "gemini_speaker": m_speaker,
-                "gemini_sentiment": sentiment,
+                "source_type":       source_type,
+                "source_name":       source_name,
+                "title":             f"{m_speaker or source_name}: {stock_name} 언급",
+                "summary":           summary,
+                "content":           statement,
+                "link":              timestamp_url,
+                "url":               timestamp_url,
+                "published":         published,
+                "stock_name":        stock_name,
+                "gemini_speaker":    m_speaker,
+                "gemini_sentiment":  sentiment,
                 "gemini_confidence": confidence,
-                "_from_gemini":   True,         # 검수 시 출처 추적용
+                "_from_gemini":      True,
             })
 
-    original_count  = len(enriched_items)
-    expanded_count  = len(expanded) - original_count
+    original_count = len(enriched_items)
+    expanded_count = len(expanded) - original_count
     print(f"[GeminiYT] 발언 확장: {expanded_count}개 항목 추가 "
           f"(원본 {original_count}개 유지)")
     return expanded
