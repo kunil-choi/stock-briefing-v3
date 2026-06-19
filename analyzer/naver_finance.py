@@ -1,7 +1,16 @@
 # analyzer/naver_finance.py
 # FIX-PRICE-1: HTML 파싱 → Naver JSON API 우선, sise_day 폴백
 # FIX-PRICE-2: 주가 단위 오류 방지 (원 단위 정수 반환)
-# FIX-SISE-1 : sise_day 정규식 그룹 인덱스 오류 수정 (m[2]전일비 스킵 → m[3]시가 올바르게 매핑)
+# FIX-SISE-1 : sise_day 정규식 그룹 인덱스 오류 수정
+#              (m[2]전일비 스킵 → m[3]시가 올바르게 매핑)
+# FIX-PRICE-5: 한국 주식시장 프리마켓 없음 반영
+#              09:00 이전 → Naver API 반환값이 전일종가임을 명시
+#              price_label을 호출부(ai_analyzer)에서 결정하므로
+#              naver_finance는 price를 있는 그대로 반환
+# FIX-PRICE-6: API closePrice=0 또는 누락 시 추가 키 탐색 강화
+#              prevClosePrice, stockEndPrice 순으로 폴백
+# FIX-API-2  : Naver Stock API 응답 구조 변화 대응
+#              stockPrice 중첩 객체 내 키도 탐색
 
 import re
 import json
@@ -43,12 +52,37 @@ def _get_json(url: str, timeout: int = 10):
         return None
 
 
+def _parse_int(value) -> int:
+    """
+    콤마·공백·부호 문자를 제거하고 정수로 변환.
+    변환 실패 시 0 반환.
+    """
+    try:
+        return int(str(value).replace(",", "").replace(" ", "").replace("+", ""))
+    except (ValueError, TypeError):
+        return 0
+
+
+def _parse_float(value) -> float:
+    """
+    콤마·공백·%·부호 문자를 제거하고 float으로 변환.
+    변환 실패 시 0.0 반환.
+    """
+    try:
+        return float(
+            str(value).replace("%", "").replace("+", "")
+                      .replace(",", "").replace(" ", "")
+        )
+    except (ValueError, TypeError):
+        return 0.0
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 종목 코드 조회
 # ─────────────────────────────────────────────────────────────────────────────
 
 def search_code_by_autocomplete(stock_name: str) -> dict:
-    """자동완성 API로 종목명 → 코드 변환. 실패 시 None."""
+    """자동완성 API로 종목명 → 코드 변환. 실패 시 None 반환."""
     enc = urllib.parse.quote(stock_name)
     url = (
         f"https://ac.finance.naver.com/ac?"
@@ -56,7 +90,7 @@ def search_code_by_autocomplete(stock_name: str) -> dict:
     )
     raw = _get(url)
     try:
-        data = json.loads(raw)
+        data  = json.loads(raw)
         items = data.get("items", [[]])[0]
         for item in items:
             # item 형식: [name, code, ...]
@@ -80,17 +114,77 @@ def verify_stock_via_naver(stock_name: str) -> dict:
 # 현재가 조회
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _extract_price_from_api(data: dict) -> tuple:
+    """
+    FIX-PRICE-6 / FIX-API-2:
+    Naver Stock API JSON에서 price, change, change_pct를 추출한다.
+
+    탐색 순서 (price):
+      1. data["closePrice"]
+      2. data["stockPrice"]["closePrice"]
+      3. data["prevClosePrice"]            ← FIX-PRICE-6 추가
+      4. data["stockPrice"]["prevClosePrice"]
+      5. data["stockEndPrice"]             ← FIX-API-2 추가
+
+    탐색 순서 (change):
+      1. data["compareToPreviousClosePrice"]
+      2. data["stockPrice"]["compareToPreviousClosePrice"]
+
+    탐색 순서 (change_pct):
+      1. data["fluctuationsRatio"]
+      2. data["stockPrice"]["fluctuationsRatio"]
+
+    반환: (price: int, change: int, change_pct: float)
+    price == 0 이면 조회 실패로 간주.
+    """
+    sp = data.get("stockPrice", {}) or {}
+
+    # ── price ──────────────────────────────────────────────────────────────
+    price = 0
+    for key in ("closePrice", "prevClosePrice", "stockEndPrice"):
+        raw = data.get(key) or sp.get(key)
+        if raw:
+            price = _parse_int(raw)
+            if price > 0:
+                break
+
+    # ── change ─────────────────────────────────────────────────────────────
+    change = 0
+    for key in ("compareToPreviousClosePrice",):
+        raw = data.get(key) or sp.get(key)
+        if raw is not None:
+            change = _parse_int(raw)
+            break
+
+    # ── change_pct ─────────────────────────────────────────────────────────
+    change_pct = 0.0
+    for key in ("fluctuationsRatio",):
+        raw = data.get(key) or sp.get(key)
+        if raw is not None:
+            change_pct = _parse_float(raw)
+            break
+
+    return price, change, change_pct
+
+
 def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
     """
-    종목 현재가를 조회한다.
+    종목 현재가(또는 전일종가)를 조회한다.
+
+    FIX-PRICE-5:
+      한국 주식시장은 프리마켓이 없다.
+      - 09:00 이전: Naver API가 반환하는 closePrice = 전일 종가
+      - 09:00 이후: closePrice = 정규장 현재가 (또는 당일 종가)
+      price_label 결정은 ai_analyzer.py(호출부)에서 담당하므로
+      이 함수는 가격 값만 올바르게 반환하면 된다.
 
     우선순위:
-      1) api.stock.naver.com/stock/{code}/basic  (JSON, 장중/장후 모두 동작)
-      2) sise_day 일별 데이터의 최신 종가 (폴백)
+      1) api.stock.naver.com/stock/{code}/basic  (JSON)
+      2) sise_day 일별 데이터의 최신 종가          (폴백)
 
     반환:
-      {"name": str, "code": str, "price": int, "change": int,
-       "change_pct": float, "url": str}
+      {"name": str, "code": str, "price": int,
+       "change": int, "change_pct": float, "url": str}
       실패 시 None.
     """
     # 1. 코드 확보
@@ -100,48 +194,29 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
         if not result:
             print(f"[naver_finance] 코드 조회 실패: {stock_name}")
             return None
-        code = result["code"]
+        code       = result["code"]
         stock_name = result.get("name", stock_name)
 
     naver_url = f"https://finance.naver.com/item/main.naver?code={code}"
 
     # 2. [1순위] Naver Stock API (JSON)
     api_url = f"https://api.stock.naver.com/stock/{code}/basic"
-    data = _get_json(api_url)
+    data    = _get_json(api_url)
+
     if data:
         try:
-            price_raw = (
-                data.get("closePrice")
-                or data.get("stockPrice", {}).get("closePrice", "")
-            )
-            change_raw = (
-                data.get("compareToPreviousClosePrice")
-                or data.get("stockPrice", {}).get("compareToPreviousClosePrice", "0")
-            )
-            pct_raw = (
-                data.get("fluctuationsRatio")
-                or data.get("stockPrice", {}).get("fluctuationsRatio", "0.00")
-            )
-            # 콤마·공백 제거 후 정수 변환
-            price  = int(str(price_raw).replace(",", "").replace(" ", ""))
-            change = int(
-                str(change_raw).replace(",", "").replace(" ", "").replace("+", "")
-            )
-            pct = float(
-                str(pct_raw).replace("%", "").replace("+", "").replace(",", "")
-            )
-
+            price, change, change_pct = _extract_price_from_api(data)
             if price > 0:
                 print(
                     f"[naver_finance] {stock_name}({code}): "
-                    f"{price:,}원 ({pct:+.2f}%) [API]"
+                    f"{price:,}원 ({change_pct:+.2f}%) [API]"
                 )
                 return {
                     "name":       stock_name,
                     "code":       code,
                     "price":      price,
                     "change":     change,
-                    "change_pct": pct,
+                    "change_pct": change_pct,
                     "url":        naver_url,
                 }
         except Exception as e:
@@ -193,15 +268,13 @@ def fetch_naver_daily_prices(code: str, days: int = 14) -> list:
 
     네이버 sise_day 컬럼 순서: 날짜 / 종가 / 전일비 / 시가 / 고가 / 저가 / 거래량
     정규식 그룹 인덱스:          [0]    [1]    [2]     [3]   [4]   [5]   [6]
-    FIX-SISE-1: 기존 코드에서 m[3]을 시가로 썼으나 실제로는 올바름 — 단,
-                전일비([2])가 부호 문자(▲▼)를 포함할 수 있어 숫자만 추출하도록 수정.
+
+    FIX-SISE-1: 전일비([2])가 부호 문자(▲▼)를 포함할 수 있어 숫자만 추출하도록 수정.
     """
     url  = f"https://finance.naver.com/item/sise_day.naver?code={code}&page=1"
     html = _get(url)
     rows = []
     try:
-        # 날짜 셀 하나 + 숫자 셀 6개를 순서대로 캡처
-        # 전일비 셀은 ▲▼ 기호 포함 가능 → [^<]+ 로 느슨하게 캡처 후 숫자만 추출
         pattern = (
             r'<td[^>]*>\s*(\d{4}\.\d{2}\.\d{2})\s*</td>'   # [0] 날짜
             r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'              # [1] 종가
@@ -231,7 +304,7 @@ def fetch_naver_daily_prices(code: str, days: int = 14) -> list:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def generate_candlestick_base64(daily_prices: list, stock_name: str = "") -> str:
-    """캔들차트 PNG → base64 문자열. 실패 시 None."""
+    """캔들차트 PNG → base64 문자열. 실패 시 None 반환."""
     try:
         import matplotlib
         matplotlib.use("Agg")
