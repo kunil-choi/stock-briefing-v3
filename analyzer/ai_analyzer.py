@@ -1,4 +1,3 @@
-# analyzer/ai_analyzer.py
 """
 AI 주식 브리핑 분석 엔진
 
@@ -32,6 +31,13 @@ AI 주식 브리핑 분석 엔진
                JSON 파싱 직후 run_full_validation() 호출
                코드 룰 검수 → 누락 종목 보충 → Gemini 내용 검수(조건부) → PDF 검수
                GEMINI_API_KEY 없으면 코드 룰 검수 + 누락 보충만 실행
+- TIER-FILTER-1: 소스 티어 시스템 도입 — 뉴스와 고품질 소스 분리 처리
+               extract_mentions()에 non_news_channel_types, max_tier 필드 추가
+               filter_mentions()를 4단계 티어 기반 필터로 교체
+               extract_hidden_picks()를 non_news_channel_types 기반으로 개선
+- FIX-PRICE-5 : 한국 주식시장 프리마켓 없음 반영
+               08:00~08:59 → 전일종가 표시 (Naver API가 전일종가를 반환하므로)
+               09:00~ → 현재가 표시
 """
 
 import json
@@ -62,7 +68,43 @@ _SKIP_NAMES = {
     "중국", "미국", "유럽", "일본", "한국",
 }
 _MIN_NAME_LEN        = 2
-_HIGH_QUALITY_TYPES  = {"애널리스트", "경제방송TV", "경제방송"}
+_HIGH_QUALITY_TYPES  = {"애널리스트", "경제방송TV", "경제방송", "증권사"}
+
+# ── TIER-FILTER-1: 소스 티어 정의 ────────────────────────────────────────────
+# T4(4.0): 애널리스트 리포트 — 가장 신뢰도 높음
+# T3(3.0): 증권사 유튜브 채널
+# T2(2.0): 경제방송TV, 경제방송, 유튜버
+# T1(1.0): 뉴스 RSS — 정보 전달 채널, 필터 기준에서 제외
+
+_SOURCE_TIER = {
+    "애널리스트":  4.0,
+    "증권사":      3.0,
+    "경제방송TV":  2.0,
+    "경제방송":    2.0,
+    "유튜브":      2.0,
+    "뉴스":        1.0,
+}
+
+# 긍정적 매수 의견 키워드
+_POSITIVE_OPINION_KEYWORDS = {
+    "매수", "buy", "강력매수", "strong buy", "비중확대", "overweight",
+    "outperform", "시장수익률상회", "적극매수",
+}
+
+# 긍정 감성 키워드
+_POSITIVE_SENTIMENT = {
+    "상승", "급등", "목표가 상향", "실적 개선", "호실적", "매출 증가",
+    "수혜", "기대", "성장", "돌파", "신고가", "강세", "반등", "회복",
+    "증가", "확대", "호조", "긍정", "추천", "주목", "주도주",
+}
+
+# 부정 감성 키워드
+_NEGATIVE_SENTIMENT = {
+    "하락", "급락", "목표가 하향", "실적 부진", "매출 감소", "리스크",
+    "우려", "불확실", "약세", "매도", "하향", "감소", "위험", "부정",
+}
+
+_NEWS_TYPES = {"뉴스"}
 
 
 # ── 유효성 검사 헬퍼 ──────────────────────────────────────────────────────────
@@ -97,6 +139,29 @@ def _build_channel_weight_map(channels_data: dict) -> dict:
             if name:
                 weight_map[name] = _channel_weight(subs)
     return weight_map
+
+
+# ── TIER-FILTER-1: 감성 가중치 계산 ──────────────────────────────────────────
+
+def _get_sentiment_weight(text: str, opinion: str = "") -> float:
+    """
+    텍스트와 애널리스트 의견을 기반으로 감성 가중치를 반환한다.
+    - 강력 매수 의견: 2.0
+    - 긍정 키워드 포함: 1.5
+    - 부정 키워드 포함: 0.5
+    - 중립 / 미확인: 1.0
+    """
+    opinion_lower = opinion.strip().lower()
+    if any(k in opinion_lower for k in _POSITIVE_OPINION_KEYWORDS):
+        return 2.0
+    text_lower = text.lower()
+    has_positive = any(k in text_lower for k in _POSITIVE_SENTIMENT)
+    has_negative = any(k in text_lower for k in _NEGATIVE_SENTIMENT)
+    if has_positive and not has_negative:
+        return 1.5
+    if has_negative and not has_positive:
+        return 0.5
+    return 1.0
 
 
 # ── 종목 이름 로드 ────────────────────────────────────────────────────────────
@@ -168,6 +233,12 @@ def load_stock_names() -> dict:
 
 def extract_mentions(all_data: list, stock_map: dict,
                      channels_data: dict = None) -> dict:
+    """
+    TIER-FILTER-1 변경사항:
+    - 각 종목 entry에 non_news_channel_types (뉴스 제외 채널 타입 집합) 추가
+    - 각 종목 entry에 max_tier (최고 티어 값) 추가
+    - 감성 가중치(_get_sentiment_weight)를 가중점수 계산에 반영
+    """
     weight_map = _build_channel_weight_map(channels_data) if channels_data else {}
 
     type_map = {
@@ -175,12 +246,12 @@ def extract_mentions(all_data: list, stock_map: dict,
         "경제방송":    "경제방송",
         "경제방송TV":  "경제방송TV",
         "유튜브":      "유튜브",
-        "증권사":      "유튜브",
+        "증권사":      "증권사",
         "애널리스트":  "애널리스트",
     }
     default_weights = {
         "뉴스": 1.5, "경제방송": 1.8, "경제방송TV": 1.8,
-        "애널리스트": 2.5, "유튜브": 1.0,
+        "애널리스트": 2.5, "유튜브": 1.0, "증권사": 2.0,
     }
 
     mentions = {}
@@ -192,12 +263,17 @@ def extract_mentions(all_data: list, stock_map: dict,
         title     = item.get("title", "")
         summary   = item.get("summary", "") or item.get("content", "")
         link      = item.get("link", "") or item.get("url", "")
+        opinion   = item.get("opinion", "")
         text      = f"{title} {summary}"
         weight    = weight_map.get(src_name, default_weights.get(ch_type, 1.0))
 
         # GEMINI-VAL-1: Gemini가 추출한 발언은 confidence 낮음일 때 가중치 절반
         if item.get("_from_gemini") and item.get("gemini_confidence") == "낮음":
             weight *= 0.5
+
+        # TIER-FILTER-1: 감성 가중치 적용
+        sentiment_w = _get_sentiment_weight(text, opinion)
+        weight = weight * sentiment_w
 
         for name, code in stock_map.items():
             if not _is_valid_stock_name(name):
@@ -216,11 +292,13 @@ def extract_mentions(all_data: list, stock_map: dict,
 
             if name not in mentions:
                 mentions[name] = {
-                    "code":           code,
-                    "total_count":    0,
-                    "weighted_score": 0.0,
-                    "channel_types":  set(),
-                    "channels":       {},
+                    "code":                  code,
+                    "total_count":           0,
+                    "weighted_score":        0.0,
+                    "channel_types":         set(),
+                    "non_news_channel_types": set(),   # TIER-FILTER-1
+                    "max_tier":              0.0,       # TIER-FILTER-1
+                    "channels":              {},
                 }
 
             entry = mentions[name]
@@ -233,6 +311,16 @@ def extract_mentions(all_data: list, stock_map: dict,
                 continue
 
             entry["channel_types"].add(ch_type)
+
+            # TIER-FILTER-1: 뉴스 타입은 non_news에서 제외
+            if ch_type not in _NEWS_TYPES:
+                entry["non_news_channel_types"].add(ch_type)
+
+            # TIER-FILTER-1: 최고 티어 갱신
+            tier = _SOURCE_TIER.get(ch_type, 1.0)
+            if tier > entry["max_tier"]:
+                entry["max_tier"] = tier
+
             if ch_type not in entry["channels"]:
                 entry["channels"][ch_type] = []
 
@@ -255,14 +343,27 @@ def extract_mentions(all_data: list, stock_map: dict,
 
     for name in mentions:
         mentions[name]["channel_types"] = list(mentions[name]["channel_types"])
+        mentions[name]["non_news_channel_types"] = list(
+            mentions[name]["non_news_channel_types"]
+        )
 
     print(f"[언급추출] {len(mentions)}개 종목 발견")
     return mentions
 
 
-# ── 단계별 관심종목 필터링 ────────────────────────────────────────────────────
+# ── TIER-FILTER-1: 단계별 관심종목 필터링 ────────────────────────────────────
 
 def filter_mentions(mentions: dict, target: int = 10) -> list:
+    """
+    4단계 티어 기반 필터링 (TIER-FILTER-1):
+
+    1차: 뉴스 제외 채널 타입 2종 이상 (다중 채널 교차 확인)
+    2차: max_tier >= 3.0 (증권사/애널리스트) AND weighted_score >= 8.0
+    3차: non_news_channel_types 1종 이상 AND total_count >= 3
+    4차: 애널리스트 단독이라도 매수 의견이 있는 경우 (analyst_only_positive)
+
+    뉴스 단독 종목은 어떤 단계에서도 통과하지 못함.
+    """
     all_sorted = sorted(
         mentions.items(),
         key=lambda x: x[1]["weighted_score"],
@@ -272,54 +373,93 @@ def filter_mentions(mentions: dict, target: int = 10) -> list:
     selected       = []
     selected_names = set()
 
+    # 1차: 뉴스 제외 채널 타입 2종 이상
     for name, data in all_sorted:
         if len(selected) >= target:
             break
-        if len(data["channel_types"]) >= 2:
+        non_news = data.get("non_news_channel_types", [])
+        if len(non_news) >= 2:
             selected.append((name, data))
             selected_names.add(name)
-    print(f"[필터링] 1차(채널타입 2종↑): {len(selected)}개")
+    print(f"[필터링] 1차(비뉴스 채널타입 2종↑): {len(selected)}개")
 
+    # 2차: 고품질 소스(T3이상) + 가중점수 8.0 이상
     if len(selected) < target:
         for name, data in all_sorted:
             if len(selected) >= target:
                 break
             if name in selected_names:
                 continue
-            if data["total_count"] >= 4:
+            non_news  = data.get("non_news_channel_types", [])
+            max_tier  = data.get("max_tier", 0.0)
+            w_score   = data.get("weighted_score", 0.0)
+            if len(non_news) >= 1 and max_tier >= 3.0 and w_score >= 8.0:
                 selected.append((name, data))
                 selected_names.add(name)
-        print(f"[필터링] 2차(전체 4회↑) 추가 후: {len(selected)}개")
+        print(f"[필터링] 2차(T3↑ + 가중점수8↑) 추가 후: {len(selected)}개")
 
+    # 3차: 비뉴스 채널 1종 이상 + 총 언급 3회 이상
     if len(selected) < target:
         for name, data in all_sorted:
             if len(selected) >= target:
                 break
             if name in selected_names:
                 continue
-            if data["total_count"] >= 2:
+            non_news = data.get("non_news_channel_types", [])
+            if len(non_news) >= 1 and data["total_count"] >= 3:
                 selected.append((name, data))
                 selected_names.add(name)
-        print(f"[필터링] 3차(전체 2회↑) 추가 후: {len(selected)}개")
+        print(f"[필터링] 3차(비뉴스1종↑ + 3회↑) 추가 후: {len(selected)}개")
+
+    # 4차: 애널리스트 단독이라도 매수 의견인 경우
+    if len(selected) < target:
+        for name, data in all_sorted:
+            if len(selected) >= target:
+                break
+            if name in selected_names:
+                continue
+            non_news  = data.get("non_news_channel_types", [])
+            max_tier  = data.get("max_tier", 0.0)
+            # 애널리스트(T4) 또는 증권사(T3) 단독 채널
+            if len(non_news) == 1 and max_tier >= 3.0:
+                # 감성 가중치가 높다 = 긍정 의견으로 언급됐다 (sentiment_w >= 1.5 기준)
+                # weighted_score / total_count 로 평균 가중치 추산
+                total = data.get("total_count", 1)
+                avg_w = data.get("weighted_score", 0.0) / max(total, 1)
+                # 기본 채널 가중치(2.5) × 감성가중치(1.5) = 3.75 이상이면 긍정으로 판단
+                if avg_w >= 3.75:
+                    selected.append((name, data))
+                    selected_names.add(name)
+        print(f"[필터링] 4차(고품질단독+긍정의견) 추가 후: {len(selected)}개")
 
     print(f"[필터링] 최종 {len(selected)}개 선택")
     return selected
 
 
-# ── 히든픽 후보 추출 ──────────────────────────────────────────────────────────
+# ── TIER-FILTER-1: 히든픽 후보 추출 ──────────────────────────────────────────
 
 def extract_hidden_picks(mentions: dict, filtered_names: set,
                          max_picks: int = 3) -> list:
+    """
+    TIER-FILTER-1 변경사항:
+    - non_news_channel_types 기준으로 선별 (뉴스 동시 언급이 있어도 무방)
+    - non_news_channel_types가 정확히 1종인 고품질 단독 언급 종목만 선택
+    - _HIGH_QUALITY_TYPES에 "증권사" 추가 반영
+    """
     candidates = []
     for name, data in mentions.items():
         if name in filtered_names:
             continue
-        ch_types = set(data["channel_types"])
-        if len(ch_types) != 1:
+
+        # 뉴스 제외 채널 타입이 정확히 1종인 경우만 히든픽 후보
+        non_news = set(data.get("non_news_channel_types", []))
+        if len(non_news) != 1:
             continue
-        sole_type = list(ch_types)[0]
+
+        sole_type = list(non_news)[0]
         if sole_type not in _HIGH_QUALITY_TYPES:
             continue
+
         candidates.append({
             "name":           name,
             "code":           data["code"],
@@ -328,6 +468,7 @@ def extract_hidden_picks(mentions: dict, filtered_names: set,
             "weighted_score": round(data["weighted_score"], 2),
             "total_count":    data["total_count"],
         })
+
     candidates.sort(key=lambda x: x["weighted_score"], reverse=True)
     result = candidates[:max_picks]
     print(f"[히든픽] 후보 {len(candidates)}개 중 {len(result)}개 선택")
@@ -407,19 +548,22 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
     for rank, (name, data) in enumerate(top_stocks, 1):
         price_info = stock_prices.get(name)
         if price_info and isinstance(price_info, dict) and price_info.get("price", 0) > 0:
+            price_label = price_info.get("price_label", "전일종가")
             price_str = (
-                f"현재가:{price_info['price']:,}원 "
+                f"{price_label}:{price_info['price']:,}원 "
                 f"({price_info.get('change_pct', 0.0):+.2f}%)"
             )
         elif isinstance(price_info, int) and price_info > 0:
-            price_str = f"현재가:{price_info:,}원"
+            price_str = f"전일종가:{price_info:,}원"
         else:
-            price_str = "현재가:미수집"
+            price_str = "가격:미수집"
 
+        non_news = data.get("non_news_channel_types", data.get("channel_types", []))
         line = (f"{rank}. {name} (코드:{data['code']}, "
                 f"언급:{data['total_count']}회, "
                 f"가중점수:{data['weighted_score']:.1f}, "
                 f"채널유형:{','.join(data['channel_types'])}, "
+                f"비뉴스채널:{','.join(non_news) if non_news else '없음'}, "
                 f"{price_str})")
         stocks_info.append(line)
 
@@ -484,7 +628,7 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         '      "risk": "주요 리스크 1~2문장",\n'
         '      "channel_mentions": [\n'
         '        {\n'
-        '          "source_type": "뉴스|경제방송|경제방송TV|유튜브|애널리스트 중 택1",\n'
+        '          "source_type": "뉴스|경제방송|경제방송TV|유튜브|증권사|애널리스트 중 택1",\n'
         '          "source_name": "채널명",\n'
         '          "content": "언급 내용 1~2문장",\n'
         '          "url": "URL 없으면 빈 문자열"\n'
@@ -506,7 +650,7 @@ def build_analysis_prompt(filtered_mentions: list, hidden_candidates: list,
         '      "summary": "종목 핵심 요약 2~3문장",\n'
         '      "catalyst": "상승 촉매 2~3문장",\n'
         '      "risk": "주요 리스크 1문장",\n'
-        '      "channel_type": "애널리스트|경제방송TV|경제방송 중 택1",\n'
+        '      "channel_type": "애널리스트|경제방송TV|경제방송|증권사 중 택1",\n'
         '      "channel_name": "채널명",\n'
         '      "reasons": [\n'
         '        {\n'
@@ -714,16 +858,21 @@ def analyze_and_generate_html(
     filtered       = filter_mentions(mentions)
     filtered_names = {name for name, _ in filtered}
 
-    # ── FIX-PRICE-4: 주가 조회 ───────────────────────────────────────────────
-    stock_prices        = {}
-    now_hour            = now_kst.hour
-    now_minute          = now_kst.minute
-    is_regular_market   = (now_hour > 9) or (now_hour == 9 and now_minute >= 0)
-    is_premarket_window = (now_hour == 8)
+    # ── FIX-PRICE-5: 주가 조회 및 라벨 결정 ──────────────────────────────────
+    # 한국 주식시장 운영 시간:
+    #   - 정규장: 09:00 ~ 15:30
+    #   - 08:xx  → 장 시작 전, Naver API가 반환하는 값은 전일 종가
+    #   - 09:00~ → 정규장, 현재가 표시
+    stock_prices  = {}
+    now_hour      = now_kst.hour
+    now_minute    = now_kst.minute
+    is_open_market = (now_hour > 9) or (now_hour == 9 and now_minute >= 0)
+
+    price_label_default = "현재가" if is_open_market else "전일종가"
 
     print(f"[주가조회] 현재 시각 {now_kst_str} KST — "
-          f"{'정규장' if is_regular_market else ('프리마켓' if is_premarket_window else '장전')}")
-    print(f"[주가조회] 관심종목 {len(filtered)}개 현재가 조회 시작")
+          f"{'정규장(현재가)' if is_open_market else '장전(전일종가)'}")
+    print(f"[주가조회] 관심종목 {len(filtered)}개 주가 조회 시작")
 
     for name, data in filtered:
         code = data.get("code", "")
@@ -732,9 +881,7 @@ def analyze_and_generate_html(
         price_info = fetch_naver_stock_price(name, code_override=code)
         if not price_info or price_info.get("price", 0) <= 0:
             continue
-        price_info["price_label"] = (
-            "현재가" if (is_regular_market or is_premarket_window) else "전일종가"
-        )
+        price_info["price_label"] = price_label_default
         stock_prices[name] = price_info
 
     print(f"[주가조회] {len(stock_prices)}/{len(filtered)}개 종목 주가 수집 완료")
@@ -760,19 +907,16 @@ def analyze_and_generate_html(
         return _fallback_html("AI 응답 파싱 실패. 잠시 후 다시 시도하세요.", briefing_date)
 
     # ── GEMINI-VAL-1: 검수 파이프라인 ────────────────────────────────────────
-    # 순서: 코드 룰 검수 → 누락 종목 보충 → Gemini 내용 검수(조건부) → PDF 검수
-    # GEMINI_API_KEY 없어도 코드 룰 검수 + 누락 보충은 항상 실행
     try:
         from .gemini_validator import run_full_validation
         result = run_full_validation(
             result,
             filtered,
             all_data,
-            GEMINI_API_KEY,   # 없으면 "" → Gemini 단계만 스킵
+            GEMINI_API_KEY,
         )
     except Exception as e:
         print(f"[검수] 파이프라인 오류 (브리핑은 계속 진행): {e}")
-    # ── GEMINI-VAL-1 끝 ──────────────────────────────────────────────────────
 
     ai_strat = result.get("ai_strategy")
     if isinstance(ai_strat, dict):
@@ -780,7 +924,7 @@ def analyze_and_generate_html(
 
     mention_lookup = dict(filtered)
 
-    # ── FIX-PRICE-4: result["stocks"]에 주가 병합 ────────────────────────────
+    # ── FIX-PRICE-4/5: result["stocks"]에 주가 병합 ──────────────────────────
     for stock in result.get("stocks", []):
         name       = stock.get("name", "")
         price_info = stock_prices.get(name)
@@ -788,7 +932,7 @@ def analyze_and_generate_html(
         if price_info and isinstance(price_info, dict) and price_info.get("price", 0) > 0:
             stock["price"]       = price_info["price"]
             stock["change_pct"]  = price_info.get("change_pct", 0.0)
-            stock["price_label"] = price_info.get("price_label", "현재가")
+            stock["price_label"] = price_info.get("price_label", price_label_default)
         else:
             stock["price"]       = 0
             stock["change_pct"]  = 0.0
@@ -801,7 +945,7 @@ def analyze_and_generate_html(
             stock["channel_counts"] = cc
             stock["total_count"]    = data["total_count"]
             stock["weighted_score"] = round(data["weighted_score"], 2)
-            stock["overlap_count"]  = len(data["channel_types"])
+            stock["overlap_count"]  = len(data["non_news_channel_types"])
             stock["reasons"]        = []
 
     hidden_lookup = {p["name"]: p for p in hidden_candidates}
@@ -810,6 +954,17 @@ def analyze_and_generate_html(
         if name in hidden_lookup:
             hp["weighted_score"] = hidden_lookup[name]["weighted_score"]
             hp["channel_type"]   = hidden_lookup[name]["channel_type"]
+
+        # 히든픽 주가도 병합
+        price_info = stock_prices.get(name)
+        if price_info and isinstance(price_info, dict) and price_info.get("price", 0) > 0:
+            hp["price"]       = price_info["price"]
+            hp["change_pct"]  = price_info.get("change_pct", 0.0)
+            hp["price_label"] = price_info.get("price_label", price_label_default)
+        else:
+            hp["price"]       = 0
+            hp["change_pct"]  = 0.0
+            hp["price_label"] = "전일종가"
 
     for stock in result.get("stocks", []):
         _restore_source_url(stock, all_data)
