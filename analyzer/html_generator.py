@@ -13,6 +13,7 @@ AI 주식 브리핑 HTML 생성 엔진
 - FIX-FILTER-HTML: _filter_stocks_tiered()를 단순 중복 제거 + 순서 유지로 변경
                    ai_analyzer가 이미 정교하게 선정·정렬한 종목을 HTML단에서
                    재필터링하지 않도록 수정 (관심종목 누락 방지)
+- FIX-DISCLAIMER : 하단 투자 유의사항 문구 추가
 """
 
 import re
@@ -975,6 +976,25 @@ a:hover { text-decoration: underline; }
 .strat-body  { font-size: .88rem; color: var(--text-muted); }
 .strat-text  { margin-bottom: .3rem; line-height: 1.6; }
 .strat-item  { margin-bottom: .25rem; line-height: 1.55; }
+.disclaimer {
+  margin-top: 2.5rem;
+  padding: 1rem 1.4rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid #58a6ff44;
+  border-radius: 8px;
+  font-size: .78rem;
+  color: #6e7681;
+  line-height: 1.8;
+  text-align: center;
+}
+.disclaimer strong {
+  display: block;
+  color: #8b949e;
+  font-weight: 600;
+  margin-bottom: .35rem;
+  font-size: .82rem;
+}
 .modal-overlay {
   display: none; position: fixed; inset: 0;
   background: rgba(0,0,0,.75); z-index: 1000;
@@ -1049,6 +1069,13 @@ a:hover { text-decoration: underline; }
   <div class="section">
     <div class="section-title">🤖 AI 투자 전략</div>
     {strategy_html}
+  </div>
+
+  <div class="disclaimer">
+    <strong>📌 투자 유의사항</strong>
+    본 브리핑은 뉴스·유튜브·애널리스트 리포트 등 공개 데이터를 AI가 수집·분석한 참고 자료입니다.
+    투자 권유 또는 종목 추천이 아니며, 수익을 보장하지 않습니다.
+    최종 투자 판단과 그에 따른 책임은 전적으로 본인에게 있습니다.
   </div>
 
 </div>
