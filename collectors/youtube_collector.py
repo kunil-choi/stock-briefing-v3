@@ -57,12 +57,17 @@ AD_KEYWORDS = [
 ]
 
 # ── 패널리스트 검색 전용 설정 ──────────────────────────────────────────
-# 이름 검색 시 함께 붙이는 주식/경제 맥락 키워드
-_PANELIST_SEARCH_SUFFIXES = ["주식", "경제", "투자", "증시", "전망"]
-# 검색 결과에서 수집할 최대 영상 수 (이름당)
-_PANELIST_MAX_RESULTS = 10
-# 검색 대상 기간 (시간)
-_PANELIST_HOURS = 48
+# PANELIST-2: 이름별 suffix 순차검색(최악 22×5=110회 search.list, 11,000유닛 →
+# 일일 quota 10,000유닛 초과로 quotaExceeded 양산) 대신, 이름을 배치로 묶어
+# OR(|) 연산자로 한 번에 검색하는 방식으로 교체. suffix 키워드는 더 이상 사용하지 않음
+# (콘텐츠 관련성 판단은 is_stock_related + 다운스트림 Gemini 분석에 위임).
+# 검색 결과에서 수집할 최대 영상 수 (배치당, search.list 응답 한도)
+_PANELIST_MAX_RESULTS = 50
+# 검색 대상 기간 (시간) — 사용자 요청에 따라 48h → 24h로 변경
+_PANELIST_HOURS = 24
+# 한 번의 OR 검색에 묶을 패널리스트 수.
+# 22명 ÷ 5명 = 배치 5회 × 100유닛 = 500유닛 (기존 최악 11,000유닛 대비 22배 절감)
+_PANELIST_BATCH_SIZE = 5
 
 
 def get_youtube_client(api_key: str = None):
@@ -312,11 +317,22 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
 
 def collect_panelist_youtube(youtube) -> list:
     """
-    POPULAR_PANELISTS 이름으로 YouTube를 검색해서,
-    등록 채널 외부 영상까지 포함해 주식·경제 관련 콘텐츠를 수집한다.
+    PANELIST-2: POPULAR_PANELISTS를 배치로 묶어 OR(|) 검색으로 후보를 모으고,
+    실제 발언자/내용 검증은 다운스트림 Gemini 분석(gemini_youtube_analyzer.py)에
+    위임하는 구조로 전면 재작성.
 
-    - 수집 기간: _PANELIST_HOURS (48h)
-    - 이름당 검색 suffix 중 첫 매칭 결과 사용 (quota 절약)
+    이전 방식(이름당 suffix 5개를 결과 나올 때까지 순차 시도)은 최악의 경우
+    22명 × 5suffix = 110회 search.list 호출 = 11,000유닛으로, search.list가
+    100유닛/회인 YouTube Data API의 일일 기본 quota(10,000유닛)를 그 자체로
+    초과해 quotaExceeded 에러를 양산했음.
+
+    새 방식: 이름을 _PANELIST_BATCH_SIZE개씩 묶어 q="이름1|이름2|..."로
+    1배치당 1회만 검색 (22명 ÷ 5 ≈ 5배치 × 100유닛 = 500유닛, 22배 절감).
+    제목/자막에 이름이 정확히 포함돼야 한다는 엄격한 매칭은 제거하고,
+    가벼운 주식관련성 체크(is_stock_related)만 거쳐 후보로 채택 —
+    실제 누가 무슨 말을 했는지는 Gemini가 영상을 직접 보고 판단하게 함.
+
+    - 수집 기간: _PANELIST_HOURS (24h, 사용자 요청 반영)
     - source_type: "유튜브"
     - 중복 제거: video_id 기준
     - BUG-1: cutoff를 UTC 기준으로 계산 (publishedAfter는 UTC 기준 RFC3339 요구)
@@ -329,94 +345,93 @@ def collect_panelist_youtube(youtube) -> list:
     # publishedAfter 파라미터는 UTC 기준 RFC3339 포맷("Z" suffix)을 요구함
     # 기존 코드는 KST 시각에 "Z"를 붙여 UTC인 척 전달 → 실제로 9시간 오차 발생
     cutoff    = datetime.now(UTC) - timedelta(hours=_PANELIST_HOURS)
+    cutoff_str = cutoff.strftime("%Y-%m-%dT%H:%M:%SZ")
     all_items = []
     seen_ids  = set()
 
-    print(f"  [패널리스트 검색] {len(POPULAR_PANELISTS)}명, 최근 {_PANELIST_HOURS}h")
+    batches = [
+        POPULAR_PANELISTS[i:i + _PANELIST_BATCH_SIZE]
+        for i in range(0, len(POPULAR_PANELISTS), _PANELIST_BATCH_SIZE)
+    ]
 
-    for name in POPULAR_PANELISTS:
+    print(f"  [패널리스트 검색] {len(POPULAR_PANELISTS)}명 → {len(batches)}배치, "
+          f"최근 {_PANELIST_HOURS}h (예상 quota: {len(batches) * 100}유닛)")
+
+    for batch_idx, batch in enumerate(batches, start=1):
+        query = "|".join(batch)
         collected = 0
 
-        for suffix in _PANELIST_SEARCH_SUFFIXES:
-            query = f"{name} {suffix}"
-            try:
-                resp = youtube.search().list(
-                    part="snippet",
-                    q=query,
-                    type="video",
-                    order="date",
-                    publishedAfter=cutoff.strftime("%Y-%m-%dT%H:%M:%SZ"),
-                    maxResults=_PANELIST_MAX_RESULTS,
-                    relevanceLanguage="ko",
-                    regionCode="KR",
-                ).execute()
-            except HttpError as e:
-                print(f"    [검색 오류] {query}: {e}")
-                break
-            except Exception as e:
-                print(f"    [검색 오류] {query}: {e}")
-                break
+        try:
+            resp = youtube.search().list(
+                part="snippet",
+                q=query,
+                type="video",
+                order="date",
+                publishedAfter=cutoff_str,
+                maxResults=_PANELIST_MAX_RESULTS,
+                relevanceLanguage="ko",
+                regionCode="KR",
+            ).execute()
+        except HttpError as e:
+            print(f"    [배치 {batch_idx}/{len(batches)} 검색 오류] {batch}: {e}")
+            continue
+        except Exception as e:
+            print(f"    [배치 {batch_idx}/{len(batches)} 검색 오류] {batch}: {e}")
+            continue
 
-            items = resp.get("items", [])
-            if not items:
+        items = resp.get("items", [])
+
+        for item in items:
+            snippet  = item.get("snippet", {})
+            video_id = item.get("id", {}).get("videoId", "")
+            if not video_id or video_id in seen_ids:
                 continue
 
-            for item in items:
-                snippet  = item.get("snippet", {})
-                video_id = item.get("id", {}).get("videoId", "")
-                if not video_id or video_id in seen_ids:
-                    continue
+            title        = snippet.get("title", "").strip()
+            channel_name = snippet.get("channelTitle", "").strip()
+            published_at = snippet.get("publishedAt", "")
 
-                title        = snippet.get("title", "").strip()
-                channel_name = snippet.get("channelTitle", "").strip()
-                published_at = snippet.get("publishedAt", "")
+            if not title or is_ad_content(title):
+                continue
 
-                if not title or is_ad_content(title):
-                    continue
+            transcript = get_transcript(video_id)
+            summary    = transcript[:500] if transcript else title
 
-                # 제목에 이름이 없으면 자막까지 확인
-                if name not in title:
-                    transcript = get_transcript(video_id)
-                    if name not in transcript:
-                        continue
-                    summary = transcript[:500]
-                else:
-                    transcript = get_transcript(video_id)
-                    summary    = transcript[:500] if transcript else title
+            # 주식/경제 관련성 체크 (이름 정확 일치 강제는 하지 않음 —
+            # 실제 발언자/내용 확인은 Gemini 분석 단계에서 처리)
+            if not is_stock_related(title, transcript):
+                continue
 
-                # 주식/경제 관련성 최종 확인
-                if not is_stock_related(title, transcript):
-                    continue
+            # 어떤 패널리스트와 매칭됐는지 추정 (제목 기준, 추적용 메타데이터.
+            # 못 찾아도 후보에서 제외하지 않음 — Gemini가 실제 발언자를 판단)
+            matched = [name for name in batch if name in title]
+            panelist_tag = ", ".join(matched) if matched else f"배치{batch_idx}({'/'.join(batch)})"
 
-                # 발행일 파싱 (API 응답은 항상 UTC "Z" 포맷)
-                try:
-                    pub_dt = datetime.fromisoformat(
-                        published_at.replace("Z", "+00:00")
-                    ).astimezone(KST)
-                    pub_str = pub_dt.strftime("%Y-%m-%d %H:%M")
-                except Exception:
-                    pub_str = published_at
+            # 발행일 파싱 (API 응답은 항상 UTC "Z" 포맷)
+            try:
+                pub_dt = datetime.fromisoformat(
+                    published_at.replace("Z", "+00:00")
+                ).astimezone(KST)
+                pub_str = pub_dt.strftime("%Y-%m-%d %H:%M")
+            except Exception:
+                pub_str = published_at
 
-                seen_ids.add(video_id)
-                all_items.append({
-                    "source_type": "유튜브",
-                    "source_name": channel_name,
-                    "title":       title,
-                    "summary":     summary or title,
-                    "link":        f"https://www.youtube.com/watch?v={video_id}",
-                    "published":   pub_str,
-                    "_panelist":   name,
-                })
-                collected += 1
+            seen_ids.add(video_id)
+            all_items.append({
+                "source_type": "유튜브",
+                "source_name": channel_name,
+                "title":       title,
+                "summary":     summary or title,
+                "link":        f"https://www.youtube.com/watch?v={video_id}",
+                "published":   pub_str,
+                "_panelist":   panelist_tag,
+            })
+            collected += 1
 
-            # 첫 suffix에서 결과를 찾았으면 나머지 suffix는 생략 (quota 절약)
-            if collected > 0:
-                break
-
-            time.sleep(0.1)
-
-        print(f"    {name}: {collected}건")
+        print(f"    배치 {batch_idx}/{len(batches)} [{'/'.join(batch)}]: {collected}건")
         time.sleep(0.3)
 
-    print(f"  [패널리스트 검색] 총 {len(all_items)}건 (중복 제거 후)")
+    print(f"  [패널리스트 검색] 총 {len(all_items)}건 (중복 제거 후, "
+          f"실제 사용 quota: {len(batches) * 100}유닛)")
     return all_items
+

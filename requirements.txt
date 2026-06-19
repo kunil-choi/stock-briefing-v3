@@ -16,7 +16,9 @@ youtube-transcript-api>=0.6,<1.0
 # BUG-REQ-2: anthropic 버전 범위 지정 — 0.40 이상은 API 변경 가능성
 anthropic>=0.39,<1.0
 # GEMINI-1: Gemini 유튜브 분석 및 브리핑 교차 검수용
-google-generativeai>=0.7,<1.0
+# GEMINI-SDK-1: google-generativeai(legacy)는 2025-11-30 EOL, 저장소 archived됨
+#               → 신규 통합 SDK google-genai로 교체
+google-genai>=2.0,<3.0
 
 # 데이터 처리
 pandas>=2.0,<3.0

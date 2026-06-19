@@ -23,6 +23,7 @@
 import re
 import json
 import os
+import math
 from datetime import datetime, timedelta, timezone
 
 KST = timezone(timedelta(hours=9))
@@ -91,6 +92,12 @@ def _pct(current, previous) -> float:
 # ── yfinance 기반 조회 ────────────────────────────────────────────────────────
 
 def _fetch_yf(ticker: str):
+    """
+    FIX-MKT-11: yfinance가 당일 미개장(특히 미국장 개장 전) 구간에
+    NaN 종가를 포함한 placeholder 행을 반환하는 경우가 있음.
+    NaN을 그대로 통과시키면 화면에 "nan"으로 표출되므로,
+    NaN인 경우 수집 실패(None, None)로 명확히 처리한다.
+    """
     if not _YF_AVAILABLE:
         return None, None
     try:
@@ -100,6 +107,8 @@ def _fetch_yf(ticker: str):
             return None, None
         close_prev = float(hist["Close"].iloc[-2])
         close_now  = float(hist["Close"].iloc[-1])
+        if math.isnan(close_prev) or math.isnan(close_now):
+            return None, None
         return close_now, _pct(close_now, close_prev)
     except Exception as e:
         print(f"  [yfinance] {ticker} 조회 실패: {e}")

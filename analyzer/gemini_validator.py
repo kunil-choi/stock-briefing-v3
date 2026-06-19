@@ -26,11 +26,12 @@ import time
 from typing import Optional
 
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
     _GEMINI_AVAILABLE = True
 except ImportError:
     _GEMINI_AVAILABLE = False
-    print("[GeminiVal] google-generativeai 미설치 → 검수 비활성화")
+    print("[GeminiVal] google-genai 미설치 → 검수 비활성화")
 
 try:
     import httpx
@@ -38,10 +39,17 @@ try:
 except ImportError:
     _HTTPX_AVAILABLE = False
 
+# GEMINI-VAL-5: 모델명을 상수로 분리 (gemini-1.5-pro/flash는 완전히 shutdown됨).
+# 2026-06 기준 안정 서비스 중. 다음에 또 막히면 이 값만 바꾸면 됨.
+_MODEL_FLASH = "gemini-2.5-flash"
+_MODEL_PRO   = "gemini-2.5-flash"
+
 
 # ── 내부 유틸리티 ─────────────────────────────────────────────────────────────
 
 def _parse_json(text: str) -> Optional[dict]:
+    if not text:
+        return None
     m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
     if m:
         try:
@@ -57,11 +65,14 @@ def _parse_json(text: str) -> Optional[dict]:
     return None
 
 
-def _get_model(api_key: str, use_flash: bool = False):
-    """Flash는 저비용 검수용, Pro는 PDF/영상 처리용."""
-    genai.configure(api_key=api_key)
-    model_name = "gemini-1.5-flash" if use_flash else "gemini-1.5-pro"
-    return genai.GenerativeModel(model_name)
+def _get_client(api_key: str):
+    """GEMINI-VAL-5: legacy genai.configure()/GenerativeModel() → Client 객체로 교체."""
+    return genai.Client(api_key=api_key)
+
+
+def _model_name(use_flash: bool = False) -> str:
+    """Flash는 저비용 검수용, Pro급은 PDF/영상 처리용 (현재는 동일 모델 사용)."""
+    return _MODEL_FLASH if use_flash else _MODEL_PRO
 
 
 # ── 1. 코드 룰 검수 (비용 0, 항상 실행) ─────────────────────────────────────
@@ -154,7 +165,7 @@ def run_gemini_content_validation(
 
     print(f"[Gemini내용검수] 경고 {len(warnings)}개 → Gemini Flash 검수 시작")
 
-    model = _get_model(api_key, use_flash=True)
+    client = _get_client(api_key)
 
     stocks_summary = []
     for s in result.get("stocks", []):
@@ -181,7 +192,10 @@ def run_gemini_content_validation(
     )
 
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=_model_name(use_flash=True),
+            contents=prompt,
+        )
         parsed   = _parse_json(response.text)
         if parsed:
             overall = parsed.get("overall", "pass")
@@ -246,7 +260,7 @@ def verify_analyst_reports(all_data: list, api_key: str) -> list:
         print("[GeminiRPT] PDF 링크 있는 리포트 없음 → 텍스트 기반 검수로 전환")
         return _verify_via_text(analyst_items, api_key)
 
-    model   = _get_model(api_key, use_flash=False)
+    client  = _get_client(api_key)
     results = []
 
     for item in pdf_items[:5]:  # 비용 제어: 최대 5개
@@ -282,10 +296,15 @@ def verify_analyst_reports(all_data: list, api_key: str) -> list:
         )
 
         try:
-            response = model.generate_content([
-                {"mime_type": "application/pdf", "data": pdf_bytes},
-                prompt,
-            ])
+            # GEMINI-VAL-5: dict 형태({"mime_type":...,"data":...})는 legacy SDK 방식.
+            # 신규 SDK는 types.Part.from_bytes()로 인라인 바이너리 데이터를 전달.
+            response = client.models.generate_content(
+                model=_model_name(use_flash=False),
+                contents=[
+                    types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
+                    prompt,
+                ],
+            )
             parsed = _parse_json(response.text)
             if parsed:
                 parsed["stock_name"] = stock_name
@@ -309,7 +328,7 @@ def _verify_via_text(analyst_items: list, api_key: str) -> list:
     PDF 없을 때 텍스트(ai_summary + opinion)로 간이 검수.
     Gemini Flash 사용 (저비용).
     """
-    model   = _get_model(api_key, use_flash=True)
+    client  = _get_client(api_key)
     results = []
 
     items_text = []
@@ -331,7 +350,10 @@ def _verify_via_text(analyst_items: list, api_key: str) -> list:
     )
 
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=_model_name(use_flash=True),
+            contents=prompt,
+        )
         parsed   = _parse_json(response.text)
         if parsed:
             issues = parsed.get("issues", [])

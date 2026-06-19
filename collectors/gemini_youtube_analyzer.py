@@ -4,7 +4,7 @@ Gemini를 활용한 유튜브 영상 직접 분석 모듈
 
 역할:
   - youtube_collector.py가 수집한 YouTube URL을 받아
-    Gemini 1.5 Pro로 영상을 직접 시청·분석
+    Gemini로 영상을 직접 시청·분석
   - 발언자 / 타임스탬프 / 실제 발언 원문 / 종목명 / 감성 추출
   - transcript(자막) 기반 분석을 병행하여 API 비용 절감
 
@@ -15,6 +15,17 @@ Gemini를 활용한 유튜브 영상 직접 분석 모듈
 - GEMINI-YT-4  : Content 구조 오류 수정
                  {"video_url": url} → parts 리스트 구조로 변경
                  YouTube URL은 file_data가 아닌 직접 url 방식 사용
+                 (※ GEMINI-YT-5에서 이 판단이 잘못됐던 것으로 확인 — 되돌림)
+- GEMINI-YT-5  : 전면 재작성.
+                 1) google-generativeai(legacy) SDK는 2025-11-30 EOL,
+                    저장소도 archived 상태 → google-genai(신규 통합 SDK)로 교체.
+                 2) gemini-1.5-pro 모델은 이미 완전히 shutdown(404) →
+                    현재 서비스 중인 모델로 교체. 모델명은 GEMINI_MODEL
+                    상수로 분리해 다음 모델 교체 시 한 곳만 고치면 되도록 함.
+                 3) GEMINI-YT-4의 "URL을 문자열로 직접 전달" 방식은 실제로는
+                    Gemini가 영상으로 인식하지 못하는 잘못된 구조였음 →
+                    공식 문서대로 types.Part(file_data=types.FileData(...))
+                    구조로 복원.
 """
 
 import json
@@ -22,13 +33,21 @@ import re
 import time
 from typing import Optional
 
-# ── Gemini SDK 임포트 ─────────────────────────────────────────────────────────
+# ── Gemini SDK 임포트 (GEMINI-YT-5: 신규 통합 SDK google-genai) ──────────────
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
     _GEMINI_AVAILABLE = True
 except ImportError:
     _GEMINI_AVAILABLE = False
-    print("[GeminiYT] google-generativeai 미설치 → 영상 분석 비활성화")
+    print("[GeminiYT] google-genai 미설치 → 영상 분석 비활성화")
+
+# GEMINI-YT-5: 모델명을 상수로 분리.
+# Gemini는 모델을 자주 셧다운하므로(예: gemini-1.5-pro, gemini-2.0-flash 등
+# 이미 shutdown) 다음에 또 막히면 이 한 줄만 바꾸면 되도록 구성.
+# 2026-06 기준 안정 서비스 중인 모델. 추후 ai.google.dev/gemini-api/docs/models
+# 의 deprecation 페이지에서 현재 상태 확인 권장.
+GEMINI_MODEL = "gemini-2.5-flash"
 
 
 # ── 분석 대상 선별 기준 ───────────────────────────────────────────────────────
@@ -96,6 +115,8 @@ JSON 형식으로만 응답하세요:
 
 def _parse_gemini_response(text: str) -> Optional[dict]:
     """Gemini 응답에서 JSON 추출."""
+    if not text:
+        return None
     m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
     if m:
         try:
@@ -111,31 +132,37 @@ def _parse_gemini_response(text: str) -> Optional[dict]:
     return None
 
 
-def _analyze_via_transcript(model, transcript: str, video_url: str) -> Optional[dict]:
+def _analyze_via_transcript(client, transcript: str, video_url: str) -> Optional[dict]:
     """transcript 텍스트로 Gemini 분석 (영상 직접 접근 실패 시 폴백)."""
     if not transcript or len(transcript) < _MIN_TRANSCRIPT_CHARS:
         return None
     prompt = _PROMPT_TRANSCRIPT.format(transcript=transcript[:4000])
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+        )
         return _parse_gemini_response(response.text)
     except Exception as e:
         print(f"    [GeminiYT] transcript 분석 실패 ({video_url}): {e}")
         return None
 
 
-def _analyze_via_video_url(model, video_url: str) -> Optional[dict]:
+def _analyze_via_video_url(client, video_url: str) -> Optional[dict]:
     """
-    GEMINI-YT-4:
-    YouTube URL을 Gemini에 전달할 때 올바른 Content 구조 사용.
-    Gemini 1.5 Pro는 YouTube URL을 parts 안의 문자열로 직접 전달 가능.
-    {"video_url": url} 딕셔너리 형식은 잘못된 구조 → parts 리스트로 수정.
+    GEMINI-YT-5:
+    YouTube URL은 file_data(FileData) 구조로 전달해야 Gemini가
+    실제 영상으로 인식한다. 단순 문자열로 넘기면 텍스트로만 취급되어
+    영상 내용을 전혀 보지 못한 채 항상 실패한다 (GEMINI-YT-4의 오판 수정).
     """
     try:
-        response = model.generate_content([
-            _PROMPT_VIDEO,
-            video_url,   # YouTube URL을 문자열로 직접 전달
-        ])
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=types.Content(parts=[
+                types.Part(file_data=types.FileData(file_uri=video_url)),
+                types.Part(text=_PROMPT_VIDEO),
+            ]),
+        )
         return _parse_gemini_response(response.text)
     except Exception as e:
         print(f"    [GeminiYT] 영상 직접 분석 실패 ({video_url}): {e}")
@@ -160,15 +187,14 @@ def analyze_youtube_items(
       - gemini_analyzed   : True (분석 완료) / False (스킵 또는 실패)
     """
     if not _GEMINI_AVAILABLE:
-        print("[GeminiYT] Gemini SDK 없음 → 전체 스킵")
+        print("[GeminiYT] google-genai SDK 없음 → 전체 스킵")
         return youtube_items
 
     if not api_key:
         print("[GeminiYT] GEMINI_API_KEY 없음 → 전체 스킵")
         return youtube_items
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-1.5-pro")
+    client = genai.Client(api_key=api_key)
 
     # 분석 대상 선별 — transcript가 있는 항목 우선, 최대 max_videos개
     candidates = []
@@ -183,7 +209,7 @@ def analyze_youtube_items(
     skip_count = len(candidates) - len(to_analyze)
 
     print(f"[GeminiYT] 분석 대상: {len(to_analyze)}개 "
-          f"(전체 {len(youtube_items)}개 중, {skip_count}개 스킵)")
+          f"(전체 {len(youtube_items)}개 중, {skip_count}개 스킵, model={GEMINI_MODEL})")
 
     enriched       = []
     analyzed_count = 0
@@ -197,12 +223,12 @@ def analyze_youtube_items(
 
         # 1차 시도: YouTube URL 직접 분석
         if video_url:
-            result = _analyze_via_video_url(model, video_url)
+            result = _analyze_via_video_url(client, video_url)
 
         # 2차 시도: transcript 폴백
         if result is None and has_transcript:
             print(f"    [GeminiYT] transcript 폴백 시도: {title[:30]}")
-            result = _analyze_via_transcript(model, transcript, video_url)
+            result = _analyze_via_transcript(client, transcript, video_url)
 
         if result:
             item["gemini_summary"]  = result.get("video_summary", "")
