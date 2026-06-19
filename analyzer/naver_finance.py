@@ -4,11 +4,13 @@
 # FIX-SISE-1 : sise_day 정규식 그룹 인덱스 오류 수정
 #              (m[2]전일비 스킵 → m[3]시가 올바르게 매핑)
 # FIX-PRICE-5: 한국 주식시장 프리마켓 없음 반영
-#              09:00 이전 → Naver API 반환값이 전일종가임을 명시
-#              price_label을 호출부(ai_analyzer)에서 결정하므로
-#              naver_finance는 price를 있는 그대로 반환
+#              09:00 이전 → Naver API 반환값 = 전일 종가
+#              price_label 결정은 ai_analyzer(호출부)에서 담당
+#              이 함수는 가격 값만 정확하게 반환
 # FIX-PRICE-6: API closePrice=0 또는 누락 시 추가 키 탐색 강화
 #              prevClosePrice, stockEndPrice 순으로 폴백
+#              prevClosePrice 폴백 시 change/change_pct는 0으로 강제
+#              (의미 혼동 방지 — 어제 종가에 오늘 등락률 붙이지 않음)
 # FIX-API-2  : Naver Stock API 응답 구조 변화 대응
 #              stockPrice 중첩 객체 내 키도 탐색
 
@@ -58,7 +60,9 @@ def _parse_int(value) -> int:
     변환 실패 시 0 반환.
     """
     try:
-        return int(str(value).replace(",", "").replace(" ", "").replace("+", ""))
+        return int(
+            str(value).replace(",", "").replace(" ", "").replace("+", "")
+        )
     except (ValueError, TypeError):
         return 0
 
@@ -111,7 +115,7 @@ def verify_stock_via_naver(stock_name: str) -> dict:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 현재가 조회
+# API 응답 파싱 헬퍼
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _extract_price_from_api(data: dict) -> tuple:
@@ -120,52 +124,67 @@ def _extract_price_from_api(data: dict) -> tuple:
     Naver Stock API JSON에서 price, change, change_pct를 추출한다.
 
     탐색 순서 (price):
-      1. data["closePrice"]
+      1. data["closePrice"]           → 정규장 현재가 / 장 전 전일종가
       2. data["stockPrice"]["closePrice"]
-      3. data["prevClosePrice"]            ← FIX-PRICE-6 추가
-      4. data["stockPrice"]["prevClosePrice"]
-      5. data["stockEndPrice"]             ← FIX-API-2 추가
+      3. data["stockEndPrice"]        → FIX-API-2: 구조 변화 대응
+      4. data["stockPrice"]["stockEndPrice"]
+      5. data["prevClosePrice"]       → FIX-PRICE-6: 위 모두 0일 때 폴백
+      6. data["stockPrice"]["prevClosePrice"]
 
-    탐색 순서 (change):
-      1. data["compareToPreviousClosePrice"]
-      2. data["stockPrice"]["compareToPreviousClosePrice"]
-
-    탐색 순서 (change_pct):
-      1. data["fluctuationsRatio"]
-      2. data["stockPrice"]["fluctuationsRatio"]
+    탐색 순서 (change / change_pct):
+      - 1~4번 경로로 price를 얻은 경우만 조회
+      - prevClosePrice 폴백 시에는 change=0, change_pct=0.0 강제
+        (어제 종가에 오늘 등락률을 붙이는 의미 혼동 방지)
 
     반환: (price: int, change: int, change_pct: float)
     price == 0 이면 조회 실패로 간주.
     """
     sp = data.get("stockPrice", {}) or {}
 
-    # ── price ──────────────────────────────────────────────────────────────
-    price = 0
-    for key in ("closePrice", "prevClosePrice", "stockEndPrice"):
+    # ── 1단계: closePrice / stockEndPrice 우선 탐색 ──────────────────────
+    price         = 0
+    used_fallback = False
+
+    for key in ("closePrice", "stockEndPrice"):
         raw = data.get(key) or sp.get(key)
         if raw:
             price = _parse_int(raw)
             if price > 0:
                 break
 
-    # ── change ─────────────────────────────────────────────────────────────
-    change = 0
-    for key in ("compareToPreviousClosePrice",):
-        raw = data.get(key) or sp.get(key)
-        if raw is not None:
-            change = _parse_int(raw)
-            break
+    # ── 2단계: 위 모두 0이면 prevClosePrice 폴백 ─────────────────────────
+    if price == 0:
+        for key in ("prevClosePrice",):
+            raw = data.get(key) or sp.get(key)
+            if raw:
+                price = _parse_int(raw)
+                if price > 0:
+                    used_fallback = True
+                    break
 
-    # ── change_pct ─────────────────────────────────────────────────────────
+    # ── change / change_pct ───────────────────────────────────────────────
+    # prevClosePrice 폴백 시에는 등락 정보가 의미 없으므로 0으로 강제
+    change     = 0
     change_pct = 0.0
-    for key in ("fluctuationsRatio",):
-        raw = data.get(key) or sp.get(key)
-        if raw is not None:
-            change_pct = _parse_float(raw)
-            break
+
+    if not used_fallback and price > 0:
+        for key in ("compareToPreviousClosePrice",):
+            raw = data.get(key) or sp.get(key)
+            if raw is not None:
+                change = _parse_int(raw)
+                break
+        for key in ("fluctuationsRatio",):
+            raw = data.get(key) or sp.get(key)
+            if raw is not None:
+                change_pct = _parse_float(raw)
+                break
 
     return price, change, change_pct
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 현재가 조회
+# ─────────────────────────────────────────────────────────────────────────────
 
 def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
     """
@@ -173,10 +192,10 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
 
     FIX-PRICE-5:
       한국 주식시장은 프리마켓이 없다.
-      - 09:00 이전: Naver API가 반환하는 closePrice = 전일 종가
-      - 09:00 이후: closePrice = 정규장 현재가 (또는 당일 종가)
-      price_label 결정은 ai_analyzer.py(호출부)에서 담당하므로
-      이 함수는 가격 값만 올바르게 반환하면 된다.
+      - 09:00 이전: Naver API closePrice = 전일 종가
+      - 09:00 이후: closePrice = 정규장 현재가
+      price_label 결정은 ai_analyzer.py(호출부)에서 담당.
+      이 함수는 가격 값만 올바르게 반환한다.
 
     우선순위:
       1) api.stock.naver.com/stock/{code}/basic  (JSON)
@@ -228,7 +247,10 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
     if daily:
         price = daily[0].get("close", 0)
         if price > 0:
-            print(f"[naver_finance] {stock_name}({code}): {price:,}원 [sise_day]")
+            print(
+                f"[naver_finance] {stock_name}({code}): "
+                f"{price:,}원 [sise_day]"
+            )
             return {
                 "name":       stock_name,
                 "code":       code,
@@ -269,7 +291,8 @@ def fetch_naver_daily_prices(code: str, days: int = 14) -> list:
     네이버 sise_day 컬럼 순서: 날짜 / 종가 / 전일비 / 시가 / 고가 / 저가 / 거래량
     정규식 그룹 인덱스:          [0]    [1]    [2]     [3]   [4]   [5]   [6]
 
-    FIX-SISE-1: 전일비([2])가 부호 문자(▲▼)를 포함할 수 있어 숫자만 추출하도록 수정.
+    FIX-SISE-1: 전일비([2])가 부호 문자(▲▼)를 포함할 수 있어
+                숫자만 추출하도록 느슨한 패턴 사용.
     """
     url  = f"https://finance.naver.com/item/sise_day.naver?code={code}&page=1"
     html = _get(url)
