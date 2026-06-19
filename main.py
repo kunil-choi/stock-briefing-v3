@@ -25,6 +25,7 @@ from collectors.youtube_collector import (
     get_youtube_client,
     collect_section1_youtube,
     collect_panelist_youtube,
+    _PANELIST_HOURS,
 )
 from collectors.analyst_collector import collect_analyst
 from analyzer.ai_analyzer         import analyze_and_generate_html
@@ -104,7 +105,7 @@ def main():
         print("  → YouTube 클라이언트 없음, 스킵")
 
     # ── 4. 패널리스트 이름 검색 수집 ──────────────────────────────────────
-    print("\n[3/5] 패널리스트 이름 검색 수집 (48h)...")
+    print(f"\n[3/5] 패널리스트 이름 검색 수집 ({_PANELIST_HOURS}h)...")
     panelist_data = []
     if youtube:
         panelist_data = safe_collect(

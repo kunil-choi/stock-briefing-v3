@@ -106,12 +106,24 @@ def _parse_published(entry) -> datetime:
 
 
 def _is_valid_feed(feed) -> bool:
-    """BUG-N-2: feedparser bozo 오류 감지"""
+    """
+    BUG-N-5: feedparser는 인코딩 선언 불일치, 네임스페이스 누락 등
+    RSS 스펙을 엄격히 따르지 않는 사소한 경우에도 bozo=True를 설정한다.
+    이런 경우 대부분 feedparser는 entries를 정상적으로 파싱해내므로,
+    bozo 플래그만으로 피드 전체를 버리면 실제로 읽을 수 있는 기사가
+    있는 피드까지 통째로 스킵하게 됨 (한국 언론사 RSS에서 빈번히 발생).
+
+    → HTTP 상태 코드가 명확한 실패(4xx/5xx)인 경우만 무효로 처리하고,
+      bozo 자체는 진단용 로그로만 남긴다. entries 존재 여부는 호출부
+      (collect_news)에서 별도로 확인.
+    """
+    status = getattr(feed, "status", None)
+    if status is not None and status >= 400:
+        return False
     if getattr(feed, "bozo", False):
         exc = getattr(feed, "bozo_exception", None)
-        if exc and "CharacterEncodingOverride" in type(exc).__name__:
-            return True
-        return False
+        print(f"    [bozo경고, 무시] {type(exc).__name__ if exc else '?'}: "
+              f"{str(exc)[:100] if exc else ''}")
     return True
 
 

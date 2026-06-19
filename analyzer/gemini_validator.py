@@ -23,6 +23,7 @@ Gemini를 활용한 브리핑 교차 검수 모듈
 import json
 import re
 import time
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 try:
@@ -73,6 +74,18 @@ def _get_client(api_key: str):
 def _model_name(use_flash: bool = False) -> str:
     """Flash는 저비용 검수용, Pro급은 PDF/영상 처리용 (현재는 동일 모델 사용)."""
     return _MODEL_FLASH if use_flash else _MODEL_PRO
+
+
+def _today_str() -> str:
+    """
+    GEMINI-VAL-6: Gemini는 학습 시점 기준으로 '현재'를 추정하기 때문에,
+    날짜 컨텍스트를 안 주면 2025~2026년 등 실제로는 이미 지났거나 진행 중인
+    분기/연도를 "미래"로 잘못 판단해 엉뚱한 시제 오류를 지적하는 경우가 있음
+    (예: 2Q26이 진행 중인 현재 분기인데도 '미래 시점'이라 오판).
+    검수 프롬프트에 오늘 날짜를 명시해 이런 오판을 방지.
+    """
+    kst = timezone(timedelta(hours=9))
+    return datetime.now(kst).strftime("%Y년 %m월 %d일")
 
 
 # ── 1. 코드 룰 검수 (비용 0, 항상 실행) ─────────────────────────────────────
@@ -176,6 +189,7 @@ def run_gemini_content_validation(
         )
 
     prompt = (
+        f"오늘 날짜는 {_today_str()}입니다. 이 날짜를 기준으로 판단하세요.\n\n"
         "아래는 AI가 생성한 주식 브리핑 데이터입니다.\n"
         "다음 두 가지를 검토하세요:\n\n"
         "1. signal(긍정/중립/부정)이 요약(summary) 내용과 논리적으로 일치하는지\n"
@@ -340,6 +354,8 @@ def _verify_via_text(analyst_items: list, api_key: str) -> list:
         )
 
     prompt = (
+        f"오늘 날짜는 {_today_str()}입니다. 이 날짜를 기준으로 판단하세요 "
+        "(예: 이미 지났거나 현재 진행 중인 연도/분기를 '미래 시점'으로 오판하지 마세요).\n\n"
         "아래 애널리스트 리포트 요약 목록에서 이상한 점을 찾아주세요.\n"
         "- 투자의견과 요약 내용이 서로 모순되는 경우\n"
         "- 목표주가가 현실적이지 않은 경우 (예: 0원, 음수, 비정상적 수치)\n"

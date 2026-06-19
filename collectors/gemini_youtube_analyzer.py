@@ -221,14 +221,18 @@ def analyze_youtube_items(
 
         result = None
 
-        # 1차 시도: YouTube URL 직접 분석
-        if video_url:
-            result = _analyze_via_video_url(client, video_url)
-
-        # 2차 시도: transcript 폴백
-        if result is None and has_transcript:
-            print(f"    [GeminiYT] transcript 폴백 시도: {title[:30]}")
+        # GEMINI-YT-6: 영상 직접분석(file_data)은 영상 전체를 토큰화하므로
+        # 자막 텍스트 대비 토큰 비용이 매우 커서, 다수 영상을 연속 처리하면
+        # generate_content_paid_tier_input_token_count(분당 토큰) quota를
+        # 빠르게 소진해 429 RESOURCE_EXHAUSTED가 양산됨.
+        # 분석 대상은 이미 "자막 있는 영상 우선"으로 선별해두므로,
+        # 자막이 있으면 자막을 먼저 쓰고, 없을 때만 비용이 큰 영상 직접분석을 쓴다.
+        if has_transcript:
             result = _analyze_via_transcript(client, transcript, video_url)
+
+        # 자막이 없거나 자막 분석이 실패한 경우에만 영상 직접분석 시도
+        if result is None and video_url:
+            result = _analyze_via_video_url(client, video_url)
 
         if result:
             item["gemini_summary"]  = result.get("video_summary", "")

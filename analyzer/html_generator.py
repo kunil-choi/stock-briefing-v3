@@ -32,14 +32,15 @@ _HP_SOURCE_META = {
 _HP_SOURCE_DEFAULT = {"color": "#adb5bd", "icon": "📌", "label": "단독 언급"}
 
 _INDICATOR_DEFS = [
-    ("코스피",             ["kospi",           "KOSPI"]),
-    ("코스닥",             ["kosdaq",          "KOSDAQ"]),
-    ("나스닥",             ["nasdaq",          "NASDAQ"]),
-    ("S&P500",             ["sp500",           "SP500", "s&p500"]),
-    ("다우존스",           ["dow",             "DOW",   "dow_jones"]),
-    ("KOSPI200 야간선물",  ["kospi200_night",  "kospi200night"]),
-    ("KOSDAQ150 야간선물", ["kosdaq150_night", "kosdaq150night"]),
-    ("달러/원",            ["usd_krw",         "USD_KRW", "usd"]),
+    ("코스피",   ["kospi",  "KOSPI"]),
+    ("코스닥",   ["kosdaq", "KOSDAQ"]),
+    ("나스닥",   ["nasdaq", "NASDAQ"]),
+    ("S&P500",   ["sp500",  "SP500", "s&p500"]),
+    ("다우존스", ["dow",    "DOW",   "dow_jones"]),
+    ("달러/원",  ["usd_krw", "USD_KRW", "usd"]),
+    # FIX-MKT-12: KOSPI200/KOSDAQ150 야간선물은 _build_dawn_market_html()의
+    # "새벽시장 포인트" 박스에서 방향성 해석과 함께 항상 표시되므로
+    # 상단 그리드에서는 제거 (중복 + 데이터 없을 때 어색한 placeholder 방지)
 ]
 
 _TAG_META = {
@@ -164,7 +165,6 @@ def _build_dawn_market_html(market_overview: dict) -> str:
 
     kospi_night  = market_overview.get("kospi200_night")
     kosdaq_night = market_overview.get("kosdaq150_night")
-    usd_krw      = market_overview.get("usd_krw")
 
     if not kospi_night and not kosdaq_night:
         return ""
@@ -205,23 +205,9 @@ def _build_dawn_market_html(market_overview: dict) -> str:
             f'</div>'
         )
 
-    if usd_krw:
-        usd_val = _safe_float(usd_krw, "value")
-        usd_pct = _safe_float(usd_krw, "change_pct")
-        if usd_pct >= 0.1:
-            usd_label, usd_color, usd_arrow = "원화 약세 (소폭 풋 방향)", "#74c0fc", "▲"
-        elif usd_pct <= -0.1:
-            usd_label, usd_color, usd_arrow = "원화 강세 (소폭 콜 방향)", "#ff6b6b", "▼"
-        else:
-            usd_label, usd_color, usd_arrow = "환율 안정", "#adb5bd", "━"
-        rows += (
-            f'<div class="dawn-row">'
-            f'<span class="dawn-icon">💱</span>'
-            f'<span class="dawn-name">역외환율</span>'
-            f'<span class="dawn-val" style="color:{usd_color};">'
-            f'{usd_arrow} {usd_val:,.2f}원 ({usd_pct:+.2f}%) {usd_label}</span>'
-            f'</div>'
-        )
+    # FIX-MKT-13: 'usd_krw'는 상단 시장지표 그리드의 "달러/원"과 동일한 값이며
+    # (별도 역외/NDF 소스가 아님), 종합판단(avg_pct) 로직에도 쓰이지 않으므로
+    # 새벽시장 박스에서는 제거 — 야간선물 본연의 역할에 집중
 
     kospi_pct  = _safe_float(kospi_night,  "change_pct") if kospi_night  else 0.0
     kosdaq_pct = _safe_float(kosdaq_night, "change_pct") if kosdaq_night else 0.0
