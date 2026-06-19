@@ -1,4 +1,3 @@
-# analyzer/html_generator.py
 """
 AI 주식 브리핑 HTML 생성 엔진
 
@@ -8,6 +7,7 @@ AI 주식 브리핑 HTML 생성 엔진
 - [13] JS-NEWLINE: safe_name_js 줄바꿈 문자 제거
 - FIX-PRICE-4  : verified_price → price/change_pct/price_label 필드로 읽기 통일
                  ai_analyzer.py FIX-PRICE-4와 맞춤 (관심종목·히든픽 모두 적용)
+- TIER-FILTER-1: _HP_SOURCE_META, _TAG_META에 증권사 항목 추가
 """
 
 import re
@@ -21,6 +21,7 @@ _HP_SOURCE_META = {
     "애널리스트": {"color": "#51cf66", "icon": "📊", "label": "애널리스트"},
     "경제방송TV": {"color": "#ffa94d", "icon": "📺", "label": "경제방송TV"},
     "경제방송":   {"color": "#74c0fc", "icon": "📡", "label": "경제방송"},
+    "증권사":     {"color": "#cc5de8", "icon": "🏦", "label": "증권사 채널"},  # TIER-FILTER-1
 }
 _HP_SOURCE_DEFAULT = {"color": "#adb5bd", "icon": "📌", "label": "단독 언급"}
 
@@ -41,6 +42,7 @@ _TAG_META = {
     "경제방송TV": {"bg": "#3a2d1a", "color": "#ffa94d"},
     "유튜브":     {"bg": "#2d1a3a", "color": "#cc5de8"},
     "애널리스트": {"bg": "#1a3a2d", "color": "#51cf66"},
+    "증권사":     {"bg": "#2d1a3a", "color": "#cc5de8"},  # TIER-FILTER-1
 }
 
 # FIX-SIG-4: 키를 list of tuples로 명확화
@@ -167,7 +169,6 @@ def _build_dawn_market_html(market_overview: dict) -> str:
     rows = ""
 
     if kospi_night:
-        # [5] DAWN-NONE: _safe_float으로 None 방어
         pct   = _safe_float(kospi_night, "change_pct")
         val   = _safe_float(kospi_night, "value")
         label, color, arrow = _direction_label(pct)
@@ -242,7 +243,7 @@ def _build_dawn_market_html(market_overview: dict) -> str:
 def _render_market_summary(market_summary: str) -> str:
     if not market_summary or not market_summary.strip():
         return '<p style="color:#666;">시장 요약 데이터 없음</p>'
-    # [12] SUMMARY-SPLIT: 단락 분리 패턴 개선 — 빈 줄 또는 번호 목록 모두 처리
+    # [12] SUMMARY-SPLIT: 단락 분리 패턴 개선
     paras = [
         p.strip()
         for p in re.split(r'\n{2,}|\n(?=\d+[\.\)])', market_summary.strip())
@@ -265,14 +266,12 @@ def _build_analyst_html(all_data: list) -> str:
     def _report_card(r: dict) -> str:
         stock  = r.get("stock_name", "")
         title  = r.get("report_title") or r.get("title", "")
-        # [11] BROKER-LIST: brokers가 리스트일 때 문자열로 변환
         brokers_raw = r.get("brokers") or r.get("source_name", "")
         broker = (", ".join(brokers_raw)
                   if isinstance(brokers_raw, list) else str(brokers_raw))
         link   = r.get("link", "")
         is_new = r.get("new_coverage", False)
 
-        # FIX-RPT-1: ai_summary만 사용
         if not link and stock:
             enc  = stock.replace(" ", "+")
             link = (f"https://finance.naver.com/research/company_list.naver"
@@ -309,7 +308,6 @@ def _build_analyst_html(all_data: list) -> str:
     if not analyst_items:
         return '<p style="color:#666;">애널리스트 리포트 데이터 없음</p>'
 
-    # [2] ANA-SINGLE: category 기반으로만 분류 — 객체 동일성 비교 제거
     simultaneous = [r for r in analyst_items
                     if r.get("analyst_category") == "simultaneous"]
     new_cov      = [r for r in analyst_items
@@ -348,7 +346,6 @@ def _render_star_rating(weighted_score, max_score: float = 5.0) -> str:
         score = float(weighted_score)
     except (TypeError, ValueError):
         score = 0.0
-    # [9] STAR-NEG: 음수 score 방어
     score  = max(0.0, score)
     filled = max(1, round((score / max_score) * 5)) if score > 0 else 0
     filled = min(filled, 5)
@@ -361,7 +358,7 @@ def _render_star_rating(weighted_score, max_score: float = 5.0) -> str:
 
 
 def _render_reasons(reasons: list) -> str:
-    """히든픽 전용 reasons 렌더링 (관심종목은 channel_mentions만 사용)."""
+    """히든픽 전용 reasons 렌더링."""
     if not reasons:
         return ""
     items = ""
@@ -386,7 +383,6 @@ def _render_reasons(reasons: list) -> str:
                 f'style="background:{meta["bg"]};color:{meta["color"]};">'
                 f'{_he.escape(rn)}</span> '
             )
-        # [7] RSN-URL: URL 프로토콜 검증 + rd html.escape
         if rl and rl.startswith(("http://", "https://")):
             text_html = (
                 f'<a href="{rl}" target="_blank" rel="noopener" '
@@ -407,10 +403,7 @@ def _is_positive_signal(sig) -> bool:
 
 
 def _render_stock_detail(stock: dict) -> str:
-    """
-    종목 카드 상세 렌더링.
-    FIX-DUP-1: channel_mentions만 렌더링.
-    """
+    """종목 카드 상세 렌더링. channel_mentions만 렌더링."""
     html = ""
 
     summary = (stock.get("summary") or stock.get("description") or "").strip()
@@ -450,8 +443,6 @@ def _render_stock_detail(stock: dict) -> str:
                 f'<span style="color:{meta["color"]};font-weight:600;">'
                 f'{_he.escape(sname)}</span>'
             )
-            # [8] CM-ESC: content html.escape 적용
-            # [7] RSN-URL: URL 프로토콜 검증
             if url and url.startswith(("http://", "https://")):
                 text_html = (
                     f'<a href="{url}" target="_blank" rel="noopener" '
@@ -474,15 +465,12 @@ def _render_stock_detail(stock: dict) -> str:
 
 
 def _render_ai_strategy(ai_strategy: str) -> str:
-    # FIX-STRAT-4: 빈 문자열/None 방어
     if not ai_strategy or not ai_strategy.strip():
         return '<p style="color:#666;">AI 전략 데이터 없음</p>'
 
-    # FIX-STRAT-4: ■ 로 시작하는 토큰만 처리
     raw_sections = re.split(r'\n(?=■ )', ai_strategy.strip())
     sections     = [s.strip() for s in raw_sections if s.strip().startswith("■")]
 
-    # [3] STRAT-XSS: ■ 없는 원문 폴백 시 html.escape 적용
     if not sections:
         return f'<p style="color:#ccc;">{_he.escape(ai_strategy.strip())}</p>'
 
@@ -521,19 +509,21 @@ def _render_ai_strategy(ai_strategy: str) -> str:
 
 def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
     """
-    1차: overlap_count >= 2 (서로 다른 채널타입 2종 이상)
-    2차: total_count >= 4  (4회 이상)
-    3차: total_count >= 2  (2회 이상)
-    FIX-BUG-3   : channel_counts 값 타입 안전 처리
-    FIX-H1      : name=None 방어 처리
-    FIX-FILTER-3: 3차 기준 2회↑ (ai_analyzer.py 동기화)
+    TIER-FILTER-1과 동기화:
+    overlap_count는 ai_analyzer에서 non_news_channel_types 기준으로 이미 설정됨.
+    html_generator에서는 그 값을 그대로 사용하여 필터링.
+
+    1차: overlap_count >= 2 (비뉴스 채널타입 2종 이상)
+    2차: total_count >= 4
+    3차: total_count >= 2
     """
     selected       = []
     selected_names = set()
 
     for s in stocks:
         cc = s.get("channel_counts", {})
-        if cc:
+        if cc and s.get("overlap_count", 0) == 0:
+            # overlap_count가 아직 0이면 channel_counts 기반으로 재계산 (하위호환)
             safe_count = 0
             for v in cc.values():
                 try:
@@ -566,7 +556,7 @@ def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
                 selected.append(s)
                 selected_names.add(name)
 
-    # 3차 — FIX-FILTER-3
+    # 3차
     if len(selected) < target:
         for s in stocks:
             if len(selected) >= target:
@@ -582,24 +572,24 @@ def _filter_stocks_tiered(stocks: list, target: int = 10) -> list:
 
 
 # ──────────────────────────────────────────────
-# 주가 표시 헬퍼 — FIX-PRICE-4
+# 주가 표시 헬퍼 — FIX-PRICE-4 / FIX-PRICE-5
 # ──────────────────────────────────────────────
 
 def _render_price_html(item: dict) -> str:
     """
-    ai_analyzer.py FIX-PRICE-4에서 병합한 price/change_pct/price_label 필드를 읽어
+    ai_analyzer.py에서 병합한 price/change_pct/price_label 필드를 읽어
     주가 HTML을 생성한다.
 
-    필드 우선순위:
-      1. price (int, ai_analyzer 병합)  → 현재가 or 전일종가 + 등락률
-      2. verified_price (레거시 호환)   → 숫자만 표시
-      3. 없음                           → "전일 종가 조회 중"
+    FIX-PRICE-5: 한국 주식시장은 프리마켓 없음.
+    - price_label = "현재가"  → 09:00 이후 정규장
+    - price_label = "전일종가" → 09:00 이전 (Naver API 반환값이 전일종가)
+    - price = 0 또는 없음     → "전일 종가 조회 중" 표시 제거, 빈 상태로 처리
     """
     price       = item.get("price", 0)
     change_pct  = item.get("change_pct", 0.0)
     price_label = item.get("price_label", "전일종가")
 
-    # ── FIX-PRICE-4 경로: ai_analyzer가 병합한 price 필드 ──────────────────
+    # FIX-PRICE-4 경로: ai_analyzer가 병합한 price 필드
     if isinstance(price, (int, float)) and price > 0:
         try:
             pct_num = float(change_pct)
@@ -622,15 +612,16 @@ def _render_price_html(item: dict) -> str:
             f'{pct_html}{label_html}'
         )
 
-    # ── 레거시 호환: verified_price ────────────────────────────────────────
+    # 레거시 호환: verified_price
     verified = item.get("verified_price")
     if isinstance(verified, int):
         return f'<span class="price-value">{verified:,}원</span>'
     if verified and str(verified).strip() not in ("None", "N/A", ""):
         return f'<span class="price-value">{_he.escape(str(verified))}</span>'
 
-    # ── 미수집 ─────────────────────────────────────────────────────────────
-    return '<span class="price-value" style="color:#666;">전일 종가 조회 중</span>'
+    # FIX-PRICE-5: 미수집 시 "전일 종가 조회 중" 문구 제거
+    # → 주가 미수집 상태를 조용히 처리 (빈 span)
+    return '<span class="price-value" style="color:#666;">-</span>'
 
 
 # ──────────────────────────────────────────────
@@ -641,7 +632,7 @@ def generate_html(
     data,
     channels_data=None,
     gh_repo="",
-    gh_token="",          # [1] gh_token: 하위 호환 유지 (내부 미사용)
+    gh_token="",
     market_overview=None,
     all_data=None,
 ) -> str:
@@ -673,7 +664,7 @@ def generate_html(
     market_summary_html    = _render_market_summary(market_sum)
     dawn_market_html       = _build_dawn_market_html(market_overview)
 
-    # [6] SECTOR-ESC: reason title 속성 따옴표 이스케이프
+    # [6] SECTOR-ESC
     sector_badges_html = ""
     for sector in hot_sectors:
         if isinstance(sector, dict):
@@ -725,7 +716,6 @@ def generate_html(
                     f'{_he.escape(src_type)} {cnt_int}</span>'
                 )
 
-        # FIX-PRICE-4: _render_price_html 헬퍼로 통일
         price_html = _render_price_html(stock)
 
         if chart_b64:
@@ -757,7 +747,7 @@ def generate_html(
       <span class="signal-badge {sig_class}"
             style="border-color:{sig_color};color:{sig_color};">{signal_label}</span>
     </div>
-    <div class="overlap-badge" title="채널 중복 언급 수">🔥 {overlap}개</div>
+    <div class="overlap-badge" title="비뉴스 채널 중복 언급 수">🔥 {overlap}개</div>
   </div>
   <div class="stock-card-body">
     <div class="source-tags">{source_tags_html}</div>
@@ -792,7 +782,6 @@ def generate_html(
         star_html         = _render_star_rating(weighted_sc)
         pick_badge_html   = f'<span class="hp-score-badge">Pick #{idx}</span>'
 
-        # FIX-PRICE-4: 히든픽도 동일한 헬퍼 사용
         price_html = _render_price_html(hp)
 
         if chart_b64:
@@ -906,25 +895,28 @@ a:hover { text-decoration: underline; }
   margin-bottom: .5rem; flex-wrap: wrap;
 }
 .dawn-icon { font-size: .9rem; flex-shrink: 0; }
-.dawn-name { font-size: .9rem; color: var(--text-muted); min-width: 160px; flex-shrink: 0; }
+.dawn-name {
+  font-size: .9rem; color: var(--text-muted);
+  min-width: 160px; flex-shrink: 0;
+}
 .dawn-val  { font-size: .9rem; font-weight: 600; }
 .dawn-summary {
-  margin-top: .85rem; padding-top: .75rem; border-top: 1px solid #2d4a6e;
-  font-size: .88rem; color: var(--text-muted);
-  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+  margin-top: .9rem; padding-top: .7rem;
+  border-top: 1px solid #2d4a6e;
+  font-size: .9rem; color: var(--text-muted);
 }
-.dawn-star { color: #ffd43b; font-size: .9rem; }
-.summary-block {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: 8px; padding: 1rem 1.2rem; margin-bottom: .75rem;
+.dawn-star { color: #74c0fc; margin-right: .3rem; }
+.summary-block { margin-bottom: 1.2rem; }
+.summary-title {
+  font-size: .85rem; font-weight: 700; color: var(--accent);
+  margin-bottom: .35rem; text-transform: uppercase; letter-spacing: .04em;
 }
-.summary-title { font-weight: 700; margin-bottom: .4rem; color: var(--accent); }
-.summary-text  { color: var(--text-muted); font-size: .95rem; }
-.sector-list  { display: flex; flex-wrap: wrap; gap: .5rem; }
+.summary-text { font-size: .93rem; color: var(--text-muted); line-height: 1.65; }
+.sector-badges { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
 .sector-badge {
-  background: #1c2d3a; color: #74c0fc;
-  border: 1px solid #1e4a6e; border-radius: 20px;
-  padding: .3rem .8rem; font-size: .85rem; font-weight: 600; cursor: default;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 20px; padding: .3rem .85rem;
+  font-size: .82rem; color: var(--accent); cursor: default;
 }
 .stock-card {
   background: var(--surface); border: 1px solid var(--border);
@@ -932,178 +924,147 @@ a:hover { text-decoration: underline; }
 }
 .stock-card-header {
   display: flex; align-items: center; gap: .75rem;
-  padding: .9rem 1.2rem; border-bottom: 1px solid var(--border); flex-wrap: wrap;
+  padding: .85rem 1rem; border-bottom: 1px solid var(--border);
+  background: var(--surface2);
 }
 .stock-rank {
-  font-size: 1rem; font-weight: 800; color: var(--accent);
-  min-width: 2rem; text-align: center;
+  font-size: .8rem; font-weight: 700; color: var(--text-muted);
+  min-width: 28px;
 }
-.stock-name-block {
-  display: flex; align-items: center; gap: .5rem; flex: 1; flex-wrap: wrap;
+.stock-name-block { display: flex; align-items: center; gap: .5rem; flex: 1; }
+.stock-name {
+  font-size: 1.05rem; font-weight: 700; color: var(--text);
 }
-.stock-name { font-size: 1.05rem; font-weight: 700; color: var(--text); }
-.stock-name:hover { color: var(--accent); text-decoration: underline; }
+.stock-name:hover { color: var(--accent); }
 .signal-badge {
-  font-size: .75rem; font-weight: 700;
-  border: 1.5px solid; border-radius: 4px;
-  padding: .15rem .45rem; white-space: nowrap;
+  font-size: .72rem; padding: .15rem .5rem;
+  border-radius: 4px; border: 1px solid; font-weight: 600;
 }
-.signal-positive { border-color: #51cf66 !important; color: #51cf66 !important; }
-.signal-neutral  { border-color: #adb5bd !important; color: #adb5bd !important; }
-.signal-negative { border-color: #74c0fc !important; color: #74c0fc !important; }
 .overlap-badge {
-  font-size: .8rem; color: var(--up);
-  background: #2d1a1a; border-radius: 6px;
-  padding: .2rem .5rem; white-space: nowrap; margin-left: auto;
+  font-size: .78rem; color: #ffa94d; font-weight: 600;
+  white-space: nowrap;
 }
-.stock-card-body { padding: .9rem 1.2rem; }
-.source-tags { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .6rem; }
+.stock-card-body { padding: .85rem 1rem; }
+.source-tags { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .6rem; }
 .source-tag {
-  font-size: .72rem; font-weight: 600; border-radius: 4px; padding: .15rem .4rem;
+  font-size: .72rem; padding: .15rem .5rem; border-radius: 4px; font-weight: 600;
 }
 .price-row {
   display: flex; align-items: center; gap: .75rem;
   margin-bottom: .75rem; flex-wrap: wrap;
 }
-.price-value { font-size: .95rem; font-weight: 700; color: var(--text); }
+.price-value { font-size: 1.05rem; font-weight: 700; }
 .chart-btn {
-  font-size: .78rem; padding: .25rem .65rem;
-  background: var(--surface2); color: var(--accent);
-  border: 1px solid var(--border); border-radius: 6px;
-  cursor: pointer; text-decoration: none;
+  font-size: .78rem; padding: .3rem .75rem; border-radius: 6px;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--accent); cursor: pointer; text-decoration: none;
+  transition: background .15s;
 }
-.chart-btn:hover { background: #1c2d3a; }
-.stock-section { margin-bottom: .65rem; }
+.chart-btn:hover { background: var(--border); text-decoration: none; }
+.stock-section { margin-bottom: .75rem; }
 .stock-section-label {
-  font-size: .75rem; font-weight: 700; color: var(--accent);
-  display: block; margin-bottom: .2rem;
+  font-size: .78rem; font-weight: 700; color: var(--accent);
+  display: block; margin-bottom: .25rem;
 }
-.stock-section-text { font-size: .88rem; color: var(--text-muted); line-height: 1.55; }
-.reasons-list { list-style: none; padding: 0; margin: .3rem 0 0; }
-.reasons-list li {
-  font-size: .83rem; color: var(--text-muted);
-  padding: .3rem 0; border-bottom: 1px solid #21262d; line-height: 1.5;
+.stock-section-text {
+  font-size: .88rem; color: var(--text-muted); line-height: 1.6;
 }
-.reasons-list li:last-child { border-bottom: none; }
+.reasons-list {
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column; gap: .4rem;
+}
+.reasons-list li { font-size: .85rem; line-height: 1.55; }
 .reason-source {
-  font-size: .7rem; font-weight: 700;
-  border-radius: 3px; padding: .1rem .3rem; margin-right: .3rem;
+  font-size: .72rem; padding: .1rem .4rem; border-radius: 3px;
+  font-weight: 600; margin-right: .3rem;
 }
 .hidden-pick-card {
-  background: linear-gradient(135deg, #1a1a2e 0%, #161b22 100%);
-  border: 1px solid #2d3a4a; border-radius: 12px;
-  margin-bottom: 1rem; overflow: hidden;
+  background: linear-gradient(135deg, var(--surface) 0%, #1a1f2e 100%);
+  border: 1px solid #3d4f6e; border-radius: 12px; margin-bottom: 1rem;
+  overflow: hidden;
 }
 .hp-card-header {
-  display: flex; align-items: center; gap: .6rem;
-  padding: .85rem 1.2rem; border-bottom: 1px solid #2d3a4a; flex-wrap: wrap;
+  display: flex; align-items: center; gap: .75rem;
+  padding: .85rem 1rem; border-bottom: 1px solid #3d4f6e;
+  background: #1a2235; flex-wrap: wrap;
 }
-.hp-badges { display: flex; gap: .4rem; flex-wrap: wrap; }
+.hp-badges { display: flex; gap: .4rem; align-items: center; }
 .hp-source-badge {
-  font-size: .72rem; font-weight: 700; border-radius: 4px; padding: .15rem .45rem;
+  font-size: .72rem; padding: .2rem .6rem; border-radius: 20px; font-weight: 700;
 }
 .hp-score-badge {
-  font-size: .72rem; font-weight: 700;
-  background: #1c2d3a; color: var(--accent);
-  border: 1px solid #1e4a6e; border-radius: 4px; padding: .15rem .45rem;
+  font-size: .72rem; padding: .2rem .6rem; border-radius: 20px;
+  background: #ffa94d22; color: #ffa94d; border: 1px solid #ffa94d55;
+  font-weight: 700;
 }
 .hp-stock-name {
   font-size: 1.05rem; font-weight: 700; color: var(--text); flex: 1;
 }
-.hp-stock-name:hover { color: var(--accent); text-decoration: underline; }
-.star-rating { font-size: 1rem; letter-spacing: .05em; }
-.star.filled { color: #ffd43b; }
-.star.empty  { color: #3d3d3d; }
-.hp-card-body { padding: .9rem 1.2rem; }
-.analyst-category-title {
-  font-size: .85rem; font-weight: 700; color: var(--accent);
-  margin: 1rem 0 .5rem; padding-bottom: .3rem;
-  border-bottom: 1px solid var(--border);
-}
+.hp-stock-name:hover { color: var(--accent); }
+.star-rating { font-size: 1rem; }
+.star.filled { color: #ffa94d; }
+.star.empty  { color: #444; }
+.hp-card-body { padding: .85rem 1rem; }
 .analyst-card {
   background: var(--surface2); border: 1px solid var(--border);
   border-radius: 8px; padding: .75rem 1rem; margin-bottom: .6rem;
 }
 .analyst-card-meta {
-  display: flex; gap: .5rem; flex-wrap: wrap;
-  align-items: center; margin-bottom: .35rem;
+  display: flex; align-items: center; gap: .5rem;
+  margin-bottom: .3rem; flex-wrap: wrap;
 }
-.analyst-stock {
-  font-size: .78rem; font-weight: 700;
-  background: #1a3a2d; color: #51cf66;
-  border-radius: 4px; padding: .1rem .35rem;
-}
-.analyst-broker {
-  font-size: .75rem; color: var(--text-muted);
-  background: #2d2d44; border-radius: 4px; padding: .1rem .35rem;
-}
+.analyst-stock { font-weight: 700; font-size: .9rem; }
+.analyst-broker { font-size: .8rem; color: var(--text-muted); }
 .new-coverage-badge {
-  font-size: .7rem; font-weight: 700;
-  background: #3a1a1a; color: #ff6b6b;
-  border: 1px solid #6e1e1e; border-radius: 4px; padding: .1rem .35rem;
+  font-size: .68rem; padding: .1rem .4rem; border-radius: 4px;
+  background: #51cf6622; color: #51cf66; border: 1px solid #51cf6655;
+  font-weight: 700;
 }
-.analyst-card-title {
-  font-size: .88rem; color: var(--text); line-height: 1.5;
-  word-break: keep-all; white-space: normal;
+.analyst-title-link, .analyst-title-text {
+  font-size: .88rem; color: var(--text-muted); line-height: 1.5;
 }
-.analyst-title-link { color: var(--text); }
-.analyst-title-link:hover { color: var(--accent); text-decoration: underline; }
-.analyst-title-text { color: var(--text); }
-.analyst-summary {
-  font-size: .82rem; color: var(--text-muted);
-  margin-top: .4rem; line-height: 1.55;
-  border-top: 1px solid var(--border); padding-top: .4rem;
+.analyst-title-link:hover { color: var(--accent); }
+.analyst-category-title {
+  font-size: .85rem; font-weight: 700; color: var(--accent);
+  margin: 1rem 0 .5rem; padding-left: .5rem;
+  border-left: 3px solid var(--accent);
 }
-.strat-section {
-  background: var(--surface2); border: 1px solid var(--border);
-  border-radius: 8px; padding: .85rem 1rem; margin-bottom: .75rem;
+.strat-section { margin-bottom: 1.2rem; }
+.strat-title {
+  font-size: .9rem; font-weight: 700; color: var(--accent);
+  margin-bottom: .4rem;
 }
-.strat-title { font-size: .9rem; font-weight: 700; color: var(--accent); margin-bottom: .45rem; }
-.strat-body  { font-size: .85rem; color: var(--text-muted); }
-.strat-item {
-  background: #1c2d3a; border-radius: 4px;
-  padding: .3rem .6rem; margin-bottom: .3rem; line-height: 1.5;
-}
-.strat-text { margin-bottom: .3rem; line-height: 1.55; }
-.disclaimer {
-  margin: 40px 0 20px;
-  padding: 16px 20px;
-  background: #13131f;
-  border: 1px solid #2d2d44;
-  border-radius: 10px;
-  text-align: center;
-  color: #6b6b88;
-  font-size: .8rem;
-  line-height: 1.9;
-}
+.strat-body { font-size: .88rem; color: var(--text-muted); }
+.strat-text { margin-bottom: .3rem; line-height: 1.6; }
+.strat-item { margin-bottom: .25rem; line-height: 1.55; }
 .modal-overlay {
   display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,.85); z-index: 1000;
+  background: rgba(0,0,0,.75); z-index: 1000;
   align-items: center; justify-content: center;
 }
 .modal-overlay.active { display: flex; }
 .modal-box {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 12px; padding: 1.5rem;
-  max-width: 700px; width: 90%; position: relative;
+  border-radius: 12px; padding: 1.5rem; max-width: 700px; width: 95%;
+  position: relative;
+}
+.modal-title {
+  font-size: 1rem; font-weight: 700; margin-bottom: 1rem; color: var(--text);
 }
 .modal-close {
-  position: absolute; top: .75rem; right: 1rem;
-  font-size: 1.4rem; cursor: pointer; color: var(--text-muted);
-  background: none; border: none;
+  position: absolute; top: .75rem; right: .75rem;
+  background: none; border: none; color: var(--text-muted);
+  font-size: 1.2rem; cursor: pointer;
 }
 .modal-close:hover { color: var(--text); }
-#modal-chart-img { width: 100%; border-radius: 8px; margin-top: .5rem; }
+#modal-chart-img { width: 100%; border-radius: 8px; }
 @media (max-width: 600px) {
   .briefing-header h1 { font-size: 1.4rem; }
-  .stock-card-header  { padding: .7rem .9rem; }
-  .stock-card-body    { padding: .7rem .9rem; }
-  .hp-card-header     { padding: .7rem .9rem; }
-  .hp-card-body       { padding: .7rem .9rem; }
-  .dawn-name          { min-width: 120px; }
+  .stock-card-header  { flex-wrap: wrap; }
+  .stock-name         { font-size: .95rem; }
 }"""
 
-    html = f"""<!DOCTYPE html>
+    return f"""<!DOCTYPE html>
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
@@ -1116,52 +1077,52 @@ a:hover { text-decoration: underline; }
 
   <div class="briefing-header">
     <h1>📈 AI 주식 브리핑</h1>
-    <div class="subtitle">{briefing_date} &nbsp;|&nbsp; 생성 시각 {briefing_time} KST</div>
+    <div class="subtitle">{briefing_date} · 생성 시각 {briefing_time} KST</div>
   </div>
 
-  {dawn_market_html}
-
+  <!-- 시장 지표 -->
   <div class="section">
     <div class="section-title">📊 시장 지표</div>
     {market_indicators_html}
   </div>
 
+  <!-- 새벽시장 -->
+  {dawn_market_html}
+
+  <!-- 시장 요약 -->
   <div class="section">
-    <div class="section-title">📝 시장 요약</div>
+    <div class="section-title">🗞 오늘의 시장 요약</div>
     {market_summary_html}
   </div>
 
+  <!-- 핫 섹터 -->
   <div class="section">
-    <div class="section-title">🔥 핫 섹터</div>
-    <div class="sector-list">
-      {sector_badges_html or '<p style="color:#666;">데이터 없음</p>'}
-    </div>
+    <div class="section-title">🔥 오늘의 핫 섹터</div>
+    <div class="sector-badges">{sector_badges_html}</div>
   </div>
 
+  <!-- 관심종목 -->
   <div class="section">
-    <div class="section-title">👀 관심 종목</div>
+    <div class="section-title">👀 오늘의 관심종목</div>
     {stocks_html}
   </div>
 
+  <!-- 오늘의 픽 -->
   <div class="section">
-    <div class="section-title">💡 오늘의 픽</div>
+    <div class="section-title">💎 오늘의 픽</div>
     {hidden_html}
   </div>
 
+  <!-- 애널리스트 리포트 -->
   <div class="section">
-    <div class="section-title">📋 애널리스트 리포트</div>
+    <div class="section-title">📋 오늘의 증권사 리포트</div>
     {analyst_html}
   </div>
 
+  <!-- AI 전략 -->
   <div class="section">
     <div class="section-title">🤖 AI 투자 전략</div>
     {strategy_html}
-  </div>
-
-  <!-- FIX-DISCLAIMER-1: 법적 면책 문구 (TV 방송 대응) -->
-  <div class="disclaimer">
-    ⚠️ 본 브리핑은 관련 데이터를 AI가 분석한 참고 자료이며, 투자 권유가 아닙니다.<br>
-    투자 판단의 책임은 투자자 본인에게 있습니다.
   </div>
 
 </div>
@@ -1170,7 +1131,7 @@ a:hover { text-decoration: underline; }
 <div class="modal-overlay" id="chartModal">
   <div class="modal-box">
     <button class="modal-close" onclick="closeChart()">✕</button>
-    <div id="modal-chart-title" style="font-weight:700;margin-bottom:.5rem;"></div>
+    <div class="modal-title" id="modal-chart-title"></div>
     <img id="modal-chart-img" src="" alt="차트">
   </div>
 </div>
@@ -1179,9 +1140,10 @@ a:hover { text-decoration: underline; }
 {chart_data_js}
 
 function showChart(key, name) {{
-  if (!chartDataMap[key]) return;
-  document.getElementById('modal-chart-title').textContent = name + ' 차트';
-  document.getElementById('modal-chart-img').src = chartDataMap[key];
+  const src = chartDataMap[key];
+  if (!src) return;
+  document.getElementById('modal-chart-title').textContent = name + ' 주가 차트';
+  document.getElementById('modal-chart-img').src = src;
   document.getElementById('chartModal').classList.add('active');
 }}
 
@@ -1194,7 +1156,6 @@ document.getElementById('chartModal').addEventListener('click', function(e) {{
   if (e.target === this) closeChart();
 }});
 </script>
+
 </body>
 </html>"""
-
-    return html
