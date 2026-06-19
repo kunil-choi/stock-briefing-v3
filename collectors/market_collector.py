@@ -323,12 +323,14 @@ def collect_market_overview() -> dict:
     """
     시장 지표 수집.
 
-    FIX-MKT-9: 야간선물 캐시 로직 추가.
-    KRX 야간선물 거래시간: 18:00~익일 05:00 KST
-    06:00 워크플로우 실행 시 이미 거래 종료 → 전일 캐시 데이터 사용.
-
-    캐시 저장 시점: 야간선물 실시간 데이터 수집 성공 시 즉시 저장.
-    캐시 유효 기간: 당일(KST 날짜 기준).
+    FIX-MKT-9  : 야간선물 캐시 로직 추가.
+                 KRX 야간선물 거래시간: 18:00~익일 05:00 KST
+                 06:00 워크플로우 실행 시 이미 거래 종료 → 전일 캐시 데이터 사용.
+                 캐시 저장 시점: 야간선물 실시간 데이터 수집 성공 시 즉시 저장.
+                 캐시 유효 기간: 당일(KST 날짜 기준).
+    FIX-MKT-10 : 모든 지표를 항상 result에 포함 (수집 실패 시 value=None).
+                 → html_generator가 "데이터 없음" 카드로라도 항상 표출하도록 함.
+                 (기존엔 수집 실패 시 키 자체가 없어 카드가 통째로 사라졌음)
     """
     print("\n[시장수집] 지표 수집 시작...")
     result    = {}
@@ -337,63 +339,60 @@ def collect_market_overview() -> dict:
     if premarket:
         print("  [장전/주말] 전일 종가 기준으로 표시")
 
+    def _set(key: str, label: str, val, pct, is_pre: bool = False) -> None:
+        """FIX-MKT-10: 성공/실패 모두 result[key]를 채운다 (실패 시 value=None)."""
+        if val is not None:
+            result[key] = _make_indicator(val, pct, is_premarket=is_pre)
+            suffix = " [전일종가]" if is_pre else ""
+            print(f"  {label}: {val:,.2f} ({pct:+.2f}%){suffix}")
+        else:
+            result[key] = _make_indicator(None, 0.0, direction="flat", is_premarket=is_pre)
+            print(f"  {label}: 데이터 없음")
+
     # ── KOSPI ─────────────────────────────────────────────────────────────────
     val, pct = _fetch_yf("^KS11")
     if val is None:
         val, pct = _fetch_naver_index("KOSPI")
-    if val is not None:
-        result["kospi"] = _make_indicator(val, pct, is_premarket=premarket)
-        print(f"  KOSPI: {val:,.2f} ({pct:+.2f}%)"
-              + (" [전일종가]" if premarket else ""))
+    _set("kospi", "KOSPI", val, pct, premarket)
 
     # ── KOSDAQ ────────────────────────────────────────────────────────────────
     val, pct = _fetch_yf("^KQ11")
     if val is None:
         val, pct = _fetch_naver_index("KOSDAQ")
-    if val is not None:
-        result["kosdaq"] = _make_indicator(val, pct, is_premarket=premarket)
-        print(f"  KOSDAQ: {val:,.2f} ({pct:+.2f}%)"
-              + (" [전일종가]" if premarket else ""))
+    _set("kosdaq", "KOSDAQ", val, pct, premarket)
 
     # ── NASDAQ ────────────────────────────────────────────────────────────────
     val, pct = _fetch_yf("^IXIC")
-    if val is not None:
-        result["nasdaq"] = _make_indicator(val, pct, is_premarket=False)
-        print(f"  NASDAQ: {val:,.2f} ({pct:+.2f}%)")
+    _set("nasdaq", "NASDAQ", val, pct, False)
 
     # ── S&P 500 ───────────────────────────────────────────────────────────────
     val, pct = _fetch_yf("^GSPC")
-    if val is not None:
-        result["sp500"] = _make_indicator(val, pct, is_premarket=False)
-        print(f"  S&P500: {val:,.2f} ({pct:+.2f}%)")
+    _set("sp500", "S&P500", val, pct, False)
 
     # ── 다우존스 ──────────────────────────────────────────────────────────────
     val, pct = _fetch_yf("^DJI")
-    if val is not None:
-        result["dow"] = _make_indicator(val, pct, is_premarket=False)
-        print(f"  DOW: {val:,.2f} ({pct:+.2f}%)")
+    _set("dow", "DOW", val, pct, False)
 
-    # ── KOSPI200 야간선물 (FIX-MKT-9: 캐시 포함) ─────────────────────────────
+    # ── KOSPI200 야간선물 (FIX-MKT-9/10: 캐시 + 항상 표출) ───────────────────
     night_cache = _load_night_future_cache()
 
     val, pct = _get_night_future("K2FA", "KOSPI200야간선물")
     if val is not None:
         result["kospi200_night"] = _make_indicator(val, pct)
         print(f"  KOSPI200 야간선물: {val:,.2f} ({pct:+.2f}%) [실시간]")
-        # 실시간 수집 성공 시 캐시 갱신
         night_cache["kospi200_night"] = {"value": val, "change_pct": pct}
         _save_night_future_cache(night_cache)
     elif night_cache.get("kospi200_night"):
-        # 거래 시간 외: 캐시에서 복원
         cached = night_cache["kospi200_night"]
         c_val  = cached.get("value", 0)
         c_pct  = cached.get("change_pct", 0.0)
         result["kospi200_night"] = _make_indicator(c_val, c_pct)
         print(f"  KOSPI200 야간선물: {c_val:,.2f} ({c_pct:+.2f}%) [캐시]")
     else:
+        result["kospi200_night"] = _make_indicator(None, 0.0, direction="flat")
         print("  KOSPI200 야간선물: 데이터 없음 (거래 시간 외 + 캐시 없음)")
 
-    # ── KOSDAQ150 야간선물 (FIX-MKT-9: 캐시 포함) ────────────────────────────
+    # ── KOSDAQ150 야간선물 (FIX-MKT-9/10: 캐시 + 항상 표출) ──────────────────
     val, pct = _get_night_future("KSFA", "KOSDAQ150야간선물")
     if val is not None:
         result["kosdaq150_night"] = _make_indicator(val, pct)
@@ -407,19 +406,16 @@ def collect_market_overview() -> dict:
         result["kosdaq150_night"] = _make_indicator(c_val, c_pct)
         print(f"  KOSDAQ150 야간선물: {c_val:,.2f} ({c_pct:+.2f}%) [캐시]")
     else:
+        result["kosdaq150_night"] = _make_indicator(None, 0.0, direction="flat")
         print("  KOSDAQ150 야간선물: 데이터 없음 (거래 시간 외 + 캐시 없음)")
 
     # ── USD/KRW ───────────────────────────────────────────────────────────────
     val, pct = _fetch_yf("KRW=X")
     if val is None:
         val, pct = _fetch_naver_forex()
-    if val is not None:
-        result["usd_krw"] = _make_indicator(val, pct, is_premarket=False)
-        print(f"  USD/KRW: {val:,.2f} ({pct:+.2f}%)")
+    _set("usd_krw", "USD/KRW", val, pct, False)
 
-    if not result:
-        print("  [경고] 모든 시장 지표 수집 실패")
-    else:
-        print(f"[시장수집] 완료 ({len(result)}개 지표)")
+    available = sum(1 for v in result.values() if v.get("value") is not None)
+    print(f"[시장수집] 완료 (전체 {len(result)}개 지표 / 실제 수집 {available}개)")
 
     return result

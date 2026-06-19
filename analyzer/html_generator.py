@@ -90,8 +90,15 @@ def _safe_float(d: dict, key: str, default: float = 0.0) -> float:
 
 def _indicator_badge(label: str, value, pct, direction: str = "",
                      is_premarket: bool = False) -> str:
+    # FIX-MKT-10: 값이 없어도 카드 자체는 항상 표출 ("-" placeholder)
     if value is None:
-        return ""
+        return (
+            f'<div class="indicator-badge indicator-badge--empty">'
+            f'<span class="ind-label">{label}</span>'
+            f'<span class="ind-value" style="color:#666;">-</span>'
+            f'<span class="ind-pct" style="color:#666;">데이터 없음</span>'
+            f'</div>'
+        )
     try:
         pct_num = float(pct) if pct is not None else 0.0
     except (TypeError, ValueError):
@@ -128,12 +135,15 @@ def _build_market_indicators(market_overview: dict) -> str:
                 '<p style="color:#666;font-size:.85em;">시장 데이터 없음</p></div>')
     badges = ""
     for label, key_candidates in _INDICATOR_DEFS:
-        item = None
+        item  = None
+        found = False
         for key in key_candidates:
-            item = market_overview.get(key)
-            if item and isinstance(item, dict):
+            if key in market_overview:
+                item  = market_overview.get(key)
+                found = True
                 break
-        if not item or not isinstance(item, dict):
+        # FIX-MKT-10: 키 자체가 없을 때만 스킵. item이 dict이면(값 None 포함) 항상 렌더링.
+        if not found or not isinstance(item, dict):
             continue
         value     = (item.get("value") or item.get("close") or
                      item.get("price") or item.get("index"))
@@ -141,9 +151,7 @@ def _build_market_indicators(market_overview: dict) -> str:
                      item.get("percent")    or item.get("change_percent"))
         direction = item.get("direction", "")
         is_pre    = item.get("is_premarket", False)
-        badge     = _indicator_badge(label, value, pct, direction, is_pre)
-        if badge:
-            badges += badge
+        badges   += _indicator_badge(label, value, pct, direction, is_pre)
     if not badges:
         return ('<div class="market-indicators">'
                 '<p style="color:#666;font-size:.85em;">시장 데이터 없음</p></div>')
@@ -266,22 +274,32 @@ def _render_market_summary(market_summary: str) -> str:
 
 def _build_analyst_html(all_data: list) -> str:
 
-    def _report_card(r: dict) -> str:
+    # FIX-ANALYST-COLOR-1: 카테고리별 강조색 (좌측 보더 + 증권사 배지에 사용)
+    _CATEGORY_META = {
+        "simultaneous": {"color": "#ff922b", "badge": "🔥 동시언급"},
+        "new_coverage": {"color": "#51cf66", "badge": "🆕 신규 커버리지"},
+        "single":       {"color": "#74c0fc", "badge": ""},
+    }
+
+    def _report_card(r: dict, category: str = "single") -> str:
         stock       = r.get("stock_name", "")
         title       = r.get("report_title") or r.get("title", "")
         brokers_raw = r.get("brokers") or r.get("source_name", "")
         broker      = (", ".join(brokers_raw)
                        if isinstance(brokers_raw, list) else str(brokers_raw))
         link        = r.get("link", "")
-        is_new      = r.get("new_coverage", False)
 
         if not link and stock:
             enc  = stock.replace(" ", "+")
             link = (f"https://finance.naver.com/research/company_list.naver"
                     f"?searchType=keyword&keyword={enc}")
 
-        new_badge  = ('<span class="new-coverage-badge">신규 커버리지</span>'
-                      if is_new else "")
+        meta       = _CATEGORY_META.get(category, _CATEGORY_META["single"])
+        accent     = meta["color"]
+        cat_badge  = (f'<span class="analyst-cat-badge" '
+                      f'style="background:{accent}22;color:{accent};'
+                      f'border:1px solid {accent}55;">{meta["badge"]}</span>'
+                      if meta["badge"] else "")
         title_html = (
             f'<a href="{link}" target="_blank" rel="noopener" '
             f'class="analyst-title-link">{_he.escape(title)}</a>'
@@ -297,11 +315,14 @@ def _build_analyst_html(all_data: list) -> str:
         )
 
         return (
-            f'<div class="analyst-card">'
+            f'<div class="analyst-card" style="border-left-color:{accent};">'
             f'<div class="analyst-card-meta">'
-            f'<span class="analyst-stock">{_he.escape(stock)}</span>'
-            f'<span class="analyst-broker">{_he.escape(broker)}</span>'
-            f'{new_badge}'
+            f'<span class="analyst-stock" style="color:{accent};">'
+            f'{_he.escape(stock)}</span>'
+            f'<span class="analyst-broker" '
+            f'style="background:{accent}1a;color:{accent};">'
+            f'🏦 {_he.escape(broker)}</span>'
+            f'{cat_badge}'
             f'</div>'
             f'<div class="analyst-card-title">{title_html}</div>'
             f'{summary_html}'
@@ -319,17 +340,23 @@ def _build_analyst_html(all_data: list) -> str:
 
     html = ""
     if simultaneous:
-        html += '<div class="analyst-category-title">🔥 복수 증권사 동시 언급</div>'
+        html += ('<div class="analyst-category-title" '
+                 'style="border-left-color:#ff922b;color:#ff922b;">'
+                 '🔥 복수 증권사 동시 언급</div>')
         for r in simultaneous[:10]:
-            html += _report_card(r)
+            html += _report_card(r, "simultaneous")
     if new_cov:
-        html += '<div class="analyst-category-title">🆕 신규 커버리지 개시</div>'
+        html += ('<div class="analyst-category-title" '
+                 'style="border-left-color:#51cf66;color:#51cf66;">'
+                 '🆕 신규 커버리지 개시</div>')
         for r in new_cov[:10]:
-            html += _report_card(r)
+            html += _report_card(r, "new_coverage")
     if single:
-        html += '<div class="analyst-category-title">📌 단독 언급</div>'
+        html += ('<div class="analyst-category-title" '
+                 'style="border-left-color:#74c0fc;color:#74c0fc;">'
+                 '📌 단독 언급</div>')
         for r in single[:10]:
-            html += _report_card(r)
+            html += _report_card(r, "single")
     return html or '<p style="color:#666;">분류된 리포트 없음</p>'
 
 
@@ -956,14 +983,19 @@ a:hover { text-decoration: underline; }
 .hp-card-body { padding: .85rem 1rem; }
 .analyst-card {
   background: var(--surface2); border: 1px solid var(--border);
+  border-left-width: 3px; border-left-color: var(--accent);
   border-radius: 8px; padding: .75rem 1rem; margin-bottom: .6rem;
+  transition: border-color .15s;
 }
 .analyst-card-meta { display: flex; align-items: center; gap: .5rem; margin-bottom: .3rem; flex-wrap: wrap; }
-.analyst-stock  { font-weight: 700; font-size: .9rem; }
-.analyst-broker { font-size: .8rem; color: var(--text-muted); }
-.new-coverage-badge {
-  font-size: .68rem; padding: .1rem .4rem; border-radius: 4px;
-  background: #51cf6622; color: #51cf66; border: 1px solid #51cf6655; font-weight: 700;
+.analyst-stock  { font-weight: 700; font-size: .92rem; }
+.analyst-broker {
+  font-size: .76rem; font-weight: 600; padding: .12rem .5rem;
+  border-radius: 999px;
+}
+.analyst-cat-badge {
+  font-size: .68rem; padding: .1rem .45rem; border-radius: 4px;
+  font-weight: 700;
 }
 .analyst-title-link, .analyst-title-text { font-size: .88rem; color: var(--text-muted); line-height: 1.5; }
 .analyst-title-link:hover { color: var(--accent); }

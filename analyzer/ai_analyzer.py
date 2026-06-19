@@ -396,9 +396,15 @@ def extract_mentions(all_data: list, stock_map: dict,
 
 # ── TIER-FILTER-1: 단계별 관심종목 필터링 ───────────────────────────────
 
-def filter_mentions(mentions: dict, target: int = 10) -> list:
+def filter_mentions(mentions: dict, target: int = 10, min_target: int = 8) -> list:
     """
-    4단계 티어 기반 필터링. 뉴스 단독 종목은 어떤 단계에서도 통과 불가.
+    티어 기반 필터링. 뉴스 단독 종목은 어떤 단계에서도 통과 불가.
+
+    FIX-FILTER-3: 1~4차를 통과한 종목이 min_target(기본 8개)에 못 미치면
+                  5차(비뉴스 채널 1종 이상 + 가중점수 순)로 target까지 보완.
+                  → "관심종목이 3개밖에 안 나온다" 문제의 근본 원인이었던
+                  과도하게 엄격한 1~4차 기준을 우회하지 않고, 마지막 단계로
+                  점수 순 보완만 추가해 8~10개를 안정적으로 채운다.
     """
     all_sorted = sorted(
         mentions.items(),
@@ -466,10 +472,28 @@ def filter_mentions(mentions: dict, target: int = 10) -> list:
                     selected_names.add(name)
         print(f"[필터링] 4차(고품질단독+매수의견) 추가 후: {len(selected)}개")
 
+    # FIX-FILTER-3 — 5차: min_target 미달 시 비뉴스 1종 이상 + 점수 순으로 보완
+    if len(selected) < min_target:
+        before = len(selected)
+        for name, data in all_sorted:
+            if len(selected) >= target:
+                break
+            if name in selected_names:
+                continue
+            if len(data.get("non_news_channel_types", [])) >= 1:
+                selected.append((name, data))
+                selected_names.add(name)
+        print(f"[필터링] 5차(보완, 비뉴스1종↑ 점수순) {before}개 → {len(selected)}개")
+
     if not selected:
         print("[필터링] ⚠️ 경고: 필터링 결과 0개 — 뉴스 전용 언급만 있거나 수집 데이터 부족")
+    elif len(selected) < min_target:
+        print(f"[필터링] ⚠️ 참고: 비뉴스 채널 언급 종목 풀 자체가 부족해 "
+              f"{min_target}개 목표에 못 미침 (최종 {len(selected)}개) "
+              f"— 데이터 수집(채널/패널리스트) 확대가 근본 해결책")
     print(f"[필터링] 최종 {len(selected)}개 선택")
     return selected
+
 
 
 # ── TIER-FILTER-1: 히든픽 후보 추출 ────────────────────────────────────

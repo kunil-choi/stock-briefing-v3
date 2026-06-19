@@ -197,9 +197,18 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
       price_label 결정은 ai_analyzer.py(호출부)에서 담당.
       이 함수는 가격 값만 올바르게 반환한다.
 
+    FIX-PRICE-7:
+      6/17에 HTML 파싱 → JSON API(api.stock.naver.com) 방식으로 전면 교체된
+      이후 가격이 계속 미수집되는 회귀(regression)가 발견됨
+      (6/16까지는 정상, 6/17~ 계속 실패 — git 히스토리로 확인).
+      원인이 무엇이든(엔드포인트 변경/응답 구조 변경/차단 등) 안전하게
+      대응하기 위해, 과거 6/16까지 실제로 동작이 확인됐던 HTML 직접 파싱
+      방식을 3순위 폴백으로 복원한다.
+
     우선순위:
-      1) api.stock.naver.com/stock/{code}/basic  (JSON)
-      2) sise_day 일별 데이터의 최신 종가          (폴백)
+      1) api.stock.naver.com/stock/{code}/basic  (JSON, 1차)
+      2) sise_day 일별 데이터의 최신 종가          (2차 폴백)
+      3) finance.naver.com/item/main.naver HTML 직접 파싱 (3차 폴백, 과거 검증된 방식)
 
     반환:
       {"name": str, "code": str, "price": int,
@@ -259,6 +268,50 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
                 "change_pct": 0.0,
                 "url":        naver_url,
             }
+
+    # 4. [3순위] FIX-PRICE-7: HTML 직접 파싱 (과거 6/16까지 검증된 방식)
+    print(f"[naver_finance] {stock_name}: sise_day 폴백 → HTML 직접 파싱 사용")
+    try:
+        text = _get(naver_url)
+        if text:
+            price_int = None
+            patterns = [
+                r'<p[^>]+class="[^"]*no_today[^"]*"[^>]*>.*?<span[^>]+class="[^"]*blind[^"]*"[^>]*>([\d,]+)',
+                r'<strong[^>]+id="stock_price"[^>]*>([\d,]+)',
+                r'<dd[^>]*>\s*현재가\s*</dd>\s*<dd[^>]*>([\d,]+)',
+            ]
+            for pattern in patterns:
+                m = re.search(pattern, text, re.DOTALL)
+                if m:
+                    raw = m.group(1).replace(",", "")
+                    if raw.isdigit() and int(raw) > 0:
+                        price_int = int(raw)
+                        break
+
+            if price_int:
+                pct = 0.0
+                m_pct = re.search(
+                    r'<span[^>]+class="[^"]*rate[^"]*"[^>]*>.*?([\d.]+)%',
+                    text, re.DOTALL,
+                )
+                if m_pct:
+                    pct = _parse_float(m_pct.group(1))
+                    if re.search(r'class="[^"]*(dn|down)[^"]*"', text):
+                        pct = -abs(pct)
+                print(
+                    f"[naver_finance] {stock_name}({code}): "
+                    f"{price_int:,}원 [HTML 폴백]"
+                )
+                return {
+                    "name":       stock_name,
+                    "code":       code,
+                    "price":      price_int,
+                    "change":     0,
+                    "change_pct": pct,
+                    "url":        naver_url,
+                }
+    except Exception as e:
+        print(f"[naver_finance] HTML 폴백 오류 ({stock_name}): {e}")
 
     print(f"[naver_finance] 현재가 조회 최종 실패: {stock_name}({code})")
     return None
