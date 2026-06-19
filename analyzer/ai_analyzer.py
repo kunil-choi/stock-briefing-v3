@@ -32,9 +32,13 @@ AI 주식 브리핑 분석 엔진
                extract_hidden_picks()를 non_news_channel_types 기반으로 개선
 - FIX-PRICE-5 : 한국 주식시장 프리마켓 없음 반영
                09:00~ → 현재가 / 09:00 이전 → 전일종가
-- FIX-HIDDEN-PRICE: 히든픽 주가 조회 코드 추가 (관심종목과 별도 조회)
+- FIX-HIDDEN-PRICE: 히든픽 주가 별도 조회 추가
 - FIX-OPINION-1: extract_mentions()에 best_opinion 필드 추가
                filter_mentions() 4차 필터에서 best_opinion 직접 확인
+- FIX-GEMINI-IMPORT: GEMINI_API_KEY ImportError 방어
+               config에 키가 없어도 환경변수 또는 빈 문자열로 폴백
+- FIX-SEEN-IDS: extract_mentions() 중복 체크를 list → set으로 교체 (성능)
+- FIX-EMPTY-FILTER: filter_mentions() 결과 0개일 때 방어 로그 추가
 """
 
 import json
@@ -226,9 +230,10 @@ def load_stock_names() -> dict:
 def extract_mentions(all_data: list, stock_map: dict,
                      channels_data: dict = None) -> dict:
     """
-    TIER-FILTER-1 + FIX-OPINION-1:
+    TIER-FILTER-1 + FIX-OPINION-1 + FIX-SEEN-IDS:
     - non_news_channel_types, max_tier, best_opinion 필드 추가
     - 감성 가중치 반영
+    - 중복 체크를 list → set으로 교체 (성능 개선)
     """
     weight_map = _build_channel_weight_map(channels_data) if channels_data else {}
 
@@ -264,7 +269,7 @@ def extract_mentions(all_data: list, stock_map: dict,
 
         # TIER-FILTER-1: 감성 가중치 적용
         sentiment_w = _get_sentiment_weight(text, opinion)
-        weight = weight * sentiment_w
+        weight      = weight * sentiment_w
 
         for name, code in stock_map.items():
             if not _is_valid_stock_name(name):
@@ -290,27 +295,28 @@ def extract_mentions(all_data: list, stock_map: dict,
                     "max_tier":               0.0,
                     "channels":               {},
                     "best_opinion":           "",   # FIX-OPINION-1
+                    "seen_ids":               set(), # FIX-SEEN-IDS
                 }
 
             entry = mentions[name]
-            existing_ids = [
-                m["content_id"]
-                for ch_items in entry["channels"].values()
-                for m in ch_items
-            ]
-            if content_id in existing_ids:
+
+            # FIX-SEEN-IDS: set으로 O(1) 중복 체크
+            if content_id in entry["seen_ids"]:
                 continue
+            entry["seen_ids"].add(content_id)
 
             entry["channel_types"].add(ch_type)
 
+            # TIER-FILTER-1: 뉴스 타입은 non_news에서 제외
             if ch_type not in _NEWS_TYPES:
                 entry["non_news_channel_types"].add(ch_type)
 
+            # TIER-FILTER-1: 최고 티어 갱신
             tier = _SOURCE_TIER.get(ch_type, 1.0)
             if tier > entry["max_tier"]:
                 entry["max_tier"] = tier
 
-            # FIX-OPINION-1: 애널리스트 리포트 의견 저장 (매수 > 중립 > 매도 우선)
+            # FIX-OPINION-1: 애널리스트 매수 의견 저장 (매수 > 기타 우선)
             if ch_type == "애널리스트" and opinion:
                 existing_op = entry.get("best_opinion", "")
                 if any(k in opinion.lower() for k in _POSITIVE_OPINION_KEYWORDS):
@@ -324,6 +330,7 @@ def extract_mentions(all_data: list, stock_map: dict,
             idx     = text.find(name)
             snippet = text[max(0, idx - 50): idx + 150].strip()
 
+            # GEMINI-VAL-1: Gemini 발언 항목은 content 원문 우선
             if item.get("_from_gemini") and item.get("content"):
                 snippet = item["content"][:200]
 
@@ -337,11 +344,13 @@ def extract_mentions(all_data: list, stock_map: dict,
             entry["total_count"]    += 1
             entry["weighted_score"] += weight
 
+    # set → list 변환 + seen_ids 제거 (JSON 직렬화 대비)
     for name in mentions:
         mentions[name]["channel_types"] = list(mentions[name]["channel_types"])
         mentions[name]["non_news_channel_types"] = list(
             mentions[name]["non_news_channel_types"]
         )
+        mentions[name].pop("seen_ids", None)  # FIX-SEEN-IDS: set 제거
 
     print(f"[언급추출] {len(mentions)}개 종목 발견")
     return mentions
@@ -359,6 +368,7 @@ def filter_mentions(mentions: dict, target: int = 10) -> list:
     4차: 고품질 단독 채널 + 명시적 매수 의견(best_opinion) 또는 높은 평균 가중치
 
     뉴스 단독 종목은 어떤 단계에서도 통과하지 못함.
+    FIX-EMPTY-FILTER: 결과 0개일 때 경고 로그 추가.
     """
     all_sorted = sorted(
         mentions.items(),
@@ -434,6 +444,10 @@ def filter_mentions(mentions: dict, target: int = 10) -> list:
                     selected_names.add(name)
         print(f"[필터링] 4차(고품질단독+매수의견) 추가 후: {len(selected)}개")
 
+    # FIX-EMPTY-FILTER: 최종 0개 경고
+    if not selected:
+        print("[필터링] ⚠️ 경고: 필터링 결과 0개 — 뉴스 전용 언급만 있거나 "
+              "수집 데이터 부족")
     print(f"[필터링] 최종 {len(selected)}개 선택")
     return selected
 
@@ -833,8 +847,18 @@ def analyze_and_generate_html(
     market_overview: dict = None,
 ) -> str:
     from .html_generator import generate_html
-    from .naver_finance import fetch_naver_stock_price
-    from config import ANTHROPIC_API_KEY, GEMINI_API_KEY
+    from .naver_finance  import fetch_naver_stock_price
+
+    # FIX-GEMINI-IMPORT: GEMINI_API_KEY ImportError 방어
+    try:
+        from config import ANTHROPIC_API_KEY, GEMINI_API_KEY
+    except ImportError:
+        from config import ANTHROPIC_API_KEY
+        GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+
+    # config에는 있지만 GEMINI_API_KEY 속성만 없는 경우 대비
+    if "GEMINI_API_KEY" not in dir():
+        GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
     now_kst       = datetime.now(KST)
     today_date    = now_kst.strftime("%Y년 %m월 %d일")
@@ -851,13 +875,17 @@ def analyze_and_generate_html(
     filtered       = filter_mentions(mentions)
     filtered_names = {name for name, _ in filtered}
 
+    # FIX-EMPTY-FILTER: 관심종목 0개여도 히든픽·브리핑은 계속 진행
+    if not filtered:
+        print("[분석] 관심종목 0개 — 히든픽 및 시장 요약만 생성")
+
     # ── FIX-PRICE-5: 주가 라벨 결정 ────────────────────────────────────
     # 한국 주식시장 정규장: 09:00 ~ 15:30
     # 09:00 이전 → Naver API 반환값 = 전일 종가
     # 09:00 이후 → 현재가
-    stock_prices  = {}
-    now_hour      = now_kst.hour
-    now_minute    = now_kst.minute
+    stock_prices   = {}
+    now_hour       = now_kst.hour
+    now_minute     = now_kst.minute
     is_open_market = (now_hour > 9) or (now_hour == 9 and now_minute >= 0)
 
     price_label_default = "현재가" if is_open_market else "전일종가"
@@ -913,7 +941,8 @@ def analyze_and_generate_html(
     result = _try_parse_json(response_text)
     if not result:
         print("[Claude] JSON 파싱 실패 → fallback")
-        return _fallback_html("AI 응답 파싱 실패. 잠시 후 다시 시도하세요.", briefing_date)
+        return _fallback_html("AI 응답 파싱 실패. 잠시 후 다시 시도하세요.",
+                              briefing_date)
 
     # ── GEMINI-VAL-1: 검수 파이프라인 ────────────────────────────────
     try:
