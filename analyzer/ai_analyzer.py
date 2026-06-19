@@ -3,40 +3,44 @@
 AI 주식 브리핑 분석 엔진
 
 수정 이력:
-- BUG-CR-1       : 상대 임포트로 전환
-- BUG-HIDDEN     : 히든픽 로직 정비
-- BUG-CACHE      : stock_map 캐시 키 우선순위 정비
-- BUG-KEY-1      : ai_strategy 키 통일
-- V2-PROMPT      : Claude 프롬프트를 V2 수준으로 개선
-- V2-SYNC        : channel_mentions → reasons 동기화 블록 추가
-- FIX-ANA-2      : generate_market_summary 데드코드 제거
-- FIX-API-1      : Claude API 호출 실패 시 fallback HTML 반환
-- FIX-STRAT      : ai_strategy 구조화 JSON 객체 전환
-- FIX-MAX-1      : 관심종목 최대 10개로 확대
-- FIX-STRAT-2    : ai_strategy dict → HTML 렌더링 전 문자열 변환 버그 수정
-- FIX-FILTER-1   : 관심종목 단계별 선정 로직
-- FIX-SIG-4      : 프롬프트 signal 지시를 긍정/중립/부정으로 통일
-- FIX-PROMPT-1   : rules 문자열 끝 손상 복구 및 stock_plans 규칙 명시
-- FIX-APIKEY-1   : call_claude_with_retry에 api_key 전달 누락 버그 수정
-- FIX-PRICE-1    : 관심종목 현재가 조회 후 Claude 프롬프트에 포함
-- FIX-PRICE-3    : 프롬프트 price_str에 등락률 병기 추가
-- FIX-FILTER-2   : 3차 필터 총 3회↑ → 총 2회↑로 완화
-- FIX-ACC-1      : 근거 없는 수치 프롬프트 및 렌더링에서 완전 제거
-                   애널리스트 ai_summary를 프롬프트에 포함
-                   signal은 리포트 opinion 우선
-- FIX-PRICE-4    : stock_prices를 result["stocks"]에 병합
+- BUG-CR-1         : 상대 임포트로 전환
+- BUG-HIDDEN       : 히든픽 로직 정비
+- BUG-CACHE        : stock_map 캐시 키 우선순위 정비
+- BUG-KEY-1        : ai_strategy 키 통일
+- V2-PROMPT        : Claude 프롬프트를 V2 수준으로 개선
+- V2-SYNC          : channel_mentions → reasons 동기화 블록 추가
+- FIX-ANA-2        : generate_market_summary 데드코드 제거
+- FIX-API-1        : Claude API 호출 실패 시 fallback HTML 반환
+- FIX-STRAT        : ai_strategy 구조화 JSON 객체 전환
+- FIX-MAX-1        : 관심종목 최대 10개로 확대
+- FIX-STRAT-2      : ai_strategy dict → HTML 렌더링 전 문자열 변환 버그 수정
+- FIX-FILTER-1     : 관심종목 단계별 선정 로직
+- FIX-SIG-4        : 프롬프트 signal 지시를 긍정/중립/부정으로 통일
+- FIX-PROMPT-1     : rules 문자열 끝 손상 복구 및 stock_plans 규칙 명시
+- FIX-APIKEY-1     : call_claude_with_retry에 api_key 전달 누락 버그 수정
+- FIX-PRICE-1      : 관심종목 현재가 조회 후 Claude 프롬프트에 포함
+- FIX-PRICE-3      : 프롬프트 price_str에 등락률 병기 추가
+- FIX-FILTER-2     : 3차 필터 총 3회↑ → 총 2회↑로 완화
+- FIX-ACC-1        : 근거 없는 수치 프롬프트 및 렌더링에서 완전 제거
+- FIX-PRICE-4      : stock_prices를 result["stocks"]에 병합
 - FIX-STOCK-COUNT-1: 프롬프트로 넘긴 종목 전체를 반드시 포함하도록 강제
-- GEMINI-VAL-1   : Gemini 검수 파이프라인 연결
-- TIER-FILTER-1  : 소스 티어 시스템 도입
-- FIX-PRICE-5    : 한국 주식시장 프리마켓 없음 반영
-- FIX-HIDDEN-PRICE: 히든픽 주가 별도 조회 추가
-- FIX-OPINION-1  : extract_mentions()에 best_opinion 필드 추가
-- FIX-GEMINI-IMPORT: GEMINI_API_KEY ImportError 방어 (완전 수정)
-                     config에 있으므로 단순 import + 환경변수 폴백으로 정리
-- FIX-SEEN-IDS   : extract_mentions() 중복 체크를 list → set으로 교체 (성능)
-- FIX-EMPTY-FILTER: filter_mentions() 결과 0개일 때 방어 로그 추가
-- FIX-MAIN-1     : analyze_and_generate_html() gh_token 인자 수신 정상화
-                   (main.py에서 전달하는 gh_token을 generate_html로 올바르게 전달)
+- GEMINI-VAL-1     : Gemini 검수 파이프라인 연결
+- TIER-FILTER-1    : 소스 티어 시스템 도입
+- FIX-PRICE-5      : 한국 주식시장 프리마켓 없음 반영
+- FIX-HIDDEN-PRICE : 히든픽 주가 별도 조회 추가
+- FIX-OPINION-1    : extract_mentions()에 best_opinion 필드 추가
+- FIX-GEMINI-IMPORT: GEMINI_API_KEY ImportError 방어
+- FIX-SEEN-IDS     : extract_mentions() 중복 체크를 list → set으로 교체
+- FIX-EMPTY-FILTER : filter_mentions() 결과 0개일 때 방어 로그 추가
+- FIX-MAIN-1       : analyze_and_generate_html() gh_token 인자 수신 정상화
+- FIX-JSON-NAME-1  : Claude 응답 JSON stocks/hidden_picks name 필드 정규화
+                     "name" 키 외에 "stock_name","종목명","ticker" 폴백 탐색
+                     name 공백 시 mention_lookup에서 복원 시도
+- FIX-JSON-PARSE-1 : _try_parse_json() 비탐욕적 패턴 → 탐욕적 패턴으로 수정
+                     중첩 JSON 전체가 올바르게 파싱되도록 {.*} 사용
+- FIX-PRICE-LABEL-1: is_open_market 조건 명확화
+                     15:30 이후 → "종가", 09:00~15:30 → "현재가",
+                     09:00 이전 → "전일종가"
 """
 
 import json
@@ -79,7 +83,7 @@ _SOURCE_TIER = {
     "뉴스":        1.0,
 }
 
-# 긍정적 매수 의견 키워드 (FIX-OPINION-1: 소문자 통일)
+# 긍정적 매수 의견 키워드 (소문자 통일)
 _POSITIVE_OPINION_KEYWORDS = {
     "매수", "buy", "강력매수", "strong buy", "비중확대", "overweight",
     "outperform", "시장수익률상회", "적극매수",
@@ -140,26 +144,16 @@ def _build_channel_weight_map(channels_data: dict) -> dict:
 def _get_sentiment_weight(text: str, opinion: str = "") -> float:
     """
     텍스트와 애널리스트 의견을 기반으로 감성 가중치를 반환한다.
-
-    판정 우선순위:
-      1) opinion에 긍정 매수 키워드 → 2.0
-      2) text에 긍정 키워드 있고 부정 없음 → 1.5
-      3) text에 부정 키워드 있고 긍정 없음 → 0.5
-      4) 중립 / 미확인 → 1.0
-
-    주의: 부정 표현 앞에 긍정 키워드가 오는 경우(예: "매수하지 않음")를
-    방지하기 위해 긍정+부정 동시 존재 시 중립(1.0)으로 처리.
+    긍정+부정 동시 존재 시 중립(1.0) — 부정 표현 앞 긍정 키워드 오분류 방지.
     """
     opinion_lower = opinion.strip().lower()
-    # opinion 기반 판정 (가장 신뢰도 높음)
     if any(k in opinion_lower for k in _POSITIVE_OPINION_KEYWORDS):
         return 2.0
 
-    text_lower = text.lower()
+    text_lower   = text.lower()
     has_positive = any(k in text_lower for k in _POSITIVE_SENTIMENT)
     has_negative = any(k in text_lower for k in _NEGATIVE_SENTIMENT)
 
-    # 긍정+부정 동시 존재 → 중립 (부정 표현 앞 긍정 키워드 오분류 방지)
     if has_positive and has_negative:
         return 1.0
     if has_positive:
@@ -167,6 +161,46 @@ def _get_sentiment_weight(text: str, opinion: str = "") -> float:
     if has_negative:
         return 0.5
     return 1.0
+
+
+# ── FIX-JSON-NAME-1: Claude 응답 JSON 정규화 헬퍼 ───────────────────────
+
+def _normalize_stock_item(item: dict, mention_lookup: dict = None) -> dict:
+    """
+    Claude가 반환한 stocks/hidden_picks 항목의 name 필드를 정규화한다.
+    탐색 순서: "name" → "stock_name" → "종목명" → "ticker"
+    모두 없으면 mention_lookup 키 순서로 추정 (rank 기반).
+    """
+    name = (
+        item.get("name")
+        or item.get("stock_name")
+        or item.get("종목명")
+        or item.get("ticker")
+        or ""
+    )
+    if name:
+        item["name"] = name.strip()
+    return item
+
+
+def _normalize_result_stocks(result: dict, mention_lookup: dict) -> dict:
+    """
+    result["stocks"]와 result["hidden_picks"]의 name 필드를 일괄 정규화.
+    name이 비어있으면 rank 순서로 mention_lookup에서 복원 시도.
+    """
+    mention_names = list(mention_lookup.keys())
+
+    for i, stock in enumerate(result.get("stocks", [])):
+        _normalize_stock_item(stock, mention_lookup)
+        # name이 여전히 비어있으면 mention_lookup 순서로 복원
+        if not stock.get("name") and i < len(mention_names):
+            stock["name"] = mention_names[i]
+            print(f"[정규화] stocks[{i}] name 복원: {mention_names[i]}")
+
+    for hp in result.get("hidden_picks", []):
+        _normalize_stock_item(hp, mention_lookup)
+
+    return result
 
 
 # ── 종목 이름 로드 ───────────────────────────────────────────────────────
@@ -189,7 +223,7 @@ def load_stock_names() -> dict:
     try:
         import requests
         for market_id in ["STK", "KSQ"]:
-            url = "http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
+            url     = "http://data.krx.co.kr/comm/bldAttendant/getJsonData.cmd"
             payload = {
                 "bld":         "dbms/MDC/STAT/standard/MDCSTAT01901",
                 "mktId":       market_id,
@@ -225,8 +259,7 @@ def load_stock_names() -> dict:
         "삼성물산": "028260", "SK텔레콤": "017670", "롯데케미칼": "011170",
         "CJ제일제당": "097950", "한화솔루션": "009830", "삼성생명": "032830",
         "SK이노베이션": "096770", "KT": "030200", "한화에어로스페이스": "012450",
-        "HMM": "011200", "현대글로비스": "015760", "삼성증권": "032830",
-        "SK바이오팜": "017670", "삼성전기": "009150",
+        "HMM": "011200", "현대글로비스": "015760", "삼성전기": "009150",
         "LG디스플레이": "034220", "현대제철": "004020",
         "HD현대": "329180", "두산에너빌리티": "034020",
     }
@@ -242,7 +275,7 @@ def extract_mentions(all_data: list, stock_map: dict,
     TIER-FILTER-1 + FIX-OPINION-1 + FIX-SEEN-IDS:
     - non_news_channel_types, max_tier, best_opinion 필드 추가
     - 감성 가중치 반영
-    - 중복 체크를 list → set으로 교체 (성능 개선)
+    - 중복 체크를 set으로 교체 (성능 개선)
     """
     weight_map = _build_channel_weight_map(channels_data) if channels_data else {}
 
@@ -309,18 +342,15 @@ def extract_mentions(all_data: list, stock_map: dict,
 
             entry = mentions[name]
 
-            # FIX-SEEN-IDS: set으로 O(1) 중복 체크
             if content_id in entry["seen_ids"]:
                 continue
             entry["seen_ids"].add(content_id)
 
             entry["channel_types"].add(ch_type)
 
-            # TIER-FILTER-1: 뉴스 타입은 non_news에서 제외
             if ch_type not in _NEWS_TYPES:
                 entry["non_news_channel_types"].add(ch_type)
 
-            # TIER-FILTER-1: 최고 티어 갱신
             tier = _SOURCE_TIER.get(ch_type, 1.0)
             if tier > entry["max_tier"]:
                 entry["max_tier"] = tier
@@ -339,7 +369,6 @@ def extract_mentions(all_data: list, stock_map: dict,
             idx     = text.find(name)
             snippet = text[max(0, idx - 50): idx + 150].strip()
 
-            # GEMINI-VAL-1: Gemini 발언 항목은 content 원문 우선
             if item.get("_from_gemini") and item.get("content"):
                 snippet = item["content"][:200]
 
@@ -353,7 +382,7 @@ def extract_mentions(all_data: list, stock_map: dict,
             entry["total_count"]    += 1
             entry["weighted_score"] += weight
 
-    # set → list 변환 + seen_ids 제거 (JSON 직렬화 대비)
+    # set → list 변환 + seen_ids 제거
     for name in mentions:
         mentions[name]["channel_types"] = list(mentions[name]["channel_types"])
         mentions[name]["non_news_channel_types"] = list(
@@ -369,15 +398,7 @@ def extract_mentions(all_data: list, stock_map: dict,
 
 def filter_mentions(mentions: dict, target: int = 10) -> list:
     """
-    4단계 티어 기반 필터링:
-
-    1차: 비뉴스 채널 타입 2종 이상
-    2차: max_tier >= 3.0 AND weighted_score >= 8.0
-    3차: non_news_channel_types 1종 이상 AND total_count >= 3
-    4차: 고품질 단독 채널 + 명시적 매수 의견(best_opinion) 또는 높은 평균 가중치
-
-    뉴스 단독 종목은 어떤 단계에서도 통과하지 못함.
-    FIX-EMPTY-FILTER: 결과 0개일 때 경고 로그 추가.
+    4단계 티어 기반 필터링. 뉴스 단독 종목은 어떤 단계에서도 통과 불가.
     """
     all_sorted = sorted(
         mentions.items(),
@@ -392,8 +413,7 @@ def filter_mentions(mentions: dict, target: int = 10) -> list:
     for name, data in all_sorted:
         if len(selected) >= target:
             break
-        non_news = data.get("non_news_channel_types", [])
-        if len(non_news) >= 2:
+        if len(data.get("non_news_channel_types", [])) >= 2:
             selected.append((name, data))
             selected_names.add(name)
     print(f"[필터링] 1차(비뉴스 채널타입 2종↑): {len(selected)}개")
@@ -406,9 +426,9 @@ def filter_mentions(mentions: dict, target: int = 10) -> list:
             if name in selected_names:
                 continue
             non_news = data.get("non_news_channel_types", [])
-            max_tier = data.get("max_tier", 0.0)
-            w_score  = data.get("weighted_score", 0.0)
-            if len(non_news) >= 1 and max_tier >= 3.0 and w_score >= 8.0:
+            if (len(non_news) >= 1
+                    and data.get("max_tier", 0.0) >= 3.0
+                    and data.get("weighted_score", 0.0) >= 8.0):
                 selected.append((name, data))
                 selected_names.add(name)
         print(f"[필터링] 2차(T3↑ + 가중점수8↑) 추가 후: {len(selected)}개")
@@ -420,8 +440,8 @@ def filter_mentions(mentions: dict, target: int = 10) -> list:
                 break
             if name in selected_names:
                 continue
-            non_news = data.get("non_news_channel_types", [])
-            if len(non_news) >= 1 and data["total_count"] >= 3:
+            if (len(data.get("non_news_channel_types", [])) >= 1
+                    and data["total_count"] >= 3):
                 selected.append((name, data))
                 selected_names.add(name)
         print(f"[필터링] 3차(비뉴스1종↑ + 3회↑) 추가 후: {len(selected)}개")
@@ -434,29 +454,20 @@ def filter_mentions(mentions: dict, target: int = 10) -> list:
             if name in selected_names:
                 continue
             non_news = data.get("non_news_channel_types", [])
-            max_tier = data.get("max_tier", 0.0)
             best_op  = data.get("best_opinion", "")
-
-            if len(non_news) == 1 and max_tier >= 3.0:
-                # FIX-OPINION-1: 소문자 변환 후 긍정 키워드 확인
+            if len(non_news) == 1 and data.get("max_tier", 0.0) >= 3.0:
                 has_buy = (
                     any(k in best_op.lower() for k in _POSITIVE_OPINION_KEYWORDS)
                     if best_op else False
                 )
-                total = data.get("total_count", 1)
-                avg_w = data.get("weighted_score", 0.0) / max(total, 1)
-
+                avg_w = data.get("weighted_score", 0.0) / max(data.get("total_count", 1), 1)
                 if has_buy or avg_w >= 3.75:
                     selected.append((name, data))
                     selected_names.add(name)
         print(f"[필터링] 4차(고품질단독+매수의견) 추가 후: {len(selected)}개")
 
-    # FIX-EMPTY-FILTER: 최종 0개 경고
     if not selected:
-        print(
-            "[필터링] ⚠️ 경고: 필터링 결과 0개 — "
-            "뉴스 전용 언급만 있거나 수집 데이터 부족"
-        )
+        print("[필터링] ⚠️ 경고: 필터링 결과 0개 — 뉴스 전용 언급만 있거나 수집 데이터 부족")
     print(f"[필터링] 최종 {len(selected)}개 선택")
     return selected
 
@@ -467,21 +478,17 @@ def extract_hidden_picks(mentions: dict, filtered_names: set,
                          max_picks: int = 3) -> list:
     """
     non_news_channel_types가 정확히 1종인 고품질 단독 언급 종목만 선택.
-    뉴스 동시 언급이 있어도 무방.
     """
     candidates = []
     for name, data in mentions.items():
         if name in filtered_names:
             continue
-
         non_news = set(data.get("non_news_channel_types", []))
         if len(non_news) != 1:
             continue
-
         sole_type = list(non_news)[0]
         if sole_type not in _HIGH_QUALITY_TYPES:
             continue
-
         candidates.append({
             "name":           name,
             "code":           data["code"],
@@ -507,18 +514,11 @@ def _build_analyst_summary_map(all_data: list) -> dict:
         stock_name = item.get("stock_name", "")
         if not stock_name:
             continue
-        ai_summary   = item.get("ai_summary", "").strip()
-        opinion      = item.get("opinion", "").strip()
-        target_price = item.get("target_price", "").strip()
-        broker       = item.get("source_name", "").strip()
-
-        if stock_name not in summary_map:
-            summary_map[stock_name] = []
-        summary_map[stock_name].append({
-            "broker":       broker,
-            "opinion":      opinion,
-            "target_price": target_price,
-            "ai_summary":   ai_summary,
+        summary_map.setdefault(stock_name, []).append({
+            "broker":       item.get("source_name", "").strip(),
+            "opinion":      item.get("opinion", "").strip(),
+            "target_price": item.get("target_price", "").strip(),
+            "ai_summary":   item.get("ai_summary", "").strip(),
         })
     return summary_map
 
@@ -539,8 +539,8 @@ def build_analysis_prompt(
     headlines = []
     for item in all_data[:150]:
         title   = (item.get("title") or "").strip()
-        src     = item.get("source_name", "")
         stype   = item.get("source_type", "")
+        src     = item.get("source_name", "")
         stock   = item.get("stock_name", "")
         url     = item.get("link") or item.get("url", "")
         summary = (item.get("summary") or item.get("content") or "")[:120]
@@ -559,13 +559,11 @@ def build_analysis_prompt(
                 line += f" [URL: {url}]"
             headlines.append(line)
 
-    headlines      = headlines[:60]
-    headlines_text = "\n".join(headlines)
+    headlines_text = "\n".join(headlines[:60])
 
     top_stocks   = filtered_mentions[:15]
-    stocks_info  = []
     stock_prices = stock_prices or {}
-
+    stocks_info  = []
     stock_name_list = [name for name, _ in top_stocks]
 
     for rank, (name, data) in enumerate(top_stocks, 1):
@@ -582,7 +580,7 @@ def build_analysis_prompt(
             price_str = "가격:미수집"
 
         non_news = data.get("non_news_channel_types", data.get("channel_types", []))
-        line = (
+        stocks_info.append(
             f"{rank}. {name} (코드:{data['code']}, "
             f"언급:{data['total_count']}회, "
             f"가중점수:{data['weighted_score']:.1f}, "
@@ -590,62 +588,49 @@ def build_analysis_prompt(
             f"비뉴스채널:{','.join(non_news) if non_news else '없음'}, "
             f"{price_str})"
         )
-        stocks_info.append(line)
 
         if name in analyst_summary_map:
             for rpt in analyst_summary_map[name]:
-                rpt_parts = []
-                if rpt["broker"]:
-                    rpt_parts.append(f"증권사:{rpt['broker']}")
-                if rpt["opinion"]:
-                    rpt_parts.append(f"의견:{rpt['opinion']}")
-                if rpt["target_price"]:
-                    rpt_parts.append(f"목표가:{rpt['target_price']}원")
-                if rpt["ai_summary"]:
-                    rpt_parts.append(f"요약:{rpt['ai_summary']}")
-                if rpt_parts:
-                    stocks_info.append(
-                        f"   [애널리스트리포트] {' | '.join(rpt_parts)}"
-                    )
+                parts = []
+                if rpt["broker"]:       parts.append(f"증권사:{rpt['broker']}")
+                if rpt["opinion"]:      parts.append(f"의견:{rpt['opinion']}")
+                if rpt["target_price"]: parts.append(f"목표가:{rpt['target_price']}원")
+                if rpt["ai_summary"]:   parts.append(f"요약:{rpt['ai_summary']}")
+                if parts:
+                    stocks_info.append(f"   [애널리스트리포트] {' | '.join(parts)}")
 
         for ch_type, items in data["channels"].items():
-            for item in items[:5]:
-                w_str   = f"[가중치:{item.get('weight', 1.0):.1f}]"
-                link    = item.get("link", "")
-                url_str = f" [URL: {link}]" if link else ""
+            for it in items[:5]:
+                w_str   = f"[가중치:{it.get('weight', 1.0):.1f}]"
+                url_str = f" [URL: {it['link']}]" if it.get("link") else ""
                 stocks_info.append(
-                    f"   [{ch_type}]{w_str} {item['source_name']}: "
-                    f"{item['snippet'][:200]}{url_str}"
+                    f"   [{ch_type}]{w_str} {it['source_name']}: "
+                    f"{it['snippet'][:200]}{url_str}"
                 )
 
     hidden_info = []
     for i, pick in enumerate(hidden_candidates, 1):
-        name    = pick["name"]
         ch_type = pick["channel_type"]
-        line = (
-            f"{i}. {name} (코드:{pick['code']}, "
+        hidden_info.append(
+            f"{i}. {pick['name']} (코드:{pick['code']}, "
             f"채널:{ch_type}, 가중점수:{pick['weighted_score']:.1f})"
         )
-        hidden_info.append(line)
-        for item in pick["channels"].get(ch_type, [])[:3]:
-            link    = item.get("link", "")
-            url_str = f" [URL: {link}]" if link else ""
+        for it in pick["channels"].get(ch_type, [])[:3]:
+            url_str = f" [URL: {it['link']}]" if it.get("link") else ""
             hidden_info.append(
-                f"   [{ch_type}] {item['source_name']}: "
-                f"{item['snippet'][:200]}{url_str}"
+                f"   [{ch_type}] {it['source_name']}: "
+                f"{it['snippet'][:200]}{url_str}"
             )
 
     stocks_text = "\n".join(stocks_info)
     hidden_text = "\n".join(hidden_info) if hidden_info else "해당 없음"
+    stock_list_str = ", ".join(stock_name_list)
 
     prompt_json_structure = (
         '{\n'
         f'  "briefing_date": "{today_date}",\n'
-        '  "market_summary": "시장 전체 분석 (5개 단락, \\n\\n 구분, '
-        '각 단락 3~4문장. 400자 이상)",\n'
-        '  "hot_sectors": [\n'
-        '    {"name": "섹터이름", "reason": "이유 1~2단어"}\n'
-        '  ],\n'
+        '  "market_summary": "시장 전체 분석 (5개 단락, \\n\\n 구분, 각 단락 3~4문장. 400자 이상)",\n'
+        '  "hot_sectors": [{"name": "섹터이름", "reason": "이유 1~2단어"}],\n'
         '  "stocks": [\n'
         '    {\n'
         '      "rank": 1,\n'
@@ -656,81 +641,57 @@ def build_analysis_prompt(
         '      "catalyst": "상승 촉매 2~3문장",\n'
         '      "risk": "주요 리스크 1~2문장",\n'
         '      "channel_mentions": [\n'
-        '        {\n'
-        '          "source_type": "뉴스|경제방송|경제방송TV|유튜브|증권사|애널리스트 중 택1",\n'
-        '          "source_name": "채널명",\n'
-        '          "content": "언급 내용 1~2문장",\n'
-        '          "url": "URL 없으면 빈 문자열"\n'
-        '        }\n'
+        '        {"source_type": "뉴스|경제방송|경제방송TV|유튜브|증권사|애널리스트 중 택1",\n'
+        '         "source_name": "채널명", "content": "언급 내용 1~2문장",\n'
+        '         "url": "URL 없으면 빈 문자열"}\n'
         '      ],\n'
-        '      "channel_counts": {},\n'
-        '      "total_count": 0,\n'
-        '      "weighted_score": 0.0,\n'
-        '      "overlap_count": 0,\n'
-        '      "reasons": []\n'
+        '      "channel_counts": {}, "total_count": 0,\n'
+        '      "weighted_score": 0.0, "overlap_count": 0, "reasons": []\n'
         '    }\n'
         '  ],\n'
         '  "hidden_picks": [\n'
         '    {\n'
-        '      "rank": 1,\n'
-        '      "name": "종목명",\n'
-        '      "code": "종목코드",\n'
-        '      "signal": "긍정",\n'
+        '      "rank": 1, "name": "종목명", "code": "종목코드",\n'
+        '      "signal": "긍정|중립|부정 중 택1",\n'
         '      "summary": "종목 핵심 요약 2~3문장",\n'
         '      "catalyst": "상승 촉매 2~3문장",\n'
         '      "risk": "주요 리스크 1문장",\n'
         '      "channel_type": "애널리스트|경제방송TV|경제방송|증권사 중 택1",\n'
         '      "channel_name": "채널명",\n'
         '      "reasons": [\n'
-        '        {\n'
-        '          "source_type": "채널유형",\n'
-        '          "source_name": "출처명",\n'
-        '          "detail": "언급 내용 요약",\n'
-        '          "source_url": "URL 없으면 빈 문자열"\n'
-        '        }\n'
+        '        {"source_type": "채널유형", "source_name": "출처명",\n'
+        '         "detail": "언급 내용 요약", "source_url": "URL 없으면 빈 문자열"}\n'
         '      ]\n'
         '    }\n'
         '  ],\n'
         '  "ai_strategy": {\n'
-        '    "core_scenario": "오늘 수집된 데이터 기반 핵심 시나리오 2~3문장",\n'
+        '    "core_scenario": "핵심 시나리오 2~3문장",\n'
         '    "sector_rotation": "섹터 로테이션 방향 및 근거",\n'
-        '    "watch_points": [\n'
-        '      "오늘 주목해야 할 포인트 1",\n'
-        '      "오늘 주목해야 할 포인트 2"\n'
-        '    ],\n'
+        '    "watch_points": ["포인트1", "포인트2"],\n'
         '    "risk_scenarios": [\n'
-        '      {\n'
-        '        "scenario": "리스크 시나리오명",\n'
-        '        "probability": "높음|보통|낮음",\n'
-        '        "response": "대응 방향"\n'
-        '      }\n'
+        '      {"scenario": "시나리오명", "probability": "높음|보통|낮음",\n'
+        '       "response": "대응 방향"}\n'
         '    ],\n'
         '    "analyst_consensus": "애널리스트 리포트 종합 시각"\n'
         '  }\n'
         '}'
     )
 
-    stock_list_str = ", ".join(stock_name_list)
-
     rules = (
         "[작성 규칙]\n"
-        f"1. stocks: 아래 종목 목록 전체를 반드시 포함하여 작성. 임의로 제외하지 말 것.\n"
-        f"   → 필수 포함 종목({len(stock_name_list)}개): {stock_list_str}\n"
-        "2. signal: 긍정|중립|부정 중 택1\n"
-        "   - 애널리스트 리포트에 매수 의견이 있으면 → 긍정 우선\n"
-        "   - 매도/부정 의견이 있으면 → 부정 우선\n"
-        "   - 리포트 없이 헤드라인만 있으면 → 중립 기본\n"
-        "3. summary / catalyst / risk: 수집된 데이터 기반으로만 작성\n"
-        "4. channel_mentions: 실제 언급된 채널/기사 내용 최대 4개\n"
-        "   ※ reasons는 빈 배열 []로 두고 channel_mentions만 채울 것\n"
-        "5. hidden_picks: 반드시 [히든픽 후보] 목록에서만 선택, 없으면 []\n"
-        "6. market_summary: 5단락, \\n\\n 구분, 각 단락 3~4문장, 400자 이상\n"
-        "7. ai_strategy 작성 원칙:\n"
-        "   - 오늘 수집된 데이터에서 확인된 내용만 작성\n"
-        "   - 목표주가·손절가·배분비율 등 수치는 절대 임의로 생성하지 말 것\n"
-        "   - analyst_consensus: 애널리스트 리포트가 있는 종목만 서술\n"
-        "8. 모든 URL은 출처 데이터에 있는 것만 사용, 없으면 빈 문자열\n"
-        "9. JSON 외 설명문·마크다운 코드블록 없이 순수 JSON만 출력\n"
+        f"1. stocks 배열에 아래 종목 전체를 반드시 포함. 임의 제외 금지.\n"
+        f"   필수 포함 종목({len(stock_name_list)}개): {stock_list_str}\n"
+        "2. 각 stocks 항목의 \"name\" 필드는 반드시 위 종목명을 그대로 사용.\n"
+        "3. signal: 긍정|중립|부정 중 택1\n"
+        "   - 애널리스트 매수 의견 있으면 → 긍정\n"
+        "   - 매도/부정 의견 있으면 → 부정\n"
+        "   - 그 외 → 중립\n"
+        "4. channel_mentions: 실제 언급 채널/기사 내용 최대 4개. reasons는 빈 배열 [] 유지.\n"
+        "5. hidden_picks: [히든픽 후보] 목록에서만 선택. 없으면 [].\n"
+        "6. market_summary: 5단락, \\n\\n 구분, 각 단락 3~4문장, 400자 이상.\n"
+        "7. ai_strategy: 수집 데이터 기반으로만 작성. 임의 수치 생성 금지.\n"
+        "8. URL은 출처 데이터에 있는 것만 사용. 없으면 빈 문자열.\n"
+        "9. 순수 JSON만 출력. 설명문·마크다운 코드블록 제거.\n"
     )
 
     return (
@@ -738,7 +699,7 @@ def build_analysis_prompt(
         f"[최근 주요 헤드라인]\n{headlines_text}\n\n"
         f"[관심종목 후보 (가중점수 순)]\n{stocks_text}\n\n"
         f"[히든픽 후보]\n{hidden_text}\n\n"
-        f"위 데이터를 바탕으로 아래 JSON 형식으로 오늘의 AI 주식 브리핑을 작성하세요.\n\n"
+        "위 데이터를 바탕으로 아래 JSON 형식으로 오늘의 AI 주식 브리핑을 작성하세요.\n\n"
         f"{rules}\n\n"
         f"[출력 JSON 구조]\n{CB}json\n{prompt_json_structure}\n{CB}"
     )
@@ -747,12 +708,14 @@ def build_analysis_prompt(
 # ── JSON 파싱 헬퍼 ──────────────────────────────────────────────────────
 
 def _try_parse_json(text: str) -> Optional[dict]:
-    m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+    # FIX-JSON-PARSE-1: 탐욕적 패턴으로 변경하여 중첩 JSON 전체를 올바르게 파싱
+    m = re.search(r'```(?:json)?\s*(\{.*\})\s*```', text, re.DOTALL)
     if m:
         try:
             return json.loads(m.group(1))
         except json.JSONDecodeError:
             pass
+    # 코드블록 없이 JSON만 있는 경우
     m = re.search(r'\{.*\}', text, re.DOTALL)
     if m:
         try:
@@ -812,7 +775,7 @@ def _restore_source_url(item: dict, all_data: list) -> None:
         if not isinstance(entries, list):
             continue
         for entry in entries:
-            url_key = "url" if field == "channel_mentions" else "source_url"
+            url_key  = "url" if field == "channel_mentions" else "source_url"
             if entry.get(url_key):
                 continue
             src_name = entry.get("source_name", "")
@@ -842,8 +805,8 @@ body {{ background:#0d1117; color:#e6edf3;
        min-height:100vh; margin:0; }}
 .box {{ background:#161b22; border:1px solid #30363d;
         border-radius:12px; padding:2rem; max-width:500px; text-align:center; }}
-h2 {{ color:#ff6b6b; margin-bottom:1rem; }}
-p  {{ color:#8b949e; font-size:.9rem; }}
+h2  {{ color:#ff6b6b; margin-bottom:1rem; }}
+p   {{ color:#8b949e; font-size:.9rem; }}
 </style>
 </head>
 <body>
@@ -856,20 +819,39 @@ p  {{ color:#8b949e; font-size:.9rem; }}
 </html>"""
 
 
+# ── FIX-PRICE-LABEL-1: 주가 라벨 결정 함수 ─────────────────────────────
+
+def _get_price_label(now: datetime) -> str:
+    """
+    한국 주식시장 시간대별 가격 라벨 반환.
+      - 09:00 이전          → "전일종가"
+      - 09:00 ~ 15:29       → "현재가"
+      - 15:30 이후 (장마감)  → "종가"
+    주말(토·일)은 항상 "전일종가".
+    """
+    if now.weekday() >= 5:
+        return "전일종가"
+    h, m = now.hour, now.minute
+    if h < 9:
+        return "전일종가"
+    if h < 15 or (h == 15 and m < 30):
+        return "현재가"
+    return "종가"
+
+
 # ── 메인 워크플로우 ─────────────────────────────────────────────────────
 
 def analyze_and_generate_html(
     all_data: list,
     channels_data: dict = None,
     gh_repo: str = "",
-    gh_token: str = "",           # FIX-MAIN-1: main.py에서 전달하는 gh_token 수신
+    gh_token: str = "",
     market_overview: dict = None,
 ) -> str:
     from .html_generator import generate_html
     from .naver_finance  import fetch_naver_stock_price
 
-    # FIX-GEMINI-IMPORT: config.py에 GEMINI_API_KEY가 정의되어 있으므로
-    # 단순 import + 환경변수 폴백으로 정리 (dir() 체크 제거)
+    # FIX-GEMINI-IMPORT: config.py에 정의되어 있으므로 단순 import + 환경변수 폴백
     from config import ANTHROPIC_API_KEY
     try:
         from config import GEMINI_API_KEY
@@ -891,25 +873,15 @@ def analyze_and_generate_html(
     filtered       = filter_mentions(mentions)
     filtered_names = {name for name, _ in filtered}
 
-    # FIX-EMPTY-FILTER: 관심종목 0개여도 히든픽·브리핑은 계속 진행
     if not filtered:
         print("[분석] 관심종목 0개 — 히든픽 및 시장 요약만 생성")
 
-    # ── FIX-PRICE-5: 주가 라벨 결정 ──────────────────────────────────────
-    # 한국 주식시장 정규장: 09:00 ~ 15:30
-    # 09:00 이전 → Naver API 반환값 = 전일 종가
-    # 09:00 이후 → 현재가
-    stock_prices    = {}
-    now_hour        = now_kst.hour
-    now_minute      = now_kst.minute
-    # 09:00:00 부터 현재가로 처리 (정규장 시작 시각)
-    is_open_market  = (now_hour > 9) or (now_hour == 9 and now_minute >= 0)
-    price_label_default = "현재가" if is_open_market else "전일종가"
-
-    print(f"[주가조회] 현재 시각 {now_kst_str} KST — "
-          f"{'정규장(현재가)' if is_open_market else '장전(전일종가)'}")
+    # ── FIX-PRICE-LABEL-1: 시각 기반 가격 라벨 결정 ──────────────────────
+    price_label_default = _get_price_label(now_kst)
+    print(f"[주가조회] 현재 시각 {now_kst_str} KST — 가격 라벨: {price_label_default}")
 
     # ── 관심종목 주가 조회 ─────────────────────────────────────────────────
+    stock_prices = {}
     print(f"[주가조회] 관심종목 {len(filtered)}개 주가 조회 시작")
     for name, data in filtered:
         code = data.get("code", "")
@@ -929,7 +901,7 @@ def analyze_and_generate_html(
     for pick in hidden_candidates:
         name = pick["name"]
         code = pick["code"]
-        if name in stock_prices:   # 관심종목과 겹치면 재사용
+        if name in stock_prices:
             continue
         if not code:
             continue
@@ -938,14 +910,12 @@ def analyze_and_generate_html(
             continue
         price_info["price_label"] = price_label_default
         stock_prices[name] = price_info
-    print(f"[주가조회] 히든픽 주가 수집 완료 "
-          f"(전체 stock_prices: {len(stock_prices)}개)")
+    print(f"[주가조회] 히든픽 주가 수집 완료 (전체 stock_prices: {len(stock_prices)}개)")
 
     prompt = build_analysis_prompt(
         filtered, hidden_candidates, all_data, today_date, now_kst_str,
         stock_prices=stock_prices,
     )
-
     print(f"[Claude] 프롬프트 길이: {len(prompt)}자")
 
     try:
@@ -957,20 +927,17 @@ def analyze_and_generate_html(
     result = _try_parse_json(response_text)
     if not result:
         print("[Claude] JSON 파싱 실패 → fallback")
-        return _fallback_html(
-            "AI 응답 파싱 실패. 잠시 후 다시 시도하세요.", briefing_date
-        )
+        return _fallback_html("AI 응답 파싱 실패. 잠시 후 다시 시도하세요.", briefing_date)
+
+    # ── FIX-JSON-NAME-1: name 필드 정규화 (종목명 공백 버그 수정) ─────────
+    mention_lookup = dict(filtered)
+    result = _normalize_result_stocks(result, mention_lookup)
 
     # ── GEMINI-VAL-1: 검수 파이프라인 ───────────────────────────────────
     if GEMINI_API_KEY:
         try:
             from .gemini_validator import run_full_validation
-            result = run_full_validation(
-                result,
-                filtered,
-                all_data,
-                GEMINI_API_KEY,
-            )
+            result = run_full_validation(result, filtered, all_data, GEMINI_API_KEY)
         except Exception as e:
             print(f"[검수] 파이프라인 오류 (브리핑은 계속 진행): {e}")
     else:
@@ -981,33 +948,28 @@ def analyze_and_generate_html(
     if isinstance(ai_strat, dict):
         result["ai_strategy"] = _format_ai_strategy(ai_strat)
 
-    mention_lookup = dict(filtered)
-
     # ── FIX-PRICE-4/5: result["stocks"]에 주가 병합 ──────────────────────
     for stock in result.get("stocks", []):
         name       = stock.get("name", "")
         price_info = stock_prices.get(name)
 
-        if (price_info and isinstance(price_info, dict)
-                and price_info.get("price", 0) > 0):
+        if price_info and isinstance(price_info, dict) and price_info.get("price", 0) > 0:
             stock["price"]       = price_info["price"]
             stock["change_pct"]  = price_info.get("change_pct", 0.0)
             stock["price_label"] = price_info.get("price_label", price_label_default)
         else:
             stock["price"]       = 0
             stock["change_pct"]  = 0.0
-            stock["price_label"] = price_label_default   # 라벨은 시각 기준으로 유지
+            stock["price_label"] = price_label_default
 
         if name in mention_lookup:
             data = mention_lookup[name]
-            cc   = {
+            stock["channel_counts"] = {
                 ch_type: len(items)
                 for ch_type, items in data["channels"].items()
             }
-            stock["channel_counts"] = cc
             stock["total_count"]    = data["total_count"]
             stock["weighted_score"] = round(data["weighted_score"], 2)
-            # TIER-FILTER-1: overlap_count = 비뉴스 채널 종류 수
             stock["overlap_count"]  = len(data["non_news_channel_types"])
             stock["reasons"]        = []
 
@@ -1020,15 +982,14 @@ def analyze_and_generate_html(
             hp["channel_type"]   = hidden_lookup[name]["channel_type"]
 
         price_info = stock_prices.get(name)
-        if (price_info and isinstance(price_info, dict)
-                and price_info.get("price", 0) > 0):
+        if price_info and isinstance(price_info, dict) and price_info.get("price", 0) > 0:
             hp["price"]       = price_info["price"]
             hp["change_pct"]  = price_info.get("change_pct", 0.0)
             hp["price_label"] = price_info.get("price_label", price_label_default)
         else:
             hp["price"]       = 0
             hp["change_pct"]  = 0.0
-            hp["price_label"] = price_label_default   # 라벨은 시각 기준으로 유지
+            hp["price_label"] = price_label_default
 
     # ── URL 복원 ───────────────────────────────────────────────────────────
     for stock in result.get("stocks", []):
@@ -1045,7 +1006,6 @@ def analyze_and_generate_html(
     except Exception as e:
         print(f"[저장] 실패: {e}")
 
-    # FIX-MAIN-1: gh_token을 generate_html로 올바르게 전달
     return generate_html(
         result, channels_data, gh_repo, gh_token, market_overview, all_data
     )
