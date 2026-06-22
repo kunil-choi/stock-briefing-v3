@@ -178,10 +178,10 @@ def main():
             print(f"  ✅ 기준({_MIN_REPORTS}건) 충족 → 진행")
             break
 
-        # 09:00 KST 넘으면 건수 무관 강제 진행 (휴장일/공휴일 대체 대응)
-        _force_hour = 9
-        if datetime.now(KST).hour >= _force_hour:
-            print(f"  ⚠️  {_force_hour}:00 KST 초과 → 건수 무관 강제 진행 ({len(_today_data)}건)")
+        # 08:30 KST 넘으면 건수 무관 강제 진행 (휴장일/공휴일 대체 대응)
+        _now2 = datetime.now(KST)
+        if _now2.hour > 8 or (_now2.hour == 8 and _now2.minute >= 30):
+            print(f"  ⚠️  08:30 KST 초과 → 건수 무관 강제 진행 ({len(_today_data)}건)")
             analyst_data = _candidate
             break
 
