@@ -146,22 +146,6 @@ def _parse_gemini_response(text: str) -> Optional[dict]:
     return None
 
 
-def _analyze_via_transcript(client, transcript: str, video_url: str) -> Optional[dict]:
-    """transcript 텍스트로 Gemini 분석 (영상 직접 접근 실패 시 폴백)."""
-    if not transcript or len(transcript) < _MIN_TRANSCRIPT_CHARS:
-        return None
-    prompt = _PROMPT_TRANSCRIPT.format(transcript=transcript[:4000])
-    try:
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-        )
-        return _parse_gemini_response(response.text)
-    except Exception as e:
-        print(f"    [GeminiYT] transcript 분석 실패 ({video_url}): {e}")
-        return None
-
-
 def _analyze_via_video_url(client, video_url: str) -> Optional[dict]:
     """
     GEMINI-YT-5:
