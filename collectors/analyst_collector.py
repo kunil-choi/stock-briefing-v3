@@ -42,6 +42,54 @@ BROKERS = [
 NAVER_FINANCE_BASE  = "https://finance.naver.com"
 NAVER_RESEARCH_BASE = "https://finance.naver.com/research"
 
+# 대형 증권사 (단독언급 유의미성 판단 기준)
+_TOP_BROKERS = {
+    "NH투자증권", "삼성증권", "KB증권", "미래에셋증권", "한국투자증권",
+    "신한투자증권", "하나증권", "키움증권", "메리츠증권", "대신증권",
+}
+
+# 목표주가 상향 패턴
+_TP_UP_PATTERN = re.compile(
+    r'(목표주가|목표가|TP)[^\d]*?(\d[\d,]+)[^\d]*?(→|▶|↑|상향|올려|높여)[^\d]*?(\d[\d,]+)',
+    re.IGNORECASE
+)
+_TP_UP_KEYWORDS = ["상향", "목표주가 ↑", "TP ↑", "올려", "높여", "목표가 상향"]
+_OPINION_UP_MAP = {
+    ("중립", "매수"), ("중립", "BUY"), ("HOLD", "매수"), ("HOLD", "BUY"),
+    ("비중축소", "중립"), ("비중축소", "매수"), ("매도", "중립"), ("매도", "매수"),
+}
+
+
+def _is_significant_single(report: dict) -> tuple[bool, str]:
+    """
+    단독언급 리포트 중 유의미한 것을 규칙 기반으로 판별.
+    Returns (is_significant, reason)
+    """
+    title  = report.get("report_title", "") or report.get("title", "")
+    broker = report.get("source_name", "")
+
+    # 조건 1: 대형 증권사 발행
+    is_top = broker in _TOP_BROKERS
+
+    # 조건 2: 목표주가 상향 키워드
+    tp_up = any(kw in title for kw in _TP_UP_KEYWORDS) or bool(_TP_UP_PATTERN.search(title))
+
+    # 조건 3: 투자의견 상향
+    opinion = report.get("opinion", "")
+    opinion_up = False  # 단독 리포트는 이전 의견 정보가 없어 제목 기반으로만 판단
+    if any(kw in title for kw in ["투자의견 상향", "의견 상향", "Buy로 상향", "매수로 상향"]):
+        opinion_up = True
+
+    # 유의미 판단: (대형사 AND 목표주가상향) OR 투자의견상향
+    if is_top and tp_up:
+        return True, f"대형사({broker}) + 목표주가 상향"
+    if opinion_up:
+        return True, f"투자의견 상향"
+    if is_top and opinion_up:
+        return True, f"대형사({broker}) + 투자의견 상향"
+
+    return False, ""
+
 COVERAGE_KEYWORDS = ["커버리지", "신규", "개시", "Coverage Initiation", "Initiation", "NDR"]
 
 _OPINION_PATTERN = re.compile(
@@ -499,7 +547,9 @@ def collect_analyst(api_key: str = "") -> list:
     today_names = {r.get("stock_name", "") for r in today_all}
 
     yest_selected = []
-    for category in ["simultaneous", "new_coverage"]:  # 단독언급 제외
+
+    # 동시언급 + 신규커버리지 (전체 포함)
+    for category in ["simultaneous", "new_coverage"]:
         for r in yest_classified[category]:
             if (r.get("date", "") == yesterday_str
                     and r.get("stock_name", "") not in today_names):
@@ -507,9 +557,24 @@ def collect_analyst(api_key: str = "") -> list:
                 r["report_day"] = "yesterday"
                 yest_selected.append(r)
 
+    # 단독언급 중 유의미한 것만 선별 (대형사+목표주가상향 or 투자의견상향)
+    yest_single_significant = []
+    for r in yest_classified["single_broker"]:
+        if (r.get("date", "") == yesterday_str
+                and r.get("stock_name", "") not in today_names):
+            significant, reason = _is_significant_single(r)
+            if significant:
+                r["analyst_category"] = "single_broker"
+                r["report_day"] = "yesterday"
+                r["significance_reason"] = reason
+                yest_single_significant.append(r)
+                print(f"  → 어제 단독언급 선별: {r.get('stock_name','')} ({reason})")
+
+    yest_selected.extend(yest_single_significant)
+
     print(
         f"  → 어제 선별: {len(yest_selected)}건 "
-        f"(동시언급+신규커버리지만, 단독언급·오늘중복 제외)"
+        f"(동시언급+신규커버리지 + 유의미 단독언급 {len(yest_single_significant)}건)"
     )
 
     # ── 최종 합산 ─────────────────────────────────────────────────
