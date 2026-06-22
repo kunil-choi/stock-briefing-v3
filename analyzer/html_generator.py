@@ -319,30 +319,47 @@ def _build_analyst_html(all_data: list) -> str:
     if not analyst_items:
         return '<p style="color:#666;">애널리스트 리포트 데이터 없음</p>'
 
-    simultaneous = [r for r in analyst_items if r.get("analyst_category") == "simultaneous"]
-    new_cov      = [r for r in analyst_items if r.get("analyst_category") == "new_coverage"]
-    single       = [r for r in analyst_items
-                    if r.get("analyst_category") not in ("simultaneous", "new_coverage")]
+    # 오늘/어제 분리
+    today_items = [r for r in analyst_items if r.get("report_day") != "yesterday"]
+    yest_items  = [r for r in analyst_items if r.get("report_day") == "yesterday"]
+
+    def _render_day_section(items: list, day_label: str, day_color: str) -> str:
+        if not items:
+            return ""
+        simultaneous = [r for r in items if r.get("analyst_category") == "simultaneous"]
+        new_cov      = [r for r in items if r.get("analyst_category") == "new_coverage"]
+        single       = [r for r in items
+                        if r.get("analyst_category") not in ("simultaneous", "new_coverage")]
+        out = ""
+        # 날짜 구분선 (어제만 표시)
+        if day_label:
+            out += (f'<div style="margin:1.2rem 0 .6rem;padding:.4rem .8rem;'
+                    f'background:{day_color}18;border-left:3px solid {day_color};'
+                    f'border-radius:4px;font-size:.82rem;font-weight:700;color:{day_color};">'
+                    f'{day_label}</div>')
+        if simultaneous:
+            out += ('<div class="analyst-category-title" '
+                    'style="border-left-color:#ff922b;color:#ff922b;">'
+                    '🔥 복수 증권사 동시 언급</div>')
+            for r in simultaneous[:10]:
+                out += _report_card(r, "simultaneous")
+        if new_cov:
+            out += ('<div class="analyst-category-title" '
+                    'style="border-left-color:#51cf66;color:#51cf66;">'
+                    '🆕 신규 커버리지 개시</div>')
+            for r in new_cov[:10]:
+                out += _report_card(r, "new_coverage")
+        if single:
+            out += ('<div class="analyst-category-title" '
+                    'style="border-left-color:#74c0fc;color:#74c0fc;">'
+                    '📌 단독 언급</div>')
+            for r in single[:10]:
+                out += _report_card(r, "single")
+        return out
 
     html = ""
-    if simultaneous:
-        html += ('<div class="analyst-category-title" '
-                 'style="border-left-color:#ff922b;color:#ff922b;">'
-                 '🔥 복수 증권사 동시 언급</div>')
-        for r in simultaneous[:10]:
-            html += _report_card(r, "simultaneous")
-    if new_cov:
-        html += ('<div class="analyst-category-title" '
-                 'style="border-left-color:#51cf66;color:#51cf66;">'
-                 '🆕 신규 커버리지 개시</div>')
-        for r in new_cov[:10]:
-            html += _report_card(r, "new_coverage")
-    if single:
-        html += ('<div class="analyst-category-title" '
-                 'style="border-left-color:#74c0fc;color:#74c0fc;">'
-                 '📌 단독 언급</div>')
-        for r in single[:10]:
-            html += _report_card(r, "single")
+    html += _render_day_section(today_items, "", "#ff922b")
+    html += _render_day_section(yest_items,  "📅 전일 주목 리포트", "#adb5bd")
     return html or '<p style="color:#666;">분류된 리포트 없음</p>'
 
 
