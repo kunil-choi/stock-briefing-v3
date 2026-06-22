@@ -735,20 +735,33 @@ def build_analysis_prompt(
 # ── JSON 파싱 헬퍼 ──────────────────────────────────────────────────────
 
 def _try_parse_json(text: str) -> Optional[dict]:
-    # FIX-JSON-PARSE-1: 탐욕적 패턴으로 변경하여 중첩 JSON 전체를 올바르게 파싱
-    m = re.search(r'```(?:json)?\s*(\{.*\})\s*```', text, re.DOTALL)
+    """Claude 응답에서 JSON 파싱 — 3단계 fallback (FIX-JSON-PARSE-2)"""
+    text = text.strip()
+
+    # 1단계: 마크다운 코드블록 내 JSON 추출
+    m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
     if m:
         try:
             return json.loads(m.group(1))
         except json.JSONDecodeError:
             pass
-    # 코드블록 없이 JSON만 있는 경우
-    m = re.search(r'\{.*\}', text, re.DOTALL)
+
+    # 2단계: 코드블록 제거 후 탐욕적 중괄호 탐지
+    cleaned = re.sub(r'```(?:json)?\s*', '', text)
+    cleaned = re.sub(r'```\s*$', '', cleaned, flags=re.MULTILINE)
+    m = re.search(r'\{.*\}', cleaned, re.DOTALL)
     if m:
         try:
             return json.loads(m.group(0))
         except json.JSONDecodeError:
             pass
+
+    # 3단계: 전체 텍스트 직접 파싱 시도
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
     return None
 
 
