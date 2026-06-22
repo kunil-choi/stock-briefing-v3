@@ -49,6 +49,12 @@ def main():
     print(f"=== AI 주식 브리핑 시작: {now_kst.strftime('%Y-%m-%d %H:%M:%S KST')} ===")
     start_time = now_kst.timestamp()
 
+    # ── 수동 실행 스킵 옵션 ────────────────────────────────────────────────
+    SKIP_YOUTUBE = os.getenv("SKIP_YOUTUBE", "false").lower() == "true"
+    SKIP_ANALYST = os.getenv("SKIP_ANALYST", "false").lower() == "true"
+    if SKIP_YOUTUBE: print("  ⚡ SKIP_YOUTUBE=true → 유튜브 수집/분석 스킵")
+    if SKIP_ANALYST: print("  ⚡ SKIP_ANALYST=true → 애널리스트 수집 스킵")
+
     # ── API 키 확인 ────────────────────────────────────────────────────────
     print("\n[API 키 확인]")
     keys = {
@@ -96,31 +102,38 @@ def main():
     youtube = get_youtube_client(YOUTUBE_API_KEY)
 
     # ── 3. 등록 채널 플레이리스트 수집 ────────────────────────────────────
-    print("\n[2/5] 유튜브 수집 (경제방송/유튜버/증권사 24h)...")
     yt_data = []
-    if youtube:
-        yt_data = safe_collect(
-            collect_section1_youtube, youtube, channels, label="유튜브"
-        )
-        print(f"  → {len(yt_data)}건")
-    else:
-        print("  → YouTube 클라이언트 없음, 스킵")
-
-    # ── 4. 패널리스트 이름 검색 수집 ──────────────────────────────────────
-    print(f"\n[3/5] 패널리스트 이름 검색 수집 ({_PANELIST_HOURS}h)...")
     panelist_data = []
-    if youtube:
-        panelist_data = safe_collect(
-            collect_panelist_youtube, youtube, label="패널리스트검색"
-        )
-        print(f"  → {len(panelist_data)}건")
+    if SKIP_YOUTUBE:
+        print("\n[2/5] 유튜브 수집 스킵 (SKIP_YOUTUBE=true)")
+        print("\n[3/5] 패널리스트 검색 스킵 (SKIP_YOUTUBE=true)")
     else:
-        print("  → YouTube 클라이언트 없음, 스킵")
+        print("\n[2/5] 유튜브 수집 (경제방송/유튜버/증권사 24h)...")
+        if youtube:
+            yt_data = safe_collect(
+                collect_section1_youtube, youtube, channels, label="유튜브"
+            )
+            print(f"  → {len(yt_data)}건")
+        else:
+            print("  → YouTube 클라이언트 없음, 스킵")
+
+        # ── 4. 패널리스트 이름 검색 수집 ──────────────────────────────────────
+        print(f"\n[3/5] 패널리스트 이름 검색 수집 ({_PANELIST_HOURS}h)...")
+        if youtube:
+            panelist_data = safe_collect(
+                collect_panelist_youtube, youtube, label="패널리스트검색"
+            )
+            print(f"  → {len(panelist_data)}건")
+        else:
+            print("  → YouTube 클라이언트 없음, 스킵")
 
     # ── GEMINI-MAIN: 유튜브 영상 Gemini 직접 분석 ─────────────────────────
     # 사전 수집된 youtube_mentions.json이 있으면 이미 분석된 영상은 건너뜀
     youtube_raw = yt_data + panelist_data
-    if GEMINI_API_KEY and youtube_raw:
+    if SKIP_YOUTUBE:
+        print("\n[GEMINI] 유튜브 분석 스킵 (SKIP_YOUTUBE=true)")
+        all_data.extend(youtube_raw)
+    elif GEMINI_API_KEY and youtube_raw:
         import json as _json
 
         # 사전 수집에서 이미 분석된 video_url 로드
@@ -215,6 +228,10 @@ def main():
     # ── 5. 애널리스트 리포트 (retry 루프: 08:00 KST 이후 5건 이상 확보까지 대기)
     import time as _time
     print("\n[5/5] 애널리스트 리포트 수집 (본문 크롤링 + Claude 요약 포함)...")
+    if SKIP_ANALYST:
+        print("  ⚡ 애널리스트 수집 스킵 (SKIP_ANALYST=true)")
+        analyst_data = []
+    else:
 
     _TARGET_HOUR   = 8      # 08:00 KST 이후부터 리포트 수집 시작
     _MIN_REPORTS   = 20     # 최소 20건 확보되면 진행
