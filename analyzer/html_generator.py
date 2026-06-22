@@ -182,15 +182,25 @@ def _build_dawn_market_html(market_overview: dict) -> str:
     if kospi_night:
         pct   = _safe_float(kospi_night,  "change_pct")
         val   = _safe_float(kospi_night,  "value")
-        label, color, arrow = _direction_label(pct)
-        rows += (
-            f'<div class="dawn-row">'
-            f'<span class="dawn-icon">📈</span>'
-            f'<span class="dawn-name">K야간선물(코스피)</span>'
-            f'<span class="dawn-val" style="color:{color};">'
-            f'{arrow} {val:,.2f} ({pct:+.2f}%) {label}</span>'
-            f'</div>'
-        )
+        # val==0 and pct==0 이면 수집 실패로 판단
+        if val == 0.0 and pct == 0.0:
+            rows += (
+                '<div class="dawn-row">'
+                '<span class="dawn-icon">📈</span>'
+                '<span class="dawn-name">K야간선물(코스피)</span>'
+                '<span class="dawn-val" style="color:#adb5bd;">데이터 없음</span>'
+                '</div>'
+            )
+        else:
+            label, color, arrow = _direction_label(pct)
+            rows += (
+                f'<div class="dawn-row">'
+                f'<span class="dawn-icon">📈</span>'
+                f'<span class="dawn-name">K야간선물(코스피)</span>'
+                f'<span class="dawn-val" style="color:{color};">'
+                f'{arrow} {val:,.2f} ({pct:+.2f}%) {label}</span>'
+                f'</div>'
+            )
 
     if kosdaq_night:
         pct   = _safe_float(kosdaq_night, "change_pct")
