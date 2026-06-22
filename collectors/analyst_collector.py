@@ -433,19 +433,8 @@ def _enrich_with_summaries(all_classified: list, api_key: str) -> None:
             print(f"  [{i}/{total}] {stock_name}: 요약 실패 → 빈 문자열 유지")
 
 
-def collect_analyst(api_key: str = "") -> list:
-    """애널리스트 리포트 수집 메인 함수"""
-    print("\n=== 섹션 3: 애널리스트 리포트 수집 ===")
-
-    # 1단계: 메타데이터만 수집 (Claude 호출 없음)
-    reports = collect_naver_research()
-    print(f"  → 원시 수집: {len(reports)}건")
-
-    if not reports:
-        print("  → 수집된 리포트 없음")
-        return []
-
-    # 2단계: 중복 제거
+def _dedupe_and_classify(reports: list) -> dict:
+    """중복 제거 후 분류 반환 (내부 헬퍼)"""
     seen_raw = set()
     deduped  = []
     for r in reports:
@@ -453,41 +442,85 @@ def collect_analyst(api_key: str = "") -> list:
         if key not in seen_raw:
             seen_raw.add(key)
             deduped.append(r)
-    print(f"  → 중복 제거 후: {len(deduped)}건")
+    return classify_analyst_reports(deduped)
 
-    # 3단계: 분류 — 종목당 대표 리포트 1건 확정
-    classified = classify_analyst_reports(deduped)
 
-    for r in classified["simultaneous"]:
+def collect_analyst(api_key: str = "") -> list:
+    """애널리스트 리포트 수집 메인 함수
+
+    수집 전략:
+    - 오늘 리포트: 동시언급 + 신규커버리지 + 단독언급 전체 수집
+    - 어제 리포트: 동시언급 + 신규커버리지만 선별 (단독언급 제외)
+                   오늘 이미 포함된 종목은 중복 제외
+    """
+    print("\n=== 섹션 3: 애널리스트 리포트 수집 ===")
+
+    KST           = timezone(timedelta(hours=9))
+    today_str     = datetime.now(KST).strftime("%y.%m.%d")
+    yesterday_str = (datetime.now(KST) - timedelta(days=1)).strftime("%y.%m.%d")
+
+    # ── 오늘 리포트 수집 (REPORT_DAYS=1) ─────────────────────────
+    print(f"  [오늘 {today_str}] 수집 중...")
+    today_reports = collect_naver_research()  # REPORT_DAYS=1 기본값
+    today_classified = _dedupe_and_classify(today_reports)
+
+    for r in today_classified["simultaneous"]:
         r["analyst_category"] = "simultaneous"
-    for r in classified["new_coverage"]:
+        r["report_day"] = "today"
+    for r in today_classified["new_coverage"]:
         r["analyst_category"] = "new_coverage"
-    for r in classified["single_broker"]:
+        r["report_day"] = "today"
+    for r in today_classified["single_broker"]:
         r["analyst_category"] = "single_broker"
+        r["report_day"] = "today"
 
-    all_classified = (
-        classified["simultaneous"]
-        + classified["new_coverage"]
-        + classified["single_broker"]
+    today_all = (
+        today_classified["simultaneous"]
+        + today_classified["new_coverage"]
+        + today_classified["single_broker"]
+    )
+    print(
+        f"  → 오늘: 동시언급 {len(today_classified['simultaneous'])}건 / "
+        f"신규커버리지 {len(today_classified['new_coverage'])}건 / "
+        f"단독언급 {len(today_classified['single_broker'])}건"
     )
 
-    sim_count    = len(classified["simultaneous"])
-    cov_count    = len(classified["new_coverage"])
-    single_count = len(classified["single_broker"])
-    total        = len(all_classified)
+    # ── 어제 리포트 수집 (REPORT_DAYS=2로 임시 변경) ─────────────
+    print(f"  [어제 {yesterday_str}] 동시언급·신규커버리지 선별 중...")
+    global REPORT_DAYS
+    _orig_days  = REPORT_DAYS
+    REPORT_DAYS = 2
+    yest_reports = collect_naver_research()
+    REPORT_DAYS  = _orig_days  # 원복
+
+    yest_classified = _dedupe_and_classify(yest_reports)
+
+    # 오늘 이미 포함된 종목 집합
+    today_names = {r.get("stock_name", "") for r in today_all}
+
+    yest_selected = []
+    for category in ["simultaneous", "new_coverage"]:  # 단독언급 제외
+        for r in yest_classified[category]:
+            if (r.get("date", "") == yesterday_str
+                    and r.get("stock_name", "") not in today_names):
+                r["analyst_category"] = category
+                r["report_day"] = "yesterday"
+                yest_selected.append(r)
 
     print(
-        f"  → 분류 완료: 동시언급 {sim_count}건 / "
-        f"신규커버리지 {cov_count}건 / "
-        f"단독언급 {single_count}건 / "
-        f"최종 {total}건"
+        f"  → 어제 선별: {len(yest_selected)}건 "
+        f"(동시언급+신규커버리지만, 단독언급·오늘중복 제외)"
     )
 
-    if classified["simultaneous"]:
-        names = [r.get("stock_name", "") for r in classified["simultaneous"]]
-        print(f"  → 동시언급 종목: {', '.join(names)}")
+    # ── 최종 합산 ─────────────────────────────────────────────────
+    all_classified = today_all + yest_selected
+    print(f"  → 최종: {len(all_classified)}건 (오늘 {len(today_all)}건 + 어제 {len(yest_selected)}건)")
 
-    # 4단계: 대표 리포트에만 Claude 요약 실행 (FIX-COST-1)
+    if today_classified["simultaneous"]:
+        names = [r.get("stock_name", "") for r in today_classified["simultaneous"]]
+        print(f"  → 오늘 동시언급 종목: {', '.join(names)}")
+
+    # 대표 리포트에만 Claude 요약 실행
     _enrich_with_summaries(all_classified, api_key)
 
     return all_classified
