@@ -516,11 +516,33 @@ def _render_ai_strategy(ai_strategy: str) -> str:
     if not ai_strategy or not ai_strategy.strip():
         return '<p style="color:#666;">AI 전략 데이터 없음</p>'
 
+    # 1차: ■ 구분자로 파싱 시도
     raw_sections = re.split(r'\n(?=■ )', ai_strategy.strip())
     sections     = [s.strip() for s in raw_sections if s.strip().startswith("■")]
 
+    # 2차 fallback: ## 헤더 방식 (Claude가 마크다운으로 응답한 경우)
     if not sections:
-        return f'<p style="color:#ccc;">{_he.escape(ai_strategy.strip())}</p>'
+        raw_sections = re.split(r'\n(?=## )', ai_strategy.strip())
+        sections = []
+        for s in raw_sections:
+            s = s.strip()
+            if s.startswith("## "):
+                s = "■ " + s[3:]  # ## → ■ 로 변환해서 기존 렌더링 재사용
+                sections.append(s)
+
+    # 3차 fallback: 번호 목록 방식 (1. 2. 3. …)
+    if not sections:
+        raw_sections = re.split(r'\n(?=\d+\. )', ai_strategy.strip())
+        sections = []
+        for s in raw_sections:
+            s = s.strip()
+            if re.match(r'^\d+\.', s):
+                s = "■ " + re.sub(r'^\d+\.\s*', '', s)
+                sections.append(s)
+
+    # 모든 fallback 실패 시 원문 그대로 표시
+    if not sections:
+        return f'<p style="color:#ccc;white-space:pre-wrap;">{_he.escape(ai_strategy.strip())}</p>'
 
     icon_map = {
         "핵심 시나리오":        "🎯",
