@@ -130,16 +130,24 @@ def main():
             try:
                 with open(_mentions_file, "r", encoding="utf-8") as _f:
                     _existing = _json.load(_f)
-                _precollected_urls = {m.get("video_url", "") for m in _existing}
+                # video_url과 timestamp_url 둘 다 포함 (필드명 불일치 방지)
+                _precollected_urls = set()
+                for m in _existing:
+                    if m.get("video_url"): _precollected_urls.add(m["video_url"])
+                    if m.get("timestamp_url"): _precollected_urls.add(m["timestamp_url"])
+                    # &t= 파라미터 제거한 순수 video_url도 추가
+                    _base_url = m.get("video_url","").split("&t=")[0]
+                    if _base_url: _precollected_urls.add(_base_url)
                 print(f"\n[GEMINI] 사전 수집 데이터: {len(_existing)}건 "
                       f"(분석된 영상 {len(_precollected_urls)}개)")
             except Exception as _e:
                 print(f"  [GEMINI] 사전 수집 데이터 로드 실패: {_e}")
 
         # 신규 영상만 분석
+        # link에서 &t= 파라미터 제거 후 비교 (timestamp_url과 불일치 방지)
         _new_items = [
             item for item in youtube_raw
-            if item.get("link", "") not in _precollected_urls
+            if item.get("link", "").split("&t=")[0] not in _precollected_urls
         ]
         _skip_count = len(youtube_raw) - len(_new_items)
         print(f"\n[GEMINI] 유튜브 영상 분석 시작 "
