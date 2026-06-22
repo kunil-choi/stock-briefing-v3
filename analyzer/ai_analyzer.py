@@ -647,7 +647,10 @@ def build_analysis_prompt(
             )
 
     stocks_text = "\n".join(stocks_info)
-    hidden_text = "\n".join(hidden_info) if hidden_info else "해당 없음"
+    if hidden_info:
+        hidden_text = "※ 아래 종목은 반드시 hidden_picks에 포함하세요\n" + "\n".join(hidden_info)
+    else:
+        hidden_text = "해당 없음 (hidden_picks는 빈 배열로)"
     stock_list_str = ", ".join(stock_name_list)
 
     prompt_json_structure = (
@@ -711,7 +714,7 @@ def build_analysis_prompt(
         "   - 매도/부정 의견 있으면 → 부정\n"
         "   - 그 외 → 중립\n"
         "4. channel_mentions: 실제 언급 채널/기사 내용 최대 4개. reasons는 빈 배열 [] 유지.\n"
-        "5. hidden_picks: [히든픽 후보] 목록에서만 선택. 없으면 [].\n"
+        "5. hidden_picks: [히든픽 후보] 목록에 종목이 있으면 반드시 포함. 후보 목록이 \"해당 없음\"일 때만 [].\n"
         "6. market_summary: 5단락, \\n\\n 구분, 각 단락 3~4문장, 400자 이상.\n"
         "7. ai_strategy: 수집 데이터 기반으로만 작성. 임의 수치 생성 금지.\n"
         "8. URL은 출처 데이터에 있는 것만 사용. 없으면 빈 문자열.\n"
