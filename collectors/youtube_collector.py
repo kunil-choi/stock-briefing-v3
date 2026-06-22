@@ -147,6 +147,7 @@ def get_recent_videos_via_playlist(youtube, channel_id: str, hours: int) -> list
                 videos.append({
                     "video_id":     video_id,
                     "title":        snippet.get("title", ""),
+                    "description":  snippet.get("description", "")[:1000],  # description 추가
                     "channel_id":   snippet.get("channelId", channel_id),
                     "channel_name": snippet.get("channelTitle", ""),
                     "published_at": pub_dt.strftime("%Y-%m-%d %H:%M"),
@@ -296,13 +297,18 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
                 if securities_filter and not is_securities_analysis(title, transcript):
                     continue
 
+                description = v.get("description", "")
+                # transcript 우선, 없으면 description, 없으면 title
+                summary = transcript[:500] if transcript else (description[:500] if description else title)
                 all_items.append({
-                    "source_type": source_type,
-                    "source_name": channel_name,
-                    "title":       title,
-                    "summary":     transcript[:500] if transcript else title,
-                    "link":        f"https://www.youtube.com/watch?v={v['video_id']}",
-                    "published":   v.get("published_at", ""),
+                    "source_type":   source_type,
+                    "source_name":   channel_name,
+                    "title":         title,
+                    "summary":       summary,
+                    "description":   description,
+                    "link":          f"https://www.youtube.com/watch?v={v['video_id']}",
+                    "published":     v.get("published_at", ""),
+                    "has_transcript": bool(transcript),
                 })
                 collected += 1
 
@@ -417,15 +423,20 @@ def collect_panelist_youtube(youtube) -> list:
             except Exception:
                 pub_str = published_at
 
+            desc = snippet.get("description", "")[:1000]
+            # transcript 우선, 없으면 description, 없으면 title
+            final_summary = summary if summary else (desc[:500] if desc else title)
             seen_ids.add(video_id)
             all_items.append({
-                "source_type": "유튜브",
-                "source_name": channel_name,
-                "title":       title,
-                "summary":     summary or title,
-                "link":        f"https://www.youtube.com/watch?v={video_id}",
-                "published":   pub_str,
-                "_panelist":   panelist_tag,
+                "source_type":    "유튜브",
+                "source_name":    channel_name,
+                "title":          title,
+                "summary":        final_summary,
+                "description":    desc,
+                "link":           f"https://www.youtube.com/watch?v={video_id}",
+                "published":      pub_str,
+                "_panelist":      panelist_tag,
+                "has_transcript": bool(transcript),
             })
             collected += 1
 
