@@ -122,6 +122,7 @@ body { background: var(--bg); color: var(--text);
       <button class="tab active" onclick="switchTab('panelist')">👤 패널리스트 후보 <span id="panelist-cnt" class="count-badge">-</span></button>
       <button class="tab" onclick="switchTab('channel')">📺 채널 후보 <span id="channel-cnt" class="count-badge">-</span></button>
       <button class="tab" onclick="switchTab('registered')">✅ 등록 현황</button>
+      <button class="tab" onclick="switchTab('add')">➕ 직접 추가</button>
     </div>
 
     <!-- 패널리스트 후보 탭 -->
@@ -146,6 +147,64 @@ body { background: var(--bg); color: var(--text);
     <div id="tab-registered" class="tab-content">
       <div class="section-title">✅ 현재 등록된 패널리스트 & 채널</div>
       <div id="registered-content"><div class="loading"><span class="spinner"></span>로딩 중...</div></div>
+    </div>
+
+    <!-- 직접 추가 탭 -->
+    <div id="tab-add" class="tab-content">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+
+        <!-- 패널리스트 직접 추가 -->
+        <div class="card" style="padding:1.2rem;">
+          <div class="section-title" style="margin-bottom:1rem;">👤 패널리스트 직접 추가</div>
+          <div style="margin-bottom:.75rem;">
+            <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:.3rem;">이름</label>
+            <input id="add-panelist-name" type="text" placeholder="예: 홍길동"
+              style="width:100%;padding:.55rem .8rem;background:var(--surface2);
+              border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:.9rem;">
+          </div>
+          <button class="btn btn-approve" style="width:100%;" onclick="addPanelist()">✅ 패널리스트 추가</button>
+          <p style="font-size:.75rem;color:var(--muted);margin-top:.6rem;">
+            POPULAR_PANELISTS 목록에 즉시 추가됩니다.
+          </p>
+        </div>
+
+        <!-- 채널 직접 추가 -->
+        <div class="card" style="padding:1.2rem;">
+          <div class="section-title" style="margin-bottom:1rem;">📺 채널 직접 추가</div>
+          <div style="margin-bottom:.6rem;">
+            <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:.3rem;">채널명</label>
+            <input id="add-ch-name" type="text" placeholder="예: 달란트투자"
+              style="width:100%;padding:.55rem .8rem;background:var(--surface2);
+              border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:.9rem;">
+          </div>
+          <div style="margin-bottom:.6rem;">
+            <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:.3rem;">
+              채널 ID
+              <span style="color:var(--accent);font-weight:400;">
+                (YouTube 채널 페이지 URL의 UC로 시작하는 값)
+              </span>
+            </label>
+            <input id="add-ch-id" type="text" placeholder="예: UCxxxxxxxxxxxxxxxxxxxxxx"
+              style="width:100%;padding:.55rem .8rem;background:var(--surface2);
+              border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:.9rem;">
+          </div>
+          <div style="margin-bottom:.75rem;">
+            <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:.3rem;">카테고리</label>
+            <select id="add-ch-cat"
+              style="width:100%;padding:.55rem .8rem;background:var(--surface2);
+              border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:.9rem;">
+              <option value="youtuber">유튜버</option>
+              <option value="broadcast">경제방송</option>
+              <option value="securities">증권사</option>
+            </select>
+          </div>
+          <button class="btn btn-approve" style="width:100%;" onclick="addChannel()">✅ 채널 추가</button>
+          <p style="font-size:.75rem;color:var(--muted);margin-top:.6rem;">
+            channels.json에 즉시 추가됩니다.
+          </p>
+        </div>
+
+      </div>
     </div>
   </div>
 </div>
@@ -177,6 +236,55 @@ function login() {
 function logout() {
   GH_TOKEN = "";
   location.reload();
+}
+
+// ── 직접 추가 ─────────────────────────────────────────────────────
+async function addPanelist() {
+  const name = document.getElementById("add-panelist-name").value.trim();
+  if (!name) { showToast("이름을 입력하세요", "error"); return; }
+  try {
+    const cfg = await ghGet("config.py");
+    let cfgContent = decodeURIComponent(escape(atob(cfg.content)));
+    if (cfgContent.includes(`"${name}"`)) {
+      showToast(`${name} 이미 등록됨`, "error"); return;
+    }
+    cfgContent = cfgContent.replace(
+      `    "김학균", "김한진",\n]`,
+      `    "김학균", "김한진",\n    "${name}",\n]`
+    );
+    await ghUpdate("config.py", cfgContent, cfg.sha, `feat: 패널리스트 직접 추가 — ${name}`);
+    document.getElementById("add-panelist-name").value = "";
+    showToast(`✅ ${name} 패널리스트 추가 완료`);
+    await loadRegistered();
+  } catch(e) { showToast(`오류: ${e.message}`, "error"); }
+}
+
+async function addChannel() {
+  const chName = document.getElementById("add-ch-name").value.trim();
+  const chId   = document.getElementById("add-ch-id").value.trim();
+  const cat    = document.getElementById("add-ch-cat").value;
+  if (!chName) { showToast("채널명을 입력하세요", "error"); return; }
+  if (!chId || !chId.startsWith("UC")) {
+    showToast("채널 ID를 확인하세요 (UC로 시작)", "error"); return;
+  }
+  try {
+    const cj = await ghGet("channels.json");
+    let channels = JSON.parse(decodeURIComponent(escape(atob(cj.content))));
+    // 중복 확인
+    for (const c of Object.values(channels).flat()) {
+      if (typeof c === "object" && c.id === chId) {
+        showToast("이미 등록된 채널 ID", "error"); return;
+      }
+    }
+    channels[cat] = channels[cat] || [];
+    channels[cat].push({ id: chId, name: chName });
+    await ghUpdate("channels.json", JSON.stringify(channels, null, 2), cj.sha,
+      `feat: 채널 직접 추가 — ${chName} (${cat})`);
+    document.getElementById("add-ch-name").value = "";
+    document.getElementById("add-ch-id").value   = "";
+    showToast(`✅ ${chName} 채널 추가 완료 (${cat})`);
+    await loadRegistered();
+  } catch(e) { showToast(`오류: ${e.message}`, "error"); }
 }
 
 // ── GitHub API ────────────────────────────────────────────────────
@@ -213,7 +321,7 @@ function showToast(msg, type="success") {
 
 // ── 탭 전환 ──────────────────────────────────────────────────────
 function switchTab(name) {
-  document.querySelectorAll(".tab").forEach((t,i) => t.classList.toggle("active", ["panelist","channel","registered"][i]===name));
+  document.querySelectorAll(".tab").forEach((t,i) => t.classList.toggle("active", ["panelist","channel","registered","add"][i]===name));
   document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
   document.getElementById(`tab-${name}`).classList.add("active");
 }
