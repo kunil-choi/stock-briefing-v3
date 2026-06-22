@@ -286,14 +286,8 @@ def main():
     os.makedirs("docs/archive", exist_ok=True)
     existing_index = "docs/index.html"
     if os.path.exists(existing_index):
-        # briefing_data의 날짜 기준으로 아카이브 (재실행 시 날짜 오류 방지)
-        import re as _re
-        _bd = briefing_data.get("briefing_date", "")
-        _dm = _re.search(r"(\d{4})년\s*(\d{2})월\s*(\d{2})일", _bd)
-        if _dm:
-            archive_date = f"{_dm.group(1)}-{_dm.group(2)}-{_dm.group(3)}"
-        else:
-            archive_date = now_kst.strftime("%Y-%m-%d")
+        # KST 기준 날짜로 아카이브 (briefing_data 정의 전이라 now_kst 사용)
+        archive_date = now_kst.strftime("%Y-%m-%d")
         archive_path = f"docs/archive/{archive_date}.html"
         if not os.path.exists(archive_path):
             shutil.copy2(existing_index, archive_path)
