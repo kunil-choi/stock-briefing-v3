@@ -28,7 +28,7 @@ from collections import defaultdict
 
 KST = timezone(timedelta(hours=9))
 
-REPORT_DAYS = 1
+REPORT_DAYS = 2  # 오늘 + 전날 리포트 포함 (당일 오전 데이터 부족 대응)
 
 BROKERS = [
     "NH투자증권", "삼성증권", "KB증권", "미래에셋증권",
