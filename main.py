@@ -232,58 +232,54 @@ def main():
         print("  ⚡ 애널리스트 수집 스킵 (SKIP_ANALYST=true)")
         analyst_data = []
     else:
+        _TARGET_HOUR   = 8
+        _MIN_REPORTS   = 20
+        _MAX_WAIT_MIN  = 120
+        _RETRY_SEC     = 5 * 60
 
-    _TARGET_HOUR   = 8      # 08:00 KST 이후부터 리포트 수집 시작
-    _MIN_REPORTS   = 20     # 최소 20건 확보되면 진행
-    _MAX_WAIT_MIN  = 120    # 최대 120분 대기 (07:00 시작 시 09:00까지 커버 → 브리핑 완성 08:40 목표)
-    _RETRY_SEC     = 5 * 60 # 5분마다 재시도
+        analyst_data = []
+        waited_min   = 0
 
-    analyst_data = []
-    waited_min   = 0
+        while waited_min <= _MAX_WAIT_MIN:
+            _now = datetime.now(KST)
 
-    while waited_min <= _MAX_WAIT_MIN:
-        _now = datetime.now(KST)
+            if _now.hour < _TARGET_HOUR:
+                _secs_to_target = (
+                    (_TARGET_HOUR - _now.hour) * 3600
+                    - _now.minute * 60
+                    - _now.second
+                )
+                _wait = min(_secs_to_target, _RETRY_SEC)
+                print(f"  ⏳ 08:00 KST 대기 중 (현재 {_now.strftime('%H:%M')}, {int(_wait//60)}분 후 재확인)...")
+                _time.sleep(_wait)
+                waited_min += _wait // 60
+                continue
 
-        # 08:00 KST 이전이면 남은 시간만큼 대기
-        if _now.hour < _TARGET_HOUR:
-            _secs_to_target = (
-                (_TARGET_HOUR - _now.hour) * 3600
-                - _now.minute * 60
-                - _now.second
-            )
-            _wait = min(_secs_to_target, _RETRY_SEC)
-            print(f"  ⏳ 08:00 KST 대기 중 (현재 {_now.strftime('%H:%M')}, {int(_wait//60)}분 후 재확인)...")
-            _time.sleep(_wait)
-            waited_min += _wait // 60
-            continue
+            _candidate  = safe_collect(collect_analyst, api_key=ANTHROPIC_API_KEY, label="애널리스트")
+            _today_str  = datetime.now(KST).strftime("%y.%m.%d")
+            _today_data = [d for d in _candidate if d.get("date", "") == _today_str]
 
-        # 08:00 이후 → 수집 시도
-        _candidate = safe_collect(collect_analyst, api_key=ANTHROPIC_API_KEY, label="애널리스트")
-        _today_str = datetime.now(KST).strftime("%y.%m.%d")  # 네이버 날짜 형식
-        _today_data = [d for d in _candidate if d.get("date", "") == _today_str]
+            print(f"  → 오늘({_today_str}) 리포트: {len(_today_data)}건 / 전체 수집: {len(_candidate)}건")
 
-        print(f"  → 오늘({_today_str}) 리포트: {len(_today_data)}건 / 전체 수집: {len(_candidate)}건")
+            if len(_today_data) >= _MIN_REPORTS:
+                analyst_data = _candidate
+                print(f"  ✅ 기준({_MIN_REPORTS}건) 충족 → 진행")
+                break
 
-        if len(_today_data) >= _MIN_REPORTS:
-            analyst_data = _candidate
-            print(f"  ✅ 기준({_MIN_REPORTS}건) 충족 → 진행")
-            break
+            _now2 = datetime.now(KST)
+            if _now2.hour > 8 or (_now2.hour == 8 and _now2.minute >= 30):
+                print(f"  ⚠️  08:30 KST 초과 → 건수 무관 강제 진행 ({len(_today_data)}건)")
+                analyst_data = _candidate
+                break
 
-        # 08:30 KST 넘으면 건수 무관 강제 진행 (휴장일/공휴일 대체 대응)
-        _now2 = datetime.now(KST)
-        if _now2.hour > 8 or (_now2.hour == 8 and _now2.minute >= 30):
-            print(f"  ⚠️  08:30 KST 초과 → 건수 무관 강제 진행 ({len(_today_data)}건)")
-            analyst_data = _candidate
-            break
+            if waited_min >= _MAX_WAIT_MIN:
+                print(f"  ⚠️  최대 대기({_MAX_WAIT_MIN}분) 초과 → 수집된 데이터로 강제 진행")
+                analyst_data = _candidate
+                break
 
-        if waited_min >= _MAX_WAIT_MIN:
-            print(f"  ⚠️  최대 대기({_MAX_WAIT_MIN}분) 초과 → 수집된 데이터로 강제 진행")
-            analyst_data = _candidate
-            break
-
-        print(f"  🔄 {_MIN_REPORTS}건 미달 → {_RETRY_SEC//60}분 후 재시도 (대기 누계: {waited_min}분)")
-        _time.sleep(_RETRY_SEC)
-        waited_min += _RETRY_SEC // 60
+            print(f"  🔄 {_MIN_REPORTS}건 미달 → {_RETRY_SEC//60}분 후 재시도 (대기 누계: {waited_min}분)")
+            _time.sleep(_RETRY_SEC)
+            waited_min += _RETRY_SEC // 60
 
     all_data.extend(analyst_data)
     print(f"  → 최종 애널리스트 데이터: {len(analyst_data)}건")
