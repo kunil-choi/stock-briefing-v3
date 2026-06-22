@@ -51,16 +51,16 @@ GEMINI_MODEL = "gemini-2.5-flash"
 
 
 # ── 분석 단계별 설정 ──────────────────────────────────────────────────────────
-# 1단계: 경량 스캔 — transcript 있는 전체 영상 대상, YES/NO 판단만
-_MIN_TRANSCRIPT_CHARS = 200   # transcript 최소 길이 (이하는 스캔 제외)
+# 1단계: 경량 스캔 — transcript 있는 영상 대상 + 패널리스트 제목 포함 영상 우선
+_MIN_TRANSCRIPT_CHARS = 50    # transcript 최소 길이 (짧아도 활용)
 _SCAN_SLEEP_SEC       = 0.5   # 1단계 스캔 간격 (빠르게)
 
-# 2단계: 심층 분석 — 1단계 통과 영상만, 영상 직접분석으로 fact/quote 추출
+# 2단계: 심층 분석 — 선별된 영상만, 영상 직접분석으로 fact/quote 추출
 _MAX_DEEP_ANALYSIS    = 5     # 심층 분석 최대 건수
 _DEEP_SLEEP_SEC       = 2.0   # 2단계 분석 간격 (여유있게)
 _DEEP_TIMEOUT_SEC     = 45    # 영상 1개당 최대 대기 시간
 
-# 패널리스트 실명 목록 (1단계 스캔 우선순위 판단용)
+# 패널리스트 실명 목록 (우선순위 판단용)
 from config import POPULAR_PANELISTS as _PANELISTS
 
 # ── 프롬프트 템플릿 ───────────────────────────────────────────────────────────
@@ -228,11 +228,21 @@ def analyze_youtube_items(
 
     client = genai.Client(api_key=api_key)
 
-    # transcript 있는 영상만 스캔 대상으로
-    scannable = [
+    # 스캔 대상 선별
+    # - 증권사 채널 제외
+    # - transcript 있는 영상 OR 패널리스트 이름이 제목에 포함된 영상
+    def _has_panelist_in_title(item):
+        title = item.get("title", "")
+        return any(name in title for name in _PANELISTS)
+
+    non_securities = [
         item for item in youtube_items
+        if item.get("source_type") != "증권사"
+    ]
+    scannable = [
+        item for item in non_securities
         if len(item.get("summary", "") or "") >= _MIN_TRANSCRIPT_CHARS
-        and item.get("source_type") != "증권사"  # 증권사 채널 제외
+        or _has_panelist_in_title(item)  # transcript 없어도 패널리스트 제목이면 포함
     ]
     non_scannable = [
         item for item in youtube_items
@@ -240,28 +250,40 @@ def analyze_youtube_items(
     ]
 
     print(f"[GeminiYT] 1단계 스캔 대상: {len(scannable)}개 "
-          f"(증권사·transcript없음 {len(non_scannable)}개 제외)")
+          f"(transcript있음 또는 패널리스트제목 포함, 증권사·무관 {len(non_scannable)}개 제외)")
 
     # ── 1단계: 경량 스캔 ─────────────────────────────────────────────────────
-    scan_results = []
     for item in scannable:
         transcript = item.get("summary", "") or ""
         title      = item.get("title", "")
         video_url  = item.get("link", "")
 
-        scan = _scan_transcript(client, transcript, video_url)
-        item["_scan_result"] = scan
-
-        # 패널리스트 실명이 제목에 있으면 우선순위 부여
-        has_panelist_in_title = any(name in title for name in _PANELISTS)
+        has_panelist_in_title = _has_panelist_in_title(item)
         item["_panelist_in_title"] = has_panelist_in_title
-        item["_detected_names"]    = scan.get("detected_names", [])
-        item["_worth_deep"]        = scan.get("worth_deep_analysis", False)
 
-        status = "✅ 통과" if item["_worth_deep"] else "⏭ 스킵"
-        panelist_tag = f" [패널:{','.join(item['_detected_names'])}]" if item["_detected_names"] else ""
-        print(f"  {status} [{title[:35]}]{panelist_tag}")
-        time.sleep(_SCAN_SLEEP_SEC)
+        # 패널리스트가 제목에 있으면 스캔 없이 바로 통과
+        if has_panelist_in_title:
+            panelist_names = [n for n in _PANELISTS if n in title]
+            item["_scan_result"]    = {"worth_deep_analysis": True, "detected_names": panelist_names, "detected_stocks": []}
+            item["_detected_names"] = panelist_names
+            item["_worth_deep"]     = True
+            print(f"  ✅ 제목패널 [{title[:35]}] [{','.join(panelist_names)}]")
+            continue
+
+        # transcript 있으면 스캔
+        if len(transcript) >= _MIN_TRANSCRIPT_CHARS:
+            scan = _scan_transcript(client, transcript, video_url)
+            item["_scan_result"]    = scan
+            item["_detected_names"] = scan.get("detected_names", [])
+            item["_worth_deep"]     = scan.get("worth_deep_analysis", False)
+            status = "✅ 통과" if item["_worth_deep"] else "⏭ 스킵"
+            panelist_tag = f" [{','.join(item['_detected_names'])}]" if item["_detected_names"] else ""
+            print(f"  {status} [{title[:35]}]{panelist_tag}")
+            time.sleep(_SCAN_SLEEP_SEC)
+        else:
+            item["_scan_result"]    = {"worth_deep_analysis": False}
+            item["_detected_names"] = []
+            item["_worth_deep"]     = False
 
     # ── 2단계 대상 선별 (최대 5개, 우선순위 적용) ────────────────────────────
     passed   = [i for i in scannable if i.get("_worth_deep")]
