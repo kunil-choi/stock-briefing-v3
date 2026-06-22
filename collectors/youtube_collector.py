@@ -247,6 +247,7 @@ def _normalize_channel_list(raw) -> list:
 def collect_section1_youtube(youtube, channels: dict) -> list:
     all_items  = []
     categories = [
+        ("broadcast",  BROADCAST_HOURS,  "경제방송", False),  # 경제방송 채널 추가
         ("youtuber",   YOUTUBER_HOURS,   "유튜브",   False),
         ("securities", SECURITIES_HOURS, "증권사",   True),
     ]
