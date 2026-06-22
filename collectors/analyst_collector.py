@@ -282,7 +282,7 @@ def _summarize_report_with_claude(
 
 # ── 수집 메인 (FIX-COST-1: Claude 호출 없이 메타데이터만 수집) ───────────────
 
-def collect_naver_research() -> list:
+def collect_naver_research(days: int = REPORT_DAYS) -> list:
     """
     네이버 금융 리서치 company_list.naver 수집.
     FIX-COST-1: 이 단계에서는 Claude 호출 없이 메타데이터만 수집.
@@ -314,7 +314,7 @@ def collect_naver_research() -> list:
                 date_str = _find_date_col(cols)
                 if not date_str:
                     continue
-                if not is_within_days(date_str, REPORT_DAYS):
+                if not is_within_days(date_str, days):
                     continue
                 page_has_recent = True
 
@@ -533,13 +533,9 @@ def collect_analyst(api_key: str = "") -> list:
         f"단독언급 {len(today_classified['single_broker'])}건"
     )
 
-    # ── 어제 리포트 수집 (REPORT_DAYS=2로 임시 변경) ─────────────
+    # ── 어제 리포트 수집 (days=2 명시 전달) ──────────────────────
     print(f"  [어제 {yesterday_str}] 동시언급·신규커버리지 선별 중...")
-    global REPORT_DAYS
-    _orig_days  = REPORT_DAYS
-    REPORT_DAYS = 2
-    yest_reports = collect_naver_research()
-    REPORT_DAYS  = _orig_days  # 원복
+    yest_reports = collect_naver_research(days=2)
 
     yest_classified = _dedupe_and_classify(yest_reports)
 
