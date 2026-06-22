@@ -7,6 +7,8 @@
 - FIX-MAIN-1  : analyze_and_generate_html() 호출 시 gh_token 인자 누락 수정
                 함수 시그니처: (all_data, channels_data, gh_repo, gh_token,
                                market_overview) 와 완전히 일치하도록 수정
+- FIX-MAIN-2  : 애널리스트 수집 retry 루프 추가
+                08:00 KST 이후 오늘 리포트 5건 이상 확보까지 5분 간격 재시도 (최대 90분)
 """
 import os
 import json
@@ -136,15 +138,57 @@ def main():
         if not GEMINI_API_KEY:
             print("\n[GEMINI] API 키 없음 → 유튜브 영상 분석 스킵")
 
-    # ── 5. 애널리스트 리포트 ───────────────────────────────────────────────
+    # ── 5. 애널리스트 리포트 (retry 루프: 08:00 KST 이후 5건 이상 확보까지 대기)
+    import time as _time
     print("\n[5/5] 애널리스트 리포트 수집 (본문 크롤링 + Claude 요약 포함)...")
-    analyst_data = safe_collect(
-        collect_analyst,
-        api_key=ANTHROPIC_API_KEY,
-        label="애널리스트",
-    )
+
+    _TARGET_HOUR   = 8      # 08:00 KST 이후부터 리포트 수집 시작
+    _MIN_REPORTS   = 5      # 최소 5건 확보되면 진행
+    _MAX_WAIT_MIN  = 90     # 최대 90분 대기 (07:00 시작 시 08:30까지 커버)
+    _RETRY_SEC     = 5 * 60 # 5분마다 재시도
+
+    analyst_data = []
+    waited_min   = 0
+
+    while waited_min <= _MAX_WAIT_MIN:
+        _now = datetime.now(KST)
+
+        # 08:00 KST 이전이면 남은 시간만큼 대기
+        if _now.hour < _TARGET_HOUR:
+            _secs_to_target = (
+                (_TARGET_HOUR - _now.hour) * 3600
+                - _now.minute * 60
+                - _now.second
+            )
+            _wait = min(_secs_to_target, _RETRY_SEC)
+            print(f"  ⏳ 08:00 KST 대기 중 (현재 {_now.strftime('%H:%M')}, {int(_wait//60)}분 후 재확인)...")
+            _time.sleep(_wait)
+            waited_min += _wait // 60
+            continue
+
+        # 08:00 이후 → 수집 시도
+        _candidate = safe_collect(collect_analyst, api_key=ANTHROPIC_API_KEY, label="애널리스트")
+        _today_str = datetime.now(KST).strftime("%y.%m.%d")  # 네이버 날짜 형식
+        _today_data = [d for d in _candidate if d.get("date", "") == _today_str]
+
+        print(f"  → 오늘({_today_str}) 리포트: {len(_today_data)}건 / 전체 수집: {len(_candidate)}건")
+
+        if len(_today_data) >= _MIN_REPORTS:
+            analyst_data = _candidate
+            print(f"  ✅ 기준({_MIN_REPORTS}건) 충족 → 진행")
+            break
+
+        if waited_min >= _MAX_WAIT_MIN:
+            print(f"  ⚠️  최대 대기({_MAX_WAIT_MIN}분) 초과 → 수집된 데이터로 강제 진행")
+            analyst_data = _candidate
+            break
+
+        print(f"  🔄 {_MIN_REPORTS}건 미달 → {_RETRY_SEC//60}분 후 재시도 (대기 누계: {waited_min}분)")
+        _time.sleep(_RETRY_SEC)
+        waited_min += _RETRY_SEC // 60
+
     all_data.extend(analyst_data)
-    print(f"  → {len(analyst_data)}건")
+    print(f"  → 최종 애널리스트 데이터: {len(analyst_data)}건")
 
     # ── 수집 요약 ──────────────────────────────────────────────────────────
     print("\n" + "=" * 50)
