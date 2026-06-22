@@ -50,27 +50,58 @@ except ImportError:
 GEMINI_MODEL = "gemini-2.5-flash"
 
 
-# ── 분석 대상 선별 기준 ───────────────────────────────────────────────────────
-_MAX_VIDEOS_PER_RUN   = 20
-_MIN_TRANSCRIPT_CHARS = 200
-_ANALYSIS_SLEEP_SEC   = 1.5   # rate limit 방지 (1.0 → 1.5로 여유 확보)
+# ── 분석 단계별 설정 ──────────────────────────────────────────────────────────
+# 1단계: 경량 스캔 — transcript 있는 전체 영상 대상, YES/NO 판단만
+_MIN_TRANSCRIPT_CHARS = 200   # transcript 최소 길이 (이하는 스캔 제외)
+_SCAN_SLEEP_SEC       = 0.5   # 1단계 스캔 간격 (빠르게)
+
+# 2단계: 심층 분석 — 1단계 통과 영상만, 영상 직접분석으로 fact/quote 추출
+_MAX_DEEP_ANALYSIS    = 5     # 심층 분석 최대 건수
+_DEEP_SLEEP_SEC       = 2.0   # 2단계 분석 간격 (여유있게)
+_DEEP_TIMEOUT_SEC     = 45    # 영상 1개당 최대 대기 시간
+
+# 패널리스트 실명 목록 (1단계 스캔 우선순위 판단용)
+from config import POPULAR_PANELISTS as _PANELISTS
 
 # ── 프롬프트 템플릿 ───────────────────────────────────────────────────────────
+# ── 1단계: 경량 스캔 프롬프트 (transcript 텍스트만 사용) ─────────────────────
+_PROMPT_SCAN = """
+아래는 유튜브 영상의 자막입니다.
+다음 두 가지만 판단하세요.
+
+1. 실명이 확인된 금융 전문가/애널리스트가 등장하는가?
+2. 특정 종목에 대해 구체적인 투자 의견, 목표주가, 실적 전망 등을 언급하는가?
+
+JSON으로만 응답:
+{{
+  "has_expert": true/false,
+  "has_specific_mention": true/false,
+  "detected_names": ["발견된 전문가 이름 (있을 경우)"],
+  "detected_stocks": ["언급된 종목명 (있을 경우)"],
+  "worth_deep_analysis": true/false
+}}
+
+worth_deep_analysis = true 조건: has_expert AND has_specific_mention 둘 다 true일 때
+
+[자막]
+{transcript}
+"""
+
+# ── 2단계: 심층 분석 프롬프트 (영상 직접분석) ────────────────────────────────
 _PROMPT_VIDEO = """
 이 유튜브 영상을 분석하여 주식 종목 언급을 추출하세요.
 방송 제작용 데이터로 사용되므로, 정확성이 최우선입니다.
 
 [분석 기준]
-- 출연자가 특정 종목에 대해 투자 의견/전망/리스크를 명확히 언급한 경우만 포함
+- 출연자가 특정 종목에 대해 투자 의견/전망/수치를 명확히 언급한 경우만 포함
 - 단순 종목명 언급, 지나가는 언급은 제외
-- 영상에서 확인되지 않은 내용은 절대 추가 금지
+- 영상에서 확인되지 않은 내용 절대 추가 금지
 
-[발언자 확인 방법]
-- 화면 하단 자막(이름/소속 표시)을 최우선으로 확인
-- 목소리와 화면 출연자를 매칭하여 누가 말했는지 특정
-- 발언자를 특정할 수 없으면 speaker를 빈 문자열로 둘 것
+[발언자 확인]
+- 화면 하단 자막(이름/소속)을 최우선으로 확인
+- 특정 불가하면 speaker를 빈 문자열로
 
-JSON 형식으로만 응답하세요:
+JSON 형식으로만 응답:
 {
   "video_summary": "영상 전체 주제 1~2문장",
   "main_speaker": "주요 발언자 이름과 소속/직책 (예: 염승환 LS증권 이사)",
@@ -78,10 +109,10 @@ JSON 형식으로만 응답하세요:
   "mentions": [
     {
       "stock_name": "종목명 (한국어 정식 명칭)",
-      "timestamp": "MM:SS (영상에서 확인된 경우만, 모르면 빈 문자열)",
+      "timestamp": "MM:SS (확인된 경우만, 모르면 빈 문자열)",
       "speaker": "발언자 이름과 소속/직책 (화면 자막 기준, 모르면 빈 문자열)",
-      "fact": "해당 종목에 대한 핵심 팩트 1문장 — 구체적 수치/전망 포함 (예: 목표주가 10만원 제시, 3분기 영업이익 15조 전망)",
-      "quote": "발언자의 실제 발언을 최대한 원문 그대로 1~2문장 (예: 지금 삼성전자 안 사면 평생 후회합니다)",
+      "fact": "핵심 팩트 1문장 — 구체적 수치/전망 포함 (예: 목표주가 10만원, 3분기 영업이익 15조 전망)",
+      "quote": "발언자 실제 발언 원문 1~2문장 (예: 지금 삼성전자 안 사면 평생 후회합니다)",
       "sentiment": "긍정|중립|부정 중 택1",
       "confidence": "높음|보통|낮음"
     }
@@ -89,36 +120,7 @@ JSON 형식으로만 응답하세요:
 }
 """
 
-_PROMPT_TRANSCRIPT = """
-아래는 유튜브 영상의 자막(transcript)입니다.
-주식 종목 언급을 추출하세요. 방송 제작용 데이터입니다.
 
-[분석 기준]
-- 특정 종목에 대한 투자 의견/전망/수치가 있는 언급만 포함
-- 단순 종목명 나열 제외
-- 자막에 없는 내용 절대 추가 금지
-
-JSON 형식으로만 응답하세요:
-{{
-  "video_summary": "영상 전체 주제 1~2문장",
-  "main_speaker": "주요 발언자 이름 (자막에서 확인된 경우만, 모르면 빈 문자열)",
-  "speakers": [],
-  "mentions": [
-    {{
-      "stock_name": "종목명",
-      "timestamp": "",
-      "speaker": "발언자 이름 (자막에서 확인된 경우만, 모르면 빈 문자열)",
-      "fact": "해당 종목 핵심 팩트 1문장 — 구체적 수치/전망 포함",
-      "quote": "자막 원문에서 발언자 말 그대로 1~2문장 발췌",
-      "sentiment": "긍정|중립|부정 중 택1",
-      "confidence": "높음|보통|낮음"
-    }}
-  ]
-}}
-
-[자막 원문]
-{transcript}
-"""
 
 
 # ── 내부 유틸리티 ────────────────────────────────────────────────────────────
@@ -181,20 +183,40 @@ def _analyze_via_video_url(client, video_url: str) -> Optional[dict]:
 
 # ── 메인 분석 함수 ───────────────────────────────────────────────────────────
 
+def _scan_transcript(client, transcript: str, video_url: str) -> dict:
+    """
+    1단계: transcript 텍스트만으로 경량 스캔.
+    전문가 실명 + 종목 구체 언급 여부만 판단 (YES/NO).
+    """
+    if not transcript or len(transcript) < _MIN_TRANSCRIPT_CHARS:
+        return {"worth_deep_analysis": False}
+    prompt = _PROMPT_SCAN.format(transcript=transcript[:3000])
+    try:
+        response = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+        )
+        result = _parse_gemini_response(response.text)
+        return result or {"worth_deep_analysis": False}
+    except Exception as e:
+        print(f"    [GeminiYT 스캔] 실패 ({video_url[:50]}): {e}")
+        return {"worth_deep_analysis": False}
+
+
 def analyze_youtube_items(
     youtube_items: list,
     api_key: str,
-    max_videos: int = _MAX_VIDEOS_PER_RUN,
 ) -> list:
     """
-    youtube_collector.py가 수집한 항목 리스트를 받아
-    Gemini로 각 영상을 분석하고, mentions 정보를 enriched_items로 반환.
+    2단계 파이프라인으로 Gemini 분석 수행.
 
-    반환 형식 — 기존 item에 아래 필드 추가:
-      - gemini_summary    : 영상 전체 요약
-      - gemini_speaker    : 주요 발언자
-      - gemini_mentions   : [{stock_name, timestamp, speaker, statement, sentiment, confidence}]
-      - gemini_analyzed   : True (분석 완료) / False (스킵 또는 실패)
+    1단계 — 경량 스캔: transcript 있는 전체 영상 대상, 전문가+종목 언급 여부만 판단
+    2단계 — 심층 분석: 1단계 통과 영상만, 영상 직접분석으로 fact/quote 추출 (최대 5개)
+
+    우선순위:
+      1순위: 제목에 패널리스트 실명 포함 영상 (최대 3개)
+      2순위: 1단계 스캔 통과한 유튜브/경제방송 영상 (최대 2개)
+      증권사 채널: 심층 분석 제외
     """
     if not _GEMINI_AVAILABLE:
         print("[GeminiYT] google-genai SDK 없음 → 전체 스킵")
@@ -206,74 +228,118 @@ def analyze_youtube_items(
 
     client = genai.Client(api_key=api_key)
 
-    # 분석 대상 선별 — transcript가 있는 항목 우선, 최대 max_videos개
-    candidates = []
-    for item in youtube_items:
-        transcript     = item.get("summary", "") or ""
-        has_transcript = len(transcript) >= _MIN_TRANSCRIPT_CHARS
-        candidates.append((item, transcript, has_transcript))
+    # transcript 있는 영상만 스캔 대상으로
+    scannable = [
+        item for item in youtube_items
+        if len(item.get("summary", "") or "") >= _MIN_TRANSCRIPT_CHARS
+        and item.get("source_type") != "증권사"  # 증권사 채널 제외
+    ]
+    non_scannable = [
+        item for item in youtube_items
+        if item not in scannable
+    ]
 
-    # transcript 있는 항목 우선 정렬
-    candidates.sort(key=lambda x: x[2], reverse=True)
-    to_analyze = candidates[:max_videos]
-    skip_count = len(candidates) - len(to_analyze)
+    print(f"[GeminiYT] 1단계 스캔 대상: {len(scannable)}개 "
+          f"(증권사·transcript없음 {len(non_scannable)}개 제외)")
 
-    print(f"[GeminiYT] 분석 대상: {len(to_analyze)}개 "
-          f"(전체 {len(youtube_items)}개 중, {skip_count}개 스킵, model={GEMINI_MODEL})")
+    # ── 1단계: 경량 스캔 ─────────────────────────────────────────────────────
+    scan_results = []
+    for item in scannable:
+        transcript = item.get("summary", "") or ""
+        title      = item.get("title", "")
+        video_url  = item.get("link", "")
 
-    enriched       = []
-    analyzed_count = 0
-    failed_count   = 0
+        scan = _scan_transcript(client, transcript, video_url)
+        item["_scan_result"] = scan
 
-    for item, transcript, has_transcript in to_analyze:
+        # 패널리스트 실명이 제목에 있으면 우선순위 부여
+        has_panelist_in_title = any(name in title for name in _PANELISTS)
+        item["_panelist_in_title"] = has_panelist_in_title
+        item["_detected_names"]    = scan.get("detected_names", [])
+        item["_worth_deep"]        = scan.get("worth_deep_analysis", False)
+
+        status = "✅ 통과" if item["_worth_deep"] else "⏭ 스킵"
+        panelist_tag = f" [패널:{','.join(item['_detected_names'])}]" if item["_detected_names"] else ""
+        print(f"  {status} [{title[:35]}]{panelist_tag}")
+        time.sleep(_SCAN_SLEEP_SEC)
+
+    # ── 2단계 대상 선별 (최대 5개, 우선순위 적용) ────────────────────────────
+    passed   = [i for i in scannable if i.get("_worth_deep")]
+    priority = []
+
+    # 1순위: 제목에 패널리스트 실명 포함 (최대 3개)
+    tier1 = [i for i in passed if i.get("_panelist_in_title")][:3]
+    priority.extend(tier1)
+    used_urls = {i.get("link") for i in tier1}
+
+    # 2순위: 나머지 통과 영상 중 유튜브/경제방송 (최대 2개)
+    tier2 = [
+        i for i in passed
+        if i.get("link") not in used_urls
+        and i.get("source_type") in ("유튜브", "경제방송", "경제방송TV")
+    ][:2]
+    priority.extend(tier2)
+
+    print(f"\n[GeminiYT] 2단계 심층 분석 대상: {len(priority)}개 "
+          f"(1순위 패널리스트:{len(tier1)}개, 2순위 유튜브:{len(tier2)}개)")
+
+    # ── 2단계: 심층 분석 (영상 직접분석) ─────────────────────────────────────
+    deep_done  = 0
+    deep_fail  = 0
+    deep_urls  = {i.get("link") for i in priority}
+
+    for item in priority:
         video_url = item.get("link", "")
         title     = item.get("title", "")
 
         result = None
-
-        # GEMINI-YT-6: 영상 직접분석(file_data)은 영상 전체를 토큰화하므로
-        # 자막 텍스트 대비 토큰 비용이 매우 커서, 다수 영상을 연속 처리하면
-        # generate_content_paid_tier_input_token_count(분당 토큰) quota를
-        # 빠르게 소진해 429 RESOURCE_EXHAUSTED가 양산됨.
-        # 분석 대상은 이미 "자막 있는 영상 우선"으로 선별해두므로,
-        # 자막이 있으면 자막을 먼저 쓰고, 없을 때만 비용이 큰 영상 직접분석을 쓴다.
-        if has_transcript:
-            result = _analyze_via_transcript(client, transcript, video_url)
-
-        # 자막이 없거나 자막 분석이 실패한 경우에만 영상 직접분석 시도
-        if result is None and video_url:
+        try:
             result = _analyze_via_video_url(client, video_url)
+        except Exception as e:
+            print(f"  ❌ [{title[:30]}] 심층분석 예외: {e}")
 
         if result:
-            item["gemini_summary"]   = result.get("video_summary", "")
-            item["gemini_speaker"]   = result.get("main_speaker", "")
-            item["gemini_speakers"]  = result.get("speakers", [])
-            item["gemini_mentions"]  = result.get("mentions", [])
-            item["gemini_analyzed"]  = True
-            analyzed_count += 1
-
-            mention_count = len(item["gemini_mentions"])
-            print(f"  ✅ [{title[:30]}] → 종목 언급 {mention_count}개 추출")
+            item["gemini_summary"]  = result.get("video_summary", "")
+            item["gemini_speaker"]  = result.get("main_speaker", "")
+            item["gemini_speakers"] = result.get("speakers", [])
+            item["gemini_mentions"] = result.get("mentions", [])
+            item["gemini_analyzed"] = True
+            deep_done += 1
+            print(f"  ✅ [{title[:30]}] → 종목 언급 {len(item['gemini_mentions'])}개")
         else:
+            item["gemini_analyzed"] = False
+            deep_fail += 1
+            print(f"  ❌ [{title[:30]}] → 심층분석 실패")
+
+        time.sleep(_DEEP_SLEEP_SEC)
+
+    # 2단계 미대상 항목은 스캔 결과(detected_stocks)로 간이 처리
+    for item in scannable:
+        if item.get("link") not in deep_urls:
+            scan = item.get("_scan_result", {})
             item["gemini_summary"]  = ""
-            item["gemini_speaker"]  = ""
-            item["gemini_mentions"] = []
+            item["gemini_speaker"]  = ", ".join(item.get("_detected_names", []))
+            item["gemini_speakers"] = item.get("_detected_names", [])
+            item["gemini_mentions"] = [
+                {
+                    "stock_name": s, "timestamp": "", "speaker": "",
+                    "fact": "", "quote": "", "sentiment": "중립", "confidence": "낮음"
+                }
+                for s in scan.get("detected_stocks", [])
+            ]
             item["gemini_analyzed"] = False
-            failed_count += 1
-            print(f"  ❌ [{title[:30]}] → 분석 실패")
 
-        enriched.append(item)
-        time.sleep(_ANALYSIS_SLEEP_SEC)
+    # 스캔 불가 항목 기본값
+    for item in non_scannable:
+        item["gemini_summary"]  = ""
+        item["gemini_speaker"]  = ""
+        item["gemini_speakers"] = []
+        item["gemini_mentions"] = []
+        item["gemini_analyzed"] = False
 
-    # 분석 대상 외 항목은 gemini 필드 없이 그대로 추가
-    analyzed_urls = {item.get("link") for item, _, _ in to_analyze}
-    for item in youtube_items:
-        if item.get("link") not in analyzed_urls:
-            item["gemini_analyzed"] = False
-            enriched.append(item)
-
-    print(f"[GeminiYT] 완료 — 성공:{analyzed_count} / 실패:{failed_count} / "
-          f"스킵:{skip_count}")
+    enriched = scannable + non_scannable
+    print(f"\n[GeminiYT] 완료 — 심층분석 성공:{deep_done} / 실패:{deep_fail} / "
+          f"스캔통과(간이):{len(passed)-len(priority)}개 / 스캔스킵:{len(non_scannable)}개")
     return enriched
 
 
