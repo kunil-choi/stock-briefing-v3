@@ -1,1004 +1,434 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stock Briefing Admin</title>
-  <style>
-    :root {
-      --bg: #0f0f13;
-      --surface: #1a1a22;
-      --surface2: #252530;
-      --accent: #6c63ff;
-      --accent2: #ff6584;
-      --text: #e8e8f0;
-      --text-muted: #8888aa;
-      --border: #2e2e3e;
-      --up: #26c281;
-      --down: #e74c3c;
-      --radius: 12px;
-      --shadow: 0 4px 20px rgba(0,0,0,0.4);
-    }
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--bg); color: var(--text);
-           font-family: 'Noto Sans KR', sans-serif; min-height: 100vh; }
-
-    /* ── 로그인 오버레이 ── */
-    #loginOverlay {
-      position: fixed; inset: 0;
-      background: rgba(15,15,19,0.97);
-      display: flex; align-items: center; justify-content: center;
-      z-index: 9999;
-    }
-    .login-box {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 40px; width: 380px;
-      box-shadow: var(--shadow);
-    }
-    .login-box h2 {
-      text-align: center; margin-bottom: 8px;
-      color: var(--accent); font-size: 1.3rem;
-    }
-    .login-subtitle {
-      text-align: center;
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      margin-bottom: 24px;
-    }
-    .form-section {
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 14px;
-      margin-bottom: 14px;
-    }
-    .form-section-title {
-      font-size: 0.78rem;
-      font-weight: 700;
-      color: var(--accent);
-      margin-bottom: 10px;
-      text-transform: uppercase;
-      letter-spacing: .05em;
-    }
-    .form-group { margin-bottom: 12px; }
-    .form-group:last-child { margin-bottom: 0; }
-    .form-group label {
-      display: block; margin-bottom: 5px;
-      font-size: 0.82rem; color: var(--text-muted);
-    }
-    .form-group input {
-      width: 100%; padding: 10px 14px;
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 8px; color: var(--text); font-size: 0.9rem;
-      transition: border-color .2s;
-    }
-    .form-group input:focus { outline: none; border-color: var(--accent); }
-    .btn-primary {
-      width: 100%; padding: 12px;
-      background: var(--accent); color: white;
-      border: none; border-radius: 8px;
-      cursor: pointer; font-size: 0.95rem; font-weight: 600;
-      transition: opacity 0.2s; margin-top: 4px;
-    }
-    .btn-primary:hover { opacity: 0.85; }
-    .login-error {
-      color: var(--down);
-      font-size: 0.82rem;
-      text-align: center;
-      margin-top: 10px;
-      min-height: 18px;
-    }
-
-    /* ── 헤더 ── */
-    .admin-header {
-      background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      padding: 14px 20px;
-      display: flex; align-items: center; justify-content: space-between;
-    }
-    .admin-header h1 { font-size: 1.2rem; color: var(--accent); }
-    .header-actions { display: flex; gap: 10px; }
-    .btn {
-      padding: 8px 16px; border-radius: 8px;
-      cursor: pointer; font-size: 0.85rem; font-weight: 600;
-      border: 1px solid var(--border);
-      background: var(--surface2); color: var(--text);
-      transition: all 0.2s;
-    }
-    .btn:hover { border-color: var(--accent); }
-    .btn-save { background: var(--accent); color: white; border-color: var(--accent); }
-    .btn-save:hover { opacity: 0.85; }
-    .btn-danger { border-color: var(--down); color: var(--down); }
-    .btn-danger:hover { background: rgba(231,76,60,0.1); }
-
-    /* ── 탭 ── */
-    .main-tabs {
-      display: flex; gap: 4px;
-      padding: 12px 20px; background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      overflow-x: auto;
-    }
-    .main-tab {
-      padding: 8px 20px; border-radius: 8px;
-      cursor: pointer; font-size: 0.9rem;
-      border: 1px solid transparent;
-      color: var(--text-muted); white-space: nowrap;
-      background: none; transition: all 0.2s;
-    }
-    .main-tab.active { background: var(--accent); color: white; border-color: var(--accent); }
-    .main-tab:hover:not(.active) { border-color: var(--border); color: var(--text); }
-
-    /* ── 콘텐츠 ── */
-    .tab-content { display: none; padding: 20px; max-width: 1200px; margin: 0 auto; }
-    .tab-content.active { display: block; }
-
-    /* ── 통계 ── */
-    .stats-bar { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
-    .stat-item {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: 8px; padding: 10px 16px; font-size: 0.85rem;
-    }
-    .stat-num { font-size: 1.2rem; font-weight: 700; color: var(--accent); }
-
-    /* ── 채널 그리드 ── */
-    .channel-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 14px;
-    }
-    .channel-card {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 16px; transition: border-color 0.2s;
-    }
-    .channel-card:hover { border-color: var(--accent); }
-    .channel-card.confirmed   { border-left: 3px solid var(--up); }
-    .channel-card.unconfirmed { border-left: 3px solid var(--text-muted); }
-    .channel-card.candidate   { border-left: 3px solid orange; }
-    .ch-name  { font-weight: 700; font-size: 0.95rem; margin-bottom: 6px; }
-    .ch-id    { font-size: 0.75rem; color: var(--accent); font-family: monospace;
-                word-break: break-all; margin-bottom: 4px; }
-    .ch-subs  { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px; }
-    .ch-note  { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 10px; font-style: italic; }
-    .ch-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-    .ch-btn {
-      padding: 4px 10px; border-radius: 6px; font-size: 0.78rem;
-      cursor: pointer; border: 1px solid var(--border);
-      background: var(--surface2); color: var(--text); transition: all 0.2s;
-    }
-    .ch-btn:hover { border-color: var(--accent); }
-    .ch-btn.danger  { border-color: var(--down); color: var(--down); }
-    .ch-btn.danger:hover  { background: rgba(231,76,60,0.1); }
-    .ch-btn.success { border-color: var(--up); color: var(--up); }
-    .ch-btn.success:hover { background: rgba(38,194,129,0.1); }
-
-    /* ── 일괄 작업 ── */
-    .bulk-actions { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
-
-    /* ── 채널 추가 폼 ── */
-    .add-channel-form {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 24px;
-    }
-    .add-channel-form h3 { margin-bottom: 16px; color: var(--accent); }
-    .form-grid {
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 14px; margin-bottom: 16px;
-    }
-    .form-group-inner label {
-      display: block; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 4px;
-    }
-    .form-group-inner input, .form-group-inner select {
-      width: 100%; padding: 8px 12px;
-      background: var(--surface2); border: 1px solid var(--border);
-      border-radius: 8px; color: var(--text); font-size: 0.88rem;
-    }
-    .form-group-inner input:focus, .form-group-inner select:focus {
-      outline: none; border-color: var(--accent);
-    }
-
-    /* ── 지난 브리핑 ── */
-    .archive-section-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 16px;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-    .archive-section-header h3 { color: var(--accent); font-size: 1rem; }
-    .archive-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 12px;
-    }
-    .archive-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px 16px;
-      transition: border-color 0.2s;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-    }
-    .archive-card:hover { border-color: var(--accent); }
-    .archive-date {
-      font-size: 0.9rem;
-      font-weight: 600;
-      color: var(--text);
-    }
-    .archive-date span {
-      display: block;
-      font-size: 0.75rem;
-      font-weight: 400;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-    .archive-actions { display: flex; gap: 6px; }
-    .archive-empty {
-      color: var(--text-muted);
-      font-size: 0.9rem;
-      padding: 30px 0;
-      text-align: center;
-    }
-    .archive-loading {
-      color: var(--text-muted);
-      font-size: 0.88rem;
-      padding: 20px 0;
-      text-align: center;
-    }
-
-    /* ── 모달 ── */
-    .modal-overlay {
-      position: fixed; inset: 0; background: rgba(0,0,0,0.7);
-      display: flex; align-items: center; justify-content: center; z-index: 1000;
-    }
-    .modal-overlay.hidden { display: none; }
-    .modal {
-      background: var(--surface); border: 1px solid var(--border);
-      border-radius: var(--radius); padding: 28px;
-      width: 480px; max-width: 95vw; max-height: 90vh;
-      overflow-y: auto; box-shadow: var(--shadow);
-    }
-    .modal h3 { margin-bottom: 18px; color: var(--accent); }
-    .modal-actions { display: flex; gap: 10px; margin-top: 20px; justify-content: flex-end; }
-
-    /* ── 토스트 ── */
-    #toastContainer {
-      position: fixed; bottom: 24px; right: 24px;
-      display: flex; flex-direction: column; gap: 8px; z-index: 9998;
-    }
-    .toast {
-      padding: 12px 20px; border-radius: 8px;
-      font-size: 0.88rem; font-weight: 500;
-      animation: slideIn 0.3s ease; max-width: 320px;
-    }
-    .toast.success { background: var(--up); color: white; }
-    .toast.error   { background: var(--down); color: white; }
-    .toast.info    { background: var(--accent); color: white; }
-    @keyframes slideIn {
-      from { transform: translateX(100%); opacity: 0; }
-      to   { transform: translateX(0); opacity: 1; }
-    }
-
-    /* ── 진행바 ── */
-    .progress-bar {
-      height: 4px; background: var(--surface2);
-      border-radius: 2px; margin: 8px 0; overflow: hidden;
-    }
-    .progress-fill { height: 100%; background: var(--accent); transition: width 0.3s ease; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>머니올라 브리핑 관리자</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0d1117; --surface: #161b22; --surface2: #21262d;
+  --border: #30363d; --text: #e6edf3; --muted: #8b949e;
+  --accent: #58a6ff; --green: #3fb950; --red: #f85149;
+  --orange: #d29922; --purple: #bc8cff;
+}
+body { background: var(--bg); color: var(--text);
+  font-family: 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  line-height: 1.6; padding-bottom: 4rem; }
+.header { background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 1rem 1.5rem; display: flex; align-items: center;
+  justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.header h1 { font-size: 1.1rem; font-weight: 700; }
+.header .subtitle { font-size: .78rem; color: var(--muted); margin-top: .1rem; }
+#login-form { max-width: 360px; margin: 6rem auto; padding: 2rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+#login-form h2 { font-size: 1.1rem; margin-bottom: 1.2rem; text-align: center; }
+#login-form input { width: 100%; padding: .6rem .9rem; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 6px; color: var(--text);
+  font-size: .9rem; margin-bottom: .8rem; }
+#login-form button { width: 100%; padding: .65rem; background: var(--accent);
+  border: none; border-radius: 6px; color: #000; font-weight: 700;
+  font-size: .95rem; cursor: pointer; }
+.container { max-width: 960px; margin: 0 auto; padding: 1.5rem 1rem; }
+.tabs { display: flex; gap: .5rem; margin-bottom: 1.5rem; border-bottom: 1px solid var(--border); }
+.tab { padding: .5rem 1.1rem; font-size: .88rem; font-weight: 600;
+  color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;
+  transition: all .15s; background: none; border-top: none;
+  border-left: none; border-right: none; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+.section-title { font-size: 1rem; font-weight: 700; margin-bottom: 1rem;
+  display: flex; align-items: center; gap: .5rem; }
+.badge { font-size: .72rem; padding: .15rem .5rem; border-radius: 20px;
+  font-weight: 700; }
+.badge-orange { background: #d2992222; color: var(--orange); border: 1px solid #d2992244; }
+.badge-green  { background: #3fb95022; color: var(--green);  border: 1px solid #3fb95044; }
+.badge-red    { background: #f8514922; color: var(--red);    border: 1px solid #f8514944; }
+.badge-blue   { background: #58a6ff22; color: var(--accent); border: 1px solid #58a6ff44; }
+.card { background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; margin-bottom: .75rem; overflow: hidden; }
+.card-header { padding: .75rem 1rem; background: var(--surface2);
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.card-body { padding: .75rem 1rem; }
+.card-name { font-size: 1rem; font-weight: 700; flex: 1; }
+.card-meta { font-size: .78rem; color: var(--muted); }
+.sample-list { list-style: none; padding: 0; margin: .4rem 0; }
+.sample-list li { font-size: .8rem; color: var(--muted); padding: .2rem 0;
+  border-bottom: 1px solid var(--border); }
+.sample-list li:last-child { border: none; }
+.btn-row { display: flex; gap: .5rem; margin-top: .75rem; }
+.btn { padding: .4rem .9rem; border-radius: 6px; font-size: .82rem;
+  font-weight: 700; cursor: pointer; border: none; transition: opacity .15s; }
+.btn:hover { opacity: .8; }
+.btn-approve { background: var(--green); color: #000; }
+.btn-reject  { background: var(--surface2); color: var(--red);
+  border: 1px solid var(--red); }
+.btn-sm { padding: .25rem .6rem; font-size: .75rem; }
+.cat-select { padding: .3rem .5rem; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 5px; color: var(--text);
+  font-size: .82rem; }
+.channel-id-input { padding: .3rem .5rem; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: 5px; color: var(--text);
+  font-size: .82rem; width: 200px; }
+.registered-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+.registered-table th { background: var(--surface2); padding: .5rem .75rem;
+  text-align: left; color: var(--muted); font-weight: 600;
+  border-bottom: 1px solid var(--border); }
+.registered-table td { padding: .5rem .75rem; border-bottom: 1px solid var(--border); }
+.registered-table tr:last-child td { border: none; }
+.expert-tag { display: inline-block; background: var(--purple); color: #000;
+  font-size: .7rem; padding: .1rem .4rem; border-radius: 3px;
+  font-weight: 700; margin: .1rem; }
+.count-badge { background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 20px; font-size: .72rem; padding: .1rem .45rem; color: var(--muted); }
+.toast { position: fixed; bottom: 1.5rem; right: 1.5rem;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: .75rem 1.2rem; font-size: .88rem; z-index: 999;
+  transform: translateY(100px); transition: transform .3s; }
+.toast.show { transform: translateY(0); }
+.toast.success { border-color: var(--green); color: var(--green); }
+.toast.error   { border-color: var(--red); color: var(--red); }
+.empty { text-align: center; padding: 2.5rem; color: var(--muted); font-size: .9rem; }
+.loading { text-align: center; padding: 2rem; color: var(--muted); }
+.spinner { display: inline-block; width: 20px; height: 20px;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin .8s linear infinite; margin-right: .5rem; }
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
 </head>
 <body>
 
-<!-- ===== 로그인 오버레이 ===== -->
-<div id="loginOverlay">
-  <div class="login-box">
+<div id="login-screen">
+  <div id="login-form">
     <h2>🔐 관리자 로그인</h2>
-    <p class="login-subtitle" id="loginSubtitle">비밀번호를 입력하세요</p>
+    <input type="password" id="pw-input" placeholder="비밀번호" onkeydown="if(event.key==='Enter')login()">
+    <button onclick="login()">로그인</button>
+    <p id="login-err" style="color:var(--red);font-size:.8rem;margin-top:.5rem;text-align:center;"></p>
+  </div>
+</div>
 
-    <div class="form-section">
-      <div class="form-section-title">🔑 인증</div>
-      <div class="form-group">
-        <label>관리자 비밀번호</label>
-        <input type="password" id="inputPw" placeholder="비밀번호 입력"
-               onkeydown="if(event.key==='Enter')login()">
+<div id="main-screen" style="display:none;">
+  <div class="header">
+    <div>
+      <div class="header h1" style="font-size:1.1rem;font-weight:700;">🛠 브리핑 관리자</div>
+      <div class="subtitle" id="header-time"></div>
+    </div>
+    <button class="btn btn-sm" style="background:var(--surface2);color:var(--muted);" onclick="logout()">로그아웃</button>
+  </div>
+
+  <div class="container">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('panelist')">👤 패널리스트 후보 <span id="panelist-cnt" class="count-badge">-</span></button>
+      <button class="tab" onclick="switchTab('channel')">📺 채널 후보 <span id="channel-cnt" class="count-badge">-</span></button>
+      <button class="tab" onclick="switchTab('registered')">✅ 등록 현황</button>
+    </div>
+
+    <!-- 패널리스트 후보 탭 -->
+    <div id="tab-panelist" class="tab-content active">
+      <div class="section-title">
+        👤 패널리스트 후보
+        <span class="badge badge-orange">승인 시 POPULAR_PANELISTS 자동 추가</span>
       </div>
+      <div id="panelist-list"><div class="loading"><span class="spinner"></span>로딩 중...</div></div>
     </div>
 
-    <div class="form-section" id="apiKeySection" style="display:none;">
-      <div class="form-section-title">🔧 GitHub Token 등록 (최초 1회)</div>
-      <div class="form-group">
-        <label>GitHub Token <span style="color:var(--down)">*필수</span></label>
-        <input type="password" id="inputGhToken" placeholder="ghp_xxxxxxxxxxxx"
-               onkeydown="if(event.key==='Enter')login()">
+    <!-- 채널 후보 탭 -->
+    <div id="tab-channel" class="tab-content">
+      <div class="section-title">
+        📺 채널 후보
+        <span class="badge badge-blue">승인 시 channels.json 자동 추가</span>
       </div>
-      <p style="font-size:0.75rem;color:var(--text-muted);margin-top:8px;">
-        ⓘ 입력한 토큰은 이 브라우저에 저장됩니다.<br>
-        다음 방문부터는 비밀번호만 입력하면 됩니다.
-      </p>
+      <div id="channel-list"><div class="loading"><span class="spinner"></span>로딩 중...</div></div>
     </div>
 
-    <button class="btn-primary" onclick="login()">로그인</button>
-    <div class="login-error" id="loginError"></div>
-  </div>
-</div>
-
-<!-- ===== 관리자 헤더 ===== -->
-<div class="admin-header">
-  <h1>📊 Stock Briefing Admin</h1>
-  <div class="header-actions">
-    <button class="btn btn-save" onclick="saveToGitHub()">💾 GitHub 저장</button>
-    <button class="btn btn-danger" onclick="logout()">로그아웃</button>
-  </div>
-</div>
-
-<!-- ===== 탭 ===== -->
-<div class="main-tabs">
-  <button class="main-tab active" onclick="switchTab('tab-youtuber', this)">유튜버</button>
-  <button class="main-tab" onclick="switchTab('tab-broadcast', this)">방송/뉴스</button>
-  <button class="main-tab" onclick="switchTab('tab-securities', this)">증권사</button>
-  <button class="main-tab" onclick="switchTab('tab-add', this)">+ 채널 추가</button>
-  <button class="main-tab" onclick="switchTab('tab-archive', this); loadArchive()">🗂 지난 브리핑</button>
-</div>
-
-<!-- ===== 탭 콘텐츠 ===== -->
-<div id="tab-youtuber" class="tab-content active">
-  <div class="stats-bar" id="statsYoutuber"></div>
-  <div class="bulk-actions">
-    <button class="btn" onclick="bulkVerify('youtuber')">일괄 검증</button>
-    <button class="btn success" onclick="bulkApprove('youtuber')">일괄 승인</button>
-  </div>
-  <div class="channel-grid" id="gridYoutuber"></div>
-</div>
-
-<div id="tab-broadcast" class="tab-content">
-  <div class="stats-bar" id="statsBroadcast"></div>
-  <div class="bulk-actions">
-    <button class="btn" onclick="bulkVerify('broadcast')">일괄 검증</button>
-    <button class="btn success" onclick="bulkApprove('broadcast')">일괄 승인</button>
-  </div>
-  <div class="channel-grid" id="gridBroadcast"></div>
-</div>
-
-<div id="tab-securities" class="tab-content">
-  <div class="stats-bar" id="statsSecurities"></div>
-  <div class="bulk-actions">
-    <button class="btn" onclick="bulkVerify('securities')">일괄 검증</button>
-    <button class="btn success" onclick="bulkApprove('securities')">일괄 승인</button>
-  </div>
-  <div class="channel-grid" id="gridSecurities"></div>
-</div>
-
-<div id="tab-add" class="tab-content">
-  <div class="add-channel-form">
-    <h3>➕ 새 채널 추가</h3>
-    <div class="form-grid">
-      <div class="form-group-inner">
-        <label>채널명 *</label>
-        <input type="text" id="addName" placeholder="예: 슈카월드">
-      </div>
-      <div class="form-group-inner">
-        <label>YouTube URL 또는 @핸들</label>
-        <input type="text" id="addUrl" placeholder="https://youtube.com/@...">
-      </div>
-      <div class="form-group-inner">
-        <label>채널 ID (UCxxx)</label>
-        <input type="text" id="addId" placeholder="API로 자동 조회 가능">
-      </div>
-      <div class="form-group-inner">
-        <label>카테고리</label>
-        <select id="addCategory">
-          <option value="youtuber">유튜버</option>
-          <option value="broadcast">방송/뉴스</option>
-          <option value="securities">증권사</option>
-        </select>
-      </div>
-      <div class="form-group-inner">
-        <label>메모</label>
-        <input type="text" id="addNote" placeholder="특이사항 메모">
-      </div>
-    </div>
-    <div style="display:flex; gap:10px;">
-      <button class="btn" onclick="fetchChannelInfo()">YouTube API로 정보 가져오기</button>
-      <button class="btn btn-save" onclick="addChannel()">채널 추가</button>
+    <!-- 등록 현황 탭 -->
+    <div id="tab-registered" class="tab-content">
+      <div class="section-title">✅ 현재 등록된 패널리스트 & 채널</div>
+      <div id="registered-content"><div class="loading"><span class="spinner"></span>로딩 중...</div></div>
     </div>
   </div>
 </div>
 
-<!-- ===== 지난 브리핑 탭 ===== -->
-<div id="tab-archive" class="tab-content">
-  <div class="archive-section-header">
-    <h3>🗂 지난 브리핑 목록</h3>
-    <button class="btn" onclick="loadArchive()">🔄 새로고침</button>
-  </div>
-  <div id="archiveGrid" class="archive-grid">
-    <p class="archive-loading">탭을 클릭하면 목록을 불러옵니다.</p>
-  </div>
-</div>
-
-<!-- ===== 편집 모달 ===== -->
-<div id="editModal" class="modal-overlay hidden">
-  <div class="modal">
-    <h3>채널 편집</h3>
-    <input type="hidden" id="editCategory">
-    <input type="hidden" id="editIndex">
-    <div class="form-group" style="margin-bottom:12px">
-      <label style="font-size:0.8rem;color:var(--text-muted)">채널명</label>
-      <input type="text" id="editName"
-             style="width:100%;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">
-    </div>
-    <div class="form-group" style="margin-bottom:12px">
-      <label style="font-size:0.8rem;color:var(--text-muted)">채널 ID</label>
-      <input type="text" id="editId"
-             style="width:100%;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">
-    </div>
-    <div class="form-group" style="margin-bottom:12px">
-      <label style="font-size:0.8rem;color:var(--text-muted)">URL</label>
-      <input type="text" id="editUrl"
-             style="width:100%;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">
-    </div>
-    <div class="form-group" style="margin-bottom:12px">
-      <label style="font-size:0.8rem;color:var(--text-muted)">구독자 수</label>
-      <input type="number" id="editSubs"
-             style="width:100%;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">
-    </div>
-    <div class="form-group" style="margin-bottom:12px">
-      <label style="font-size:0.8rem;color:var(--text-muted)">메모</label>
-      <input type="text" id="editNote"
-             style="width:100%;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">
-    </div>
-    <div class="form-group" style="margin-bottom:12px">
-      <label style="font-size:0.8rem;color:var(--text-muted)">상태</label>
-      <select id="editStatus"
-              style="width:100%;padding:8px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text)">
-        <option value="confirmed">confirmed</option>
-        <option value="unconfirmed">unconfirmed</option>
-        <option value="candidate">candidate</option>
-      </select>
-    </div>
-    <div class="modal-actions">
-      <button class="btn" onclick="closeEditModal()">취소</button>
-      <button class="btn btn-save" onclick="saveEdit()">저장</button>
-    </div>
-  </div>
-</div>
-
-<!-- ===== 토스트 컨테이너 ===== -->
-<div id="toastContainer"></div>
+<div class="toast" id="toast"></div>
 
 <script>
-// ================================================================
-//  설정 상수
-// ================================================================
-const REPO            = 'kunil-choi/stock-briefing-v3';
-const CHANNELS_FILE   = 'channels.json';
-const CANDIDATES_FILE = 'candidates.json';
-const MIN_VIEWS       = 10000;
+const REPO   = "kunil-choi/stock-briefing-v3";
+const BRANCH = "main";
+let GH_TOKEN = "";
 
-const PW_HASH     = 'd3245607e1c80030349094f0ea642bc3c9e28714640e528f22671b50bc2f15f4';
-const LS_GH_TOKEN = 'sbv3_gh_token';
-const LS_YT_KEY   = 'sbv3_yt_key';
-const LS_PW_SET   = 'sbv3_pw_verified';
-const SS_AUTHED   = 'sbv3_authed';
-
-// ================================================================
-//  전역 상태
-// ================================================================
-let ghToken      = '';
-let ytKey        = '';
-let channelsData = { broadcast: [], youtuber: [], securities: [], meta: {} };
-let archiveLoaded = false;
-
-// ================================================================
-//  SHA-256
-// ================================================================
-async function sha256(message) {
-  const msgBuffer  = new TextEncoder().encode(message);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-  const hashArray  = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-// ================================================================
-//  페이지 로드 초기화
-// ================================================================
-window.addEventListener('DOMContentLoaded', () => {
-  const hasToken = localStorage.getItem(LS_PW_SET) === 'true';
-
-  if (hasToken) {
-    document.getElementById('apiKeySection').style.display = 'none';
-    document.getElementById('loginSubtitle').textContent =
-      '비밀번호를 입력하면 자동으로 연결됩니다.';
-  } else {
-    document.getElementById('apiKeySection').style.display = 'block';
-    document.getElementById('loginSubtitle').textContent =
-      '최초 로그인입니다. 비밀번호와 GitHub Token을 입력하세요.';
-  }
-
-  if (sessionStorage.getItem(SS_AUTHED) === 'true') {
-    ghToken = localStorage.getItem(LS_GH_TOKEN) || '';
-    if (ghToken) {
-      document.getElementById('loginOverlay').style.display = 'none';
-      loadChannels();
-    }
-  }
-
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Enter' &&
-        document.getElementById('loginOverlay').style.display !== 'none') {
-      login();
-    }
-  });
-});
-
-// ================================================================
-//  로그인
-// ================================================================
-async function login() {
-  const pw      = document.getElementById('inputPw').value;
-  const errorEl = document.getElementById('loginError');
-  errorEl.textContent = '';
-
-  if (!pw) { errorEl.textContent = '비밀번호를 입력하세요.'; return; }
-
-  const inputHash = await sha256(pw);
-  if (inputHash !== PW_HASH) {
-    errorEl.textContent = '❌ 비밀번호가 틀렸습니다.';
-    document.getElementById('inputPw').value = '';
+// ── 인증 ──────────────────────────────────────────────────────────
+const PW_HASH = "stock2026!";
+function login() {
+  const pw = document.getElementById("pw-input").value;
+  if (pw !== PW_HASH) {
+    document.getElementById("login-err").textContent = "비밀번호가 틀렸습니다.";
     return;
   }
-
-  const hasToken = localStorage.getItem(LS_PW_SET) === 'true';
-
-  if (!hasToken) {
-    const newGhToken = document.getElementById('inputGhToken').value.trim();
-    if (!newGhToken) {
-      document.getElementById('loginError').textContent = '❌ GitHub Token은 필수입니다.';
-      return;
-    }
-    localStorage.setItem(LS_GH_TOKEN, newGhToken);
-    localStorage.setItem(LS_PW_SET,   'true');
-    ghToken = newGhToken;
-    showToast('✅ GitHub Token이 저장되었습니다. 다음부터는 비밀번호만 입력하세요.', 'success');
-  } else {
-    ghToken = localStorage.getItem(LS_GH_TOKEN) || '';
-  }
-
-  sessionStorage.setItem(SS_AUTHED, 'true');
-  document.getElementById('loginOverlay').style.display = 'none';
-  loadChannels();
-  showToast('✅ 로그인 성공!', 'success');
+  // GitHub Token은 환경변수로 관리 — 관리자가 직접 입력
+  GH_TOKEN = prompt("GitHub Personal Access Token 입력 (repo 권한 필요):");
+  if (!GH_TOKEN) { document.getElementById("login-err").textContent = "토큰이 필요합니다."; return; }
+  document.getElementById("login-screen").style.display = "none";
+  document.getElementById("main-screen").style.display = "block";
+  document.getElementById("header-time").textContent =
+    new Date().toLocaleString("ko-KR", {timeZone:"Asia/Seoul"}) + " KST";
+  loadAll();
 }
-
-// ================================================================
-//  로그아웃
-// ================================================================
 function logout() {
-  if (!confirm('로그아웃하시겠습니까?\n(저장된 API 키는 유지됩니다)')) return;
-  sessionStorage.removeItem(SS_AUTHED);
+  GH_TOKEN = "";
   location.reload();
 }
 
-function resetApiKeys() {
-  if (!confirm('저장된 GitHub Token을 삭제하고 다시 등록하시겠습니까?')) return;
-  localStorage.removeItem(LS_GH_TOKEN);
-  localStorage.removeItem(LS_PW_SET);
-  sessionStorage.removeItem(SS_AUTHED);
-  location.reload();
-}
-
-// ================================================================
-//  GitHub API 헬퍼
-// ================================================================
+// ── GitHub API ────────────────────────────────────────────────────
 async function ghGet(path) {
-  const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`, {
-    headers: {
-      Authorization: `token ${ghToken}`,
-      Accept: 'application/vnd.github.v3+json'
-    }
+  const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}?ref=${BRANCH}`, {
+    headers: { Authorization: `token ${GH_TOKEN}`, Accept: "application/vnd.github.v3+json" }
   });
-  if (!res.ok) throw new Error(`GitHub GET 실패: ${res.status} ${path}`);
-  return res.json();
+  if (!r.ok) throw new Error(`GET ${path} → ${r.status}`);
+  return r.json();
 }
-
-async function ghPut(path, content, sha, message) {
-  const body = { message, content: btoa(unescape(encodeURIComponent(content))) };
-  if (sha) body.sha = sha;
-  const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`, {
-    method: 'PUT',
-    headers: {
-      Authorization: `token ${ghToken}`,
-      Accept: 'application/vnd.github.v3+json',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(body)
+async function ghUpdate(path, content, sha, message) {
+  const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}`, {
+    method: "PUT",
+    headers: { Authorization: `token ${GH_TOKEN}`, Accept: "application/vnd.github.v3+json",
+               "Content-Type": "application/json" },
+    body: JSON.stringify({ message, content: btoa(unescape(encodeURIComponent(content))), sha, branch: BRANCH })
   });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(`GitHub PUT 실패: ${res.status} - ${err.message}`);
-  }
-  return res.json();
+  if (!r.ok) { const e = await r.json(); throw new Error(e.message); }
+  return r.json();
 }
-
-// ================================================================
-//  채널 데이터 로드
-// ================================================================
-async function loadChannels() {
+async function readJson(path) {
   try {
-    const file = await ghGet(CHANNELS_FILE);
-    const raw  = decodeURIComponent(escape(atob(file.content)));
-    channelsData = JSON.parse(raw);
-    ['broadcast', 'youtuber', 'securities'].forEach(k => {
-      if (!channelsData[k]) channelsData[k] = [];
-    });
-    renderAll();
-    showToast('채널 데이터 로드 완료', 'info');
-  } catch (e) {
-    showToast(`채널 로드 실패: ${e.message}`, 'error');
-    console.error(e);
-  }
+    const d = await ghGet(path);
+    return { data: JSON.parse(decodeURIComponent(escape(atob(d.content)))), sha: d.sha };
+  } catch(e) { return { data: [], sha: null }; }
 }
 
-// ================================================================
-//  지난 브리핑 로드
-// ================================================================
-async function loadArchive() {
-  const grid = document.getElementById('archiveGrid');
-  grid.innerHTML = '<p class="archive-loading">불러오는 중...</p>';
-  archiveLoaded = false;
-
-  try {
-    const files = await ghGet('docs/archive');
-
-    const htmlFiles = files
-      .filter(f => f.name.endsWith('.html'))
-      .sort((a, b) => b.name.localeCompare(a.name));
-
-    if (!htmlFiles.length) {
-      grid.innerHTML = '<p class="archive-empty">저장된 브리핑이 없습니다.</p>';
-      return;
-    }
-
-    const [owner, repo] = REPO.split('/');
-    grid.innerHTML = htmlFiles.map(f => {
-      const dateMatch = f.name.match(/(\d{4})(\d{2})(\d{2})/);
-      const dateLabel = dateMatch
-        ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`
-        : f.name.replace('.html', '');
-      const dayNames  = ['일', '월', '화', '수', '목', '금', '토'];
-      let dayLabel    = '';
-      if (dateMatch) {
-        const d   = new Date(`${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`);
-        dayLabel  = isNaN(d) ? '' : dayNames[d.getDay()] + '요일';
-      }
-      const pageUrl = `https://${owner}.github.io/${repo}/archive/${f.name}`;
-
-      return `
-        <div class="archive-card">
-          <div class="archive-date">
-            ${dateLabel}
-            <span>${dayLabel}</span>
-          </div>
-          <div class="archive-actions">
-            <a href="${pageUrl}" target="_blank" rel="noopener" class="btn" style="font-size:0.78rem;padding:5px 10px;">
-              열기
-            </a>
-            <button class="ch-btn danger" onclick="deleteArchive('${f.path}', '${f.sha}', '${f.name}', this.closest('.archive-card'))">
-              삭제
-            </button>
-          </div>
-        </div>`;
-    }).join('');
-
-    archiveLoaded = true;
-    showToast(`브리핑 ${htmlFiles.length}개 로드 완료`, 'info');
-  } catch (e) {
-    grid.innerHTML = `<p class="archive-empty">로드 실패: ${e.message}</p>`;
-    showToast(`아카이브 로드 실패: ${e.message}`, 'error');
-  }
+// ── 토스트 ────────────────────────────────────────────────────────
+function showToast(msg, type="success") {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.className = `toast ${type} show`;
+  setTimeout(() => t.className = "toast", 2500);
 }
 
-// ================================================================
-//  아카이브 파일 삭제
-// ================================================================
-async function deleteArchive(filePath, fileSha, fileName, cardEl) {
-  if (!confirm(`"${fileName}" 브리핑을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) return;
-  try {
-    showToast('삭제 중...', 'info');
-    const res = await fetch(`https://api.github.com/repos/${REPO}/contents/${filePath}`, {
-      method: 'DELETE',
-      headers: {
-        Authorization: `token ${ghToken}`,
-        Accept: 'application/vnd.github.v3+json',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        message: `admin: 아카이브 삭제 ${fileName}`,
-        sha: fileSha
-      })
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.message);
-    }
-    cardEl.remove();
-    showToast(`✅ "${fileName}" 삭제 완료`, 'success');
-  } catch (e) {
-    showToast(`삭제 실패: ${e.message}`, 'error');
-  }
+// ── 탭 전환 ──────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll(".tab").forEach((t,i) => t.classList.toggle("active", ["panelist","channel","registered"][i]===name));
+  document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+  document.getElementById(`tab-${name}`).classList.add("active");
 }
 
-// ================================================================
-//  렌더링
-// ================================================================
-function renderAll() {
-  renderCategory('youtuber',   'gridYoutuber',   'statsYoutuber');
-  renderCategory('broadcast',  'gridBroadcast',  'statsBroadcast');
-  renderCategory('securities', 'gridSecurities', 'statsSecurities');
+// ── 데이터 로드 ──────────────────────────────────────────────────
+async function loadAll() {
+  await Promise.all([loadPanelists(), loadChannels(), loadRegistered()]);
 }
 
-function renderCategory(category, gridId, statsId) {
-  const channels    = channelsData[category] || [];
-  const confirmed   = channels.filter(c => c.status === 'confirmed').length;
-  const unconfirmed = channels.length - confirmed;
-
-  document.getElementById(statsId).innerHTML = `
-    <div class="stat-item">전체 <div class="stat-num">${channels.length}</div></div>
-    <div class="stat-item">확인됨 <div class="stat-num" style="color:var(--up)">${confirmed}</div></div>
-    <div class="stat-item">미확인 <div class="stat-num" style="color:var(--text-muted)">${unconfirmed}</div></div>
-  `;
-
-  const grid = document.getElementById(gridId);
-  if (!channels.length) {
-    grid.innerHTML = '<p style="color:var(--text-muted);padding:20px">등록된 채널이 없습니다.</p>';
-    return;
-  }
-
-  grid.innerHTML = channels.map((ch, idx) => `
-    <div class="channel-card ${ch.status || 'unconfirmed'}">
-      <div class="ch-name">${ch.name || '이름 없음'}</div>
-      <div class="ch-id">${ch.id || '채널 ID 없음'}</div>
-      <div class="ch-subs">${ch.subscribers ? ch.subscribers.toLocaleString() + '명' : '구독자 미확인'}</div>
-      ${ch.note ? `<div class="ch-note">${ch.note}</div>` : ''}
-      <div class="ch-actions">
-        <button class="ch-btn" onclick="openEditModal('${category}', ${idx})">편집</button>
-        <button class="ch-btn success" onclick="verifyChannel('${category}', ${idx})">검증</button>
-        <button class="ch-btn danger" onclick="removeChannel('${category}', ${idx})">삭제</button>
+// ── 패널리스트 후보 ───────────────────────────────────────────────
+async function loadPanelists() {
+  const el = document.getElementById("panelist-list");
+  const { data, sha } = await readJson("data/pending_names.json");
+  const pending = data.filter(d => d.status === "pending")
+                      .sort((a,b) => b.count - a.count);
+  document.getElementById("panelist-cnt").textContent = pending.length;
+  if (!pending.length) { el.innerHTML = `<div class="empty">⭕ 승인 대기 중인 패널리스트 후보가 없습니다.</div>`; return; }
+  el.innerHTML = pending.map(p => `
+    <div class="card" id="pn-${p.name}">
+      <div class="card-header">
+        <span class="card-name">👤 ${p.name}</span>
+        <span class="badge badge-orange">발견 ${p.count}회</span>
+        <span class="card-meta">${p.first_seen} 첫 발견 · 최근 ${p.last_seen}</span>
       </div>
-    </div>
-  `).join('');
+      <div class="card-body">
+        <div style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem;">등장 영상:</div>
+        <ul class="sample-list">
+          ${(p.sample_videos||[]).map(v=>`<li>▸ ${v}</li>`).join("")}
+        </ul>
+        <div class="btn-row">
+          <button class="btn btn-approve btn-sm" onclick="approvePanelist('${p.name}')">✅ 승인</button>
+          <button class="btn btn-reject btn-sm"  onclick="rejectPanelist('${p.name}')">❌ 거절</button>
+        </div>
+      </div>
+    </div>`).join("");
 }
 
-// ================================================================
-//  탭 전환
-// ================================================================
-function switchTab(tabId, btn) {
-  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.main-tab').forEach(el => el.classList.remove('active'));
-  document.getElementById(tabId).classList.add('active');
-  if (btn) btn.classList.add('active');
-}
-
-// ================================================================
-//  편집 모달
-// ================================================================
-function openEditModal(category, idx) {
-  const ch = channelsData[category][idx];
-  document.getElementById('editCategory').value = category;
-  document.getElementById('editIndex').value    = idx;
-  document.getElementById('editName').value     = ch.name        || '';
-  document.getElementById('editId').value       = ch.id          || '';
-  document.getElementById('editUrl').value      = ch.url         || '';
-  document.getElementById('editSubs').value     = ch.subscribers || 0;
-  document.getElementById('editNote').value     = ch.note        || '';
-  document.getElementById('editStatus').value   = ch.status      || 'unconfirmed';
-  document.getElementById('editModal').classList.remove('hidden');
-}
-
-function closeEditModal() {
-  document.getElementById('editModal').classList.add('hidden');
-}
-
-function saveEdit() {
-  const category = document.getElementById('editCategory').value;
-  const idx      = parseInt(document.getElementById('editIndex').value);
-  channelsData[category][idx] = {
-    ...channelsData[category][idx],
-    name:        document.getElementById('editName').value.trim(),
-    id:          document.getElementById('editId').value.trim(),
-    url:         document.getElementById('editUrl').value.trim(),
-    subscribers: parseInt(document.getElementById('editSubs').value) || 0,
-    note:        document.getElementById('editNote').value.trim(),
-    status:      document.getElementById('editStatus').value,
-  };
-  closeEditModal();
-  renderAll();
-  showToast('수정 완료 (GitHub 저장 버튼으로 반영하세요)', 'info');
-}
-
-// ================================================================
-//  채널 삭제
-// ================================================================
-function removeChannel(category, idx) {
-  const ch = channelsData[category][idx];
-  if (!confirm(`"${ch.name}"을 삭제하시겠습니까?`)) return;
-  channelsData[category].splice(idx, 1);
-  renderAll();
-  showToast('삭제 완료 (GitHub 저장 버튼으로 반영하세요)', 'info');
-}
-
-// ================================================================
-//  YouTube API로 채널 정보 조회
-// ================================================================
-async function fetchChannelInfo() {
-  if (!ytKey) {
-    showToast('YouTube API Key가 없습니다. 로그아웃 후 재등록하세요.', 'error');
-    return;
-  }
-  const urlOrHandle = document.getElementById('addUrl').value.trim();
-  if (!urlOrHandle) { showToast('URL 또는 @핸들을 입력하세요.', 'error'); return; }
-
-  let handle = urlOrHandle;
-  if (urlOrHandle.includes('youtube.com/@')) {
-    handle = urlOrHandle.split('@').pop().split('/')[0];
-  } else if (urlOrHandle.startsWith('@')) {
-    handle = urlOrHandle.slice(1);
-  }
-
+async function approvePanelist(name) {
   try {
-    showToast('YouTube API 조회 중...', 'info');
-    const res  = await fetch(
-      `https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&forHandle=${encodeURIComponent(handle)}&key=${ytKey}`
+    // 1. config.py 업데이트
+    const cfg = await ghGet("config.py");
+    let cfgContent = decodeURIComponent(escape(atob(cfg.content)));
+    if (cfgContent.includes(`"${name}"`)) { showToast(`${name} 이미 등록됨`,"error"); return; }
+    cfgContent = cfgContent.replace(
+      `    "김학균", "김한진",
+]`,
+      `    "김학균", "김한진",
+    "${name}",
+]`
     );
-    const data  = await res.json();
-    const items = data.items || [];
-    if (!items.length) { showToast('채널을 찾을 수 없습니다.', 'error'); return; }
-    const ch   = items[0];
-    document.getElementById('addId').value = ch.id;
-    if (!document.getElementById('addName').value) {
-      document.getElementById('addName').value = ch.snippet.title;
-    }
-    const subs = parseInt(ch.statistics.subscriberCount) || 0;
-    showToast(`조회 성공: ${ch.snippet.title} (구독자 ${subs.toLocaleString()}명)`, 'success');
-  } catch (e) {
-    showToast(`API 오류: ${e.message}`, 'error');
-  }
+    await ghUpdate("config.py", cfgContent, cfg.sha, `feat: 패널리스트 추가 — ${name}`);
+
+    // 2. pending_names.json 상태 업데이트
+    const { data, sha } = await readJson("data/pending_names.json");
+    const updated = data.map(d => d.name === name ? {...d, status:"approved"} : d);
+    await ghUpdate("data/pending_names.json", JSON.stringify(updated, null, 2), sha,
+      `admin: 패널리스트 승인 — ${name}`);
+
+    document.getElementById(`pn-${name}`)?.remove();
+    showToast(`✅ ${name} 패널리스트 추가 완료`);
+    const cnt = document.getElementById("panelist-cnt");
+    cnt.textContent = Math.max(0, parseInt(cnt.textContent||0) - 1);
+  } catch(e) { showToast(`오류: ${e.message}`, "error"); }
 }
 
-// ================================================================
-//  채널 추가
-// ================================================================
-function addChannel() {
-  const name     = document.getElementById('addName').value.trim();
-  const url      = document.getElementById('addUrl').value.trim();
-  const id       = document.getElementById('addId').value.trim();
-  const category = document.getElementById('addCategory').value;
-  const note     = document.getElementById('addNote').value.trim();
-
-  if (!name) { showToast('채널명을 입력하세요.', 'error'); return; }
-
-  const newCh = {
-    name, id: id || '', url: url || '',
-    subscribers: 0, note: note || '',
-    status: id ? 'confirmed' : 'unconfirmed',
-  };
-
-  if (!channelsData[category]) channelsData[category] = [];
-  channelsData[category].push(newCh);
-  renderAll();
-
-  ['addName', 'addUrl', 'addId', 'addNote'].forEach(id => {
-    document.getElementById(id).value = '';
-  });
-
-  showToast(`"${name}" 추가! (GitHub 저장 필요)`, 'success');
-  switchTab('tab-' + category, null);
-}
-
-// ================================================================
-//  채널 검증
-// ================================================================
-async function verifyChannel(category, idx) {
-  if (!ytKey) {
-    showToast('YouTube API Key가 없습니다. 로그아웃 후 재등록하세요.', 'error');
-    return;
-  }
-  const ch = channelsData[category][idx];
-  if (!ch.id) { showToast(`${ch.name}: 채널 ID가 없습니다.`, 'error'); return; }
-
-  showToast(`${ch.name} 검증 중...`, 'info');
+async function rejectPanelist(name) {
   try {
-    const playlistId = 'UU' + ch.id.slice(2);
-    const plRes      = await fetch(
-      `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${playlistId}&maxResults=10&key=${ytKey}`
-    );
-    const plData  = await plRes.json();
-    const videoIds = (plData.items || [])
-      .map(i => i.snippet?.resourceId?.videoId).filter(Boolean);
-
-    if (!videoIds.length) { showToast(`${ch.name}: 최근 영상 없음`, 'error'); return; }
-
-    const statsRes  = await fetch(
-      `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoIds.join(',')}&key=${ytKey}`
-    );
-    const statsData = await statsRes.json();
-    const views     = (statsData.items || [])
-      .map(i => parseInt(i.statistics?.viewCount || '0'));
-    const maxViews  = Math.max(...views);
-
-    if (maxViews >= MIN_VIEWS) {
-      channelsData[category][idx].status = 'confirmed';
-      showToast(`✅ ${ch.name}: 검증 통과 (최고 조회수 ${maxViews.toLocaleString()})`, 'success');
-    } else {
-      showToast(`❌ ${ch.name}: 기준 미달 (${maxViews.toLocaleString()} / 기준 ${MIN_VIEWS.toLocaleString()})`, 'error');
-    }
-    renderAll();
-  } catch (e) {
-    showToast(`검증 오류: ${e.message}`, 'error');
-  }
+    const { data, sha } = await readJson("data/pending_names.json");
+    const updated = data.map(d => d.name === name ? {...d, status:"rejected"} : d);
+    await ghUpdate("data/pending_names.json", JSON.stringify(updated, null, 2), sha,
+      `admin: 패널리스트 거절 — ${name}`);
+    document.getElementById(`pn-${name}`)?.remove();
+    showToast(`${name} 거절 처리`);
+    const cnt = document.getElementById("panelist-cnt");
+    cnt.textContent = Math.max(0, parseInt(cnt.textContent||0) - 1);
+  } catch(e) { showToast(`오류: ${e.message}`, "error"); }
 }
 
-// ================================================================
-//  일괄 검증 / 승인
-// ================================================================
-async function bulkVerify(category) {
-  if (!ytKey) { showToast('YouTube API Key가 없습니다.', 'error'); return; }
-  const channels = channelsData[category] || [];
-  const toVerify = channels.filter(c => c.id && c.status !== 'confirmed');
-  if (!toVerify.length) { showToast('검증할 채널이 없습니다.', 'info'); return; }
-  showToast(`${toVerify.length}개 채널 검증 시작...`, 'info');
-  for (let i = 0; i < channels.length; i++) {
-    if (channels[i].id && channels[i].status !== 'confirmed') {
-      await verifyChannel(category, i);
-      await new Promise(r => setTimeout(r, 300));
-    }
-  }
-  showToast('일괄 검증 완료!', 'success');
+// ── 채널 후보 ─────────────────────────────────────────────────────
+async function loadChannels() {
+  const el = document.getElementById("channel-list");
+  const { data, sha } = await readJson("data/pending_channels.json");
+  const pending = data.filter(d => d.status === "pending")
+                      .sort((a,b) => b.count - a.count);
+  document.getElementById("channel-cnt").textContent = pending.length;
+  if (!pending.length) { el.innerHTML = `<div class="empty">⭕ 승인 대기 중인 채널 후보가 없습니다.</div>`; return; }
+  el.innerHTML = pending.map(ch => `
+    <div class="card" id="ch-${encodeURIComponent(ch.channel_name)}">
+      <div class="card-header">
+        <span class="card-name">📺 ${ch.channel_name}</span>
+        <span class="badge badge-blue">발견 ${ch.count}회</span>
+        <span class="card-meta">${ch.first_seen} ~ ${ch.last_seen}</span>
+      </div>
+      <div class="card-body">
+        ${ch.expert_appeared?.length ? `
+          <div style="margin-bottom:.5rem;">
+            <span style="font-size:.78rem;color:var(--muted);">출연 전문가:</span>
+            ${ch.expert_appeared.map(e=>`<span class="expert-tag">${e}</span>`).join("")}
+          </div>` : ""}
+        <ul class="sample-list">
+          ${(ch.sample_videos||[]).map(v=>`<li>▸ ${v}</li>`).join("")}
+        </ul>
+        <div class="btn-row" style="flex-wrap:wrap;">
+          <select class="cat-select" id="cat-${encodeURIComponent(ch.channel_name)}">
+            <option value="youtuber">유튜버</option>
+            <option value="broadcast">경제방송</option>
+            <option value="securities">증권사</option>
+          </select>
+          <input class="channel-id-input" id="chid-${encodeURIComponent(ch.channel_name)}"
+            placeholder="채널 ID (UCxxxxx)" value="${ch.channel_id||''}">
+          <button class="btn btn-approve btn-sm"
+            onclick="approveChannel('${ch.channel_name}')">✅ 승인</button>
+          <button class="btn btn-reject btn-sm"
+            onclick="rejectChannel('${ch.channel_name}')">❌ 거절</button>
+        </div>
+        <div style="font-size:.74rem;color:var(--muted);margin-top:.4rem;">
+          💡 채널 ID는 YouTube 채널 페이지 URL에서 확인 (UC로 시작)
+        </div>
+      </div>
+    </div>`).join("");
 }
 
-function bulkApprove(category) {
-  if (!confirm(`${category}의 ID 있는 채널을 모두 승인하시겠습니까?`)) return;
-  let count = 0;
-  (channelsData[category] || []).forEach(ch => {
-    if (ch.id && ch.status !== 'confirmed') { ch.status = 'confirmed'; count++; }
-  });
-  renderAll();
-  showToast(`${count}개 승인 완료 (GitHub 저장 필요)`, 'success');
-}
-
-// ================================================================
-//  GitHub 저장
-// ================================================================
-async function saveToGitHub() {
-  if (!confirm('channels.json을 GitHub에 저장하시겠습니까?')) return;
+async function approveChannel(chName) {
+  const key     = encodeURIComponent(chName);
+  const cat     = document.getElementById(`cat-${key}`)?.value || "youtuber";
+  const chId    = document.getElementById(`chid-${key}`)?.value?.trim() || "";
+  if (!chId) { showToast("채널 ID를 입력하세요", "error"); return; }
   try {
-    showToast('저장 중...', 'info');
-    const file = await ghGet(CHANNELS_FILE);
-    channelsData.meta = channelsData.meta || {};
-    channelsData.meta.last_updated = new Date().toISOString().split('T')[0];
-    const content = JSON.stringify(channelsData, null, 2);
-    await ghPut(CHANNELS_FILE, content, file.sha,
-      `admin: channels.json 업데이트 ${channelsData.meta.last_updated}`);
-    showToast('✅ GitHub 저장 완료!', 'success');
-  } catch (e) {
-    showToast(`저장 실패: ${e.message}`, 'error');
-    console.error(e);
-  }
+    // channels.json 업데이트
+    const cj = await ghGet("channels.json");
+    let channels = JSON.parse(decodeURIComponent(escape(atob(cj.content))));
+    channels[cat] = channels[cat] || [];
+    if (channels[cat].some(c => c.id === chId)) {
+      showToast("이미 등록된 채널 ID", "error"); return;
+    }
+    channels[cat].push({ id: chId, name: chName });
+    await ghUpdate("channels.json", JSON.stringify(channels, null, 2), cj.sha,
+      `feat: 채널 추가 — ${chName} (${cat})`);
+
+    // pending_channels.json 상태 업데이트
+    const { data, sha } = await readJson("data/pending_channels.json");
+    const updated = data.map(d => d.channel_name === chName ? {...d, status:"approved", channel_id:chId} : d);
+    await ghUpdate("data/pending_channels.json", JSON.stringify(updated, null, 2), sha,
+      `admin: 채널 승인 — ${chName}`);
+
+    document.getElementById(`ch-${key}`)?.remove();
+    showToast(`✅ ${chName} 채널 추가 완료 (${cat})`);
+    const cnt = document.getElementById("channel-cnt");
+    cnt.textContent = Math.max(0, parseInt(cnt.textContent||0) - 1);
+  } catch(e) { showToast(`오류: ${e.message}`, "error"); }
 }
 
-// ================================================================
-//  토스트
-// ================================================================
-function showToast(msg, type = 'info') {
-  const container = document.getElementById('toastContainer');
-  const toast     = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.textContent = msg;
-  container.appendChild(toast);
-  setTimeout(() => toast.remove(), 4000);
+async function rejectChannel(chName) {
+  const key = encodeURIComponent(chName);
+  try {
+    const { data, sha } = await readJson("data/pending_channels.json");
+    const updated = data.map(d => d.channel_name === chName ? {...d, status:"rejected"} : d);
+    await ghUpdate("data/pending_channels.json", JSON.stringify(updated, null, 2), sha,
+      `admin: 채널 거절 — ${chName}`);
+    document.getElementById(`ch-${key}`)?.remove();
+    showToast(`${chName} 거절 처리`);
+    const cnt = document.getElementById("channel-cnt");
+    cnt.textContent = Math.max(0, parseInt(cnt.textContent||0) - 1);
+  } catch(e) { showToast(`오류: ${e.message}`, "error"); }
+}
+
+// ── 등록 현황 ─────────────────────────────────────────────────────
+async function loadRegistered() {
+  const el = document.getElementById("registered-content");
+  try {
+    const [cfgData, cjData] = await Promise.all([
+      ghGet("config.py"), ghGet("channels.json")
+    ]);
+    const cfgContent = decodeURIComponent(escape(atob(cfgData.content)));
+    const channels   = JSON.parse(decodeURIComponent(escape(atob(cjData.content))));
+
+    // 패널리스트 목록 파싱
+    const pMatch = cfgContent.match(/POPULAR_PANELISTS\s*=\s*\[([\s\S]*?)\]/);
+    const panelists = pMatch
+      ? [...pMatch[1].matchAll(/"([^"]+)"/g)].map(m => m[1])
+      : [];
+
+    const catLabel = { broadcast:"경제방송", youtuber:"유튜버", securities:"증권사" };
+    let html = `
+      <div style="margin-bottom:1.5rem;">
+        <div class="section-title" style="margin-bottom:.75rem;">
+          👤 패널리스트 (${panelists.length}명)
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:.4rem;">
+          ${panelists.map(p=>`<span class="expert-tag" style="background:var(--surface2);color:var(--accent);border:1px solid var(--border);">${p}</span>`).join("")}
+        </div>
+      </div>
+      <div>
+        <div class="section-title" style="margin-bottom:.75rem;">📺 등록 채널</div>`;
+
+    for (const [cat, label] of Object.entries(catLabel)) {
+      const chs = channels[cat] || [];
+      html += `
+        <div style="margin-bottom:1.2rem;">
+          <div style="font-size:.85rem;font-weight:700;color:var(--muted);margin-bottom:.5rem;">
+            ${label} (${chs.length}개)
+          </div>
+          <table class="registered-table">
+            <thead><tr><th>채널명</th><th>채널 ID</th></tr></thead>
+            <tbody>
+              ${chs.map(c=>`<tr><td>${c.name||c}</td><td style="color:var(--muted);font-size:.78rem;">${c.id||""}</td></tr>`).join("")}
+            </tbody>
+          </table>
+        </div>`;
+    }
+    html += `</div>`;
+    el.innerHTML = html;
+  } catch(e) {
+    el.innerHTML = `<div class="empty" style="color:var(--red);">로드 실패: ${e.message}</div>`;
+  }
 }
 </script>
 </body>
