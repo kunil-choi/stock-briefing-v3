@@ -118,16 +118,82 @@ def main():
         print("  → YouTube 클라이언트 없음, 스킵")
 
     # ── GEMINI-MAIN: 유튜브 영상 Gemini 직접 분석 ─────────────────────────
+    # 사전 수집된 youtube_mentions.json이 있으면 이미 분석된 영상은 건너뜀
     youtube_raw = yt_data + panelist_data
     if GEMINI_API_KEY and youtube_raw:
-        print(f"\n[GEMINI] 유튜브 영상 분석 시작 ({len(youtube_raw)}개 영상)...")
+        import json as _json
+
+        # 사전 수집에서 이미 분석된 video_url 로드
+        _precollected_urls = set()
+        _mentions_file = "data/youtube_mentions.json"
+        if os.path.exists(_mentions_file):
+            try:
+                with open(_mentions_file, "r", encoding="utf-8") as _f:
+                    _existing = _json.load(_f)
+                _precollected_urls = {m.get("video_url", "") for m in _existing}
+                print(f"\n[GEMINI] 사전 수집 데이터: {len(_existing)}건 "
+                      f"(분석된 영상 {len(_precollected_urls)}개)")
+            except Exception as _e:
+                print(f"  [GEMINI] 사전 수집 데이터 로드 실패: {_e}")
+
+        # 신규 영상만 분석
+        _new_items = [
+            item for item in youtube_raw
+            if item.get("link", "") not in _precollected_urls
+        ]
+        _skip_count = len(youtube_raw) - len(_new_items)
+        print(f"\n[GEMINI] 유튜브 영상 분석 시작 "
+              f"({len(_new_items)}개 신규 / {_skip_count}개 사전수집으로 스킵)...")
+
         try:
             from collectors.gemini_youtube_analyzer import (
                 analyze_youtube_items,
                 expand_gemini_mentions,
             )
-            enriched = analyze_youtube_items(youtube_raw, GEMINI_API_KEY)
-            expanded = expand_gemini_mentions(enriched)
+            if _new_items:
+                enriched = analyze_youtube_items(_new_items, GEMINI_API_KEY)
+                expanded = expand_gemini_mentions(enriched)
+            else:
+                expanded = []
+                print("  → 신규 영상 없음, Gemini 분석 스킵")
+
+            # 사전 수집 데이터를 all_data에 추가 (기존 mentions → gemini 필드로 변환)
+            if _precollected_urls and os.path.exists(_mentions_file):
+                try:
+                    with open(_mentions_file, "r", encoding="utf-8") as _f:
+                        _pre_mentions = _json.load(_f)
+                    # 사전 수집 데이터를 all_data 형식으로 변환
+                    for _m in _pre_mentions:
+                        _pre_item = {
+                            "source_type":      "유튜브",
+                            "source_name":      _m.get("channel", ""),
+                            "title":            f"{_m.get('speaker','')} : {_m.get('stock_name','')} 언급" if _m.get("speaker") else _m.get("video_title", ""),
+                            "summary":          _m.get("fact", "") or _m.get("quote", ""),
+                            "content":          _m.get("quote", ""),
+                            "link":             _m.get("timestamp_url") or _m.get("video_url", ""),
+                            "url":              _m.get("timestamp_url") or _m.get("video_url", ""),
+                            "published":        _m.get("published", ""),
+                            "stock_name":       _m.get("stock_name", ""),
+                            "gemini_speaker":   _m.get("speaker", ""),
+                            "gemini_fact":      _m.get("fact", ""),
+                            "gemini_quote":     _m.get("quote", ""),
+                            "gemini_sentiment": _m.get("sentiment", "중립"),
+                            "gemini_confidence":_m.get("confidence", "보통"),
+                            "_from_gemini":     True,
+                            "_from_precollect": True,
+                        }
+                        if _pre_item["stock_name"]:
+                            expanded.append(_pre_item)
+                    print(f"  → 사전 수집 데이터 {len(_pre_mentions)}건 추가")
+                except Exception as _e:
+                    print(f"  [GEMINI] 사전 수집 데이터 변환 실패: {_e}")
+
+            # 분석 안 된 원본 영상도 추가 (스킵된 것 제외)
+            analyzed_urls = {item.get("link","") for item in (_new_items if _new_items else [])}
+            for item in youtube_raw:
+                if item.get("link","") not in analyzed_urls and item.get("link","") not in _precollected_urls:
+                    expanded.append(item)
+
             all_data.extend(expanded)
             print(f"  → Gemini 분석 완료: {len(expanded)}건 (원본+발언 확장 포함)")
         except Exception as e:
