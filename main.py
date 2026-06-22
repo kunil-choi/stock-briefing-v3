@@ -178,6 +178,13 @@ def main():
             print(f"  ✅ 기준({_MIN_REPORTS}건) 충족 → 진행")
             break
 
+        # 09:00 KST 넘으면 건수 무관 강제 진행 (휴장일/공휴일 대체 대응)
+        _force_hour = 9
+        if datetime.now(KST).hour >= _force_hour:
+            print(f"  ⚠️  {_force_hour}:00 KST 초과 → 건수 무관 강제 진행 ({len(_today_data)}건)")
+            analyst_data = _candidate
+            break
+
         if waited_min >= _MAX_WAIT_MIN:
             print(f"  ⚠️  최대 대기({_MAX_WAIT_MIN}분) 초과 → 수집된 데이터로 강제 진행")
             analyst_data = _candidate
