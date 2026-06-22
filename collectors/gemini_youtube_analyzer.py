@@ -56,7 +56,9 @@ _MIN_TRANSCRIPT_CHARS = 50    # transcript 최소 길이 (짧아도 활용)
 _SCAN_SLEEP_SEC       = 0.5   # 1단계 스캔 간격 (빠르게)
 
 # 2단계: 심층 분석 — 선별된 영상만, 영상 직접분석으로 fact/quote 추출
-_MAX_DEEP_ANALYSIS    = 5     # 심층 분석 최대 건수
+_MAX_DEEP_ANALYSIS    = 7     # 심층 분석 최대 건수 (타임라인 기준: 영상당 45초 × 7개 ≈ 5분)
+_DEEP_TIER1_MAX       = 4     # 1순위 (패널리스트 제목) 최대 건수
+_DEEP_TIER2_MAX       = 3     # 2순위 (스캔 통과) 최대 건수
 _DEEP_SLEEP_SEC       = 2.0   # 2단계 분석 간격 (여유있게)
 _DEEP_TIMEOUT_SEC     = 45    # 영상 1개당 최대 대기 시간
 
@@ -235,22 +237,22 @@ def analyze_youtube_items(
         title = item.get("title", "")
         return any(name in title for name in _PANELISTS)
 
-    non_securities = [
-        item for item in youtube_items
-        if item.get("source_type") != "증권사"
-    ]
+    # 스캔 대상: 증권사 포함 전체 — description 또는 transcript가 있거나 패널리스트 제목
     scannable = [
-        item for item in non_securities
+        item for item in youtube_items
         if len(item.get("summary", "") or "") >= _MIN_TRANSCRIPT_CHARS
-        or _has_panelist_in_title(item)  # transcript 없어도 패널리스트 제목이면 포함
+        or len(item.get("description", "") or "") >= _MIN_TRANSCRIPT_CHARS
+        or _has_panelist_in_title(item)
     ]
     non_scannable = [
         item for item in youtube_items
         if item not in scannable
     ]
 
+    has_desc  = sum(1 for i in scannable if len(i.get("description","") or "") >= _MIN_TRANSCRIPT_CHARS)
+    has_trans = sum(1 for i in scannable if i.get("has_transcript"))
     print(f"[GeminiYT] 1단계 스캔 대상: {len(scannable)}개 "
-          f"(transcript있음 또는 패널리스트제목 포함, 증권사·무관 {len(non_scannable)}개 제외)")
+          f"(transcript:{has_trans}개 / description:{has_desc}개 / 무관 {len(non_scannable)}개 제외)")
 
     # ── 1단계: 경량 스캔 ─────────────────────────────────────────────────────
     for item in scannable:
@@ -270,9 +272,11 @@ def analyze_youtube_items(
             print(f"  ✅ 제목패널 [{title[:35]}] [{','.join(panelist_names)}]")
             continue
 
-        # transcript 있으면 스캔
-        if len(transcript) >= _MIN_TRANSCRIPT_CHARS:
-            scan = _scan_transcript(client, transcript, video_url)
+        # transcript 또는 description으로 스캔
+        description = item.get("description", "") or ""
+        scan_text = transcript if len(transcript) >= _MIN_TRANSCRIPT_CHARS else description
+        if len(scan_text) >= _MIN_TRANSCRIPT_CHARS:
+            scan = _scan_transcript(client, scan_text, video_url)
             item["_scan_result"]    = scan
             item["_detected_names"] = scan.get("detected_names", [])
             item["_worth_deep"]     = scan.get("worth_deep_analysis", False)
@@ -289,21 +293,20 @@ def analyze_youtube_items(
     passed   = [i for i in scannable if i.get("_worth_deep")]
     priority = []
 
-    # 1순위: 제목에 패널리스트 실명 포함 (최대 3개)
-    tier1 = [i for i in passed if i.get("_panelist_in_title")][:3]
+    # 1순위: 제목에 패널리스트 실명 포함 (최대 4개)
+    tier1 = [i for i in passed if i.get("_panelist_in_title")][:_DEEP_TIER1_MAX]
     priority.extend(tier1)
     used_urls = {i.get("link") for i in tier1}
 
-    # 2순위: 나머지 통과 영상 중 유튜브/경제방송 (최대 2개)
+    # 2순위: 나머지 스캔 통과 영상 전체 (유튜브/경제방송/증권사 모두, 최대 3개)
     tier2 = [
         i for i in passed
         if i.get("link") not in used_urls
-        and i.get("source_type") in ("유튜브", "경제방송", "경제방송TV")
-    ][:2]
+    ][:_DEEP_TIER2_MAX]
     priority.extend(tier2)
 
     print(f"\n[GeminiYT] 2단계 심층 분석 대상: {len(priority)}개 "
-          f"(1순위 패널리스트:{len(tier1)}개, 2순위 유튜브:{len(tier2)}개)")
+          f"(1순위 패널리스트:{len(tier1)}개, 2순위 스캔통과:{len(tier2)}개)")
 
     # ── 2단계: 심층 분석 (영상 직접분석) ─────────────────────────────────────
     deep_done  = 0
