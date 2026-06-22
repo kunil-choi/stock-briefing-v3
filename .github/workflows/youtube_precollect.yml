@@ -1,0 +1,69 @@
+name: YouTube 사전 수집
+
+on:
+  schedule:
+    - cron: '0 5 * * 1-5'    # KST 14:00 월~금 (전날 영상 오후 수집)
+    - cron: '0 11 * * 1-5'   # KST 20:00 월~금 (저녁 영상 수집)
+    - cron: '0 21 * * 0-4'   # KST 06:00 월~금 (새벽 영상 수집)
+  workflow_dispatch:           # 수동 실행 가능
+
+permissions:
+  contents: write
+
+jobs:
+  precollect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: 📥 저장소 체크아웃
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: 🐍 Python 환경 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
+
+      - name: 📦 패키지 설치
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🎬 유튜브 사전 수집·분석
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          GEMINI_API_KEY:  ${{ secrets.GEMINI_API_KEY }}
+        run: python collectors/youtube_precollect.py
+
+      - name: 💾 결과 커밋
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add data/youtube_mentions.json data/pending_channels.json data/pending_names.json || true
+          if git diff --quiet && git diff --staged --quiet; then
+            echo "변경사항 없음 → 스킵"
+          else
+            git commit -m "🎬 유튜브 사전 수집: $(TZ='Asia/Seoul' date +'%Y-%m-%d %H:%M KST')"
+            for i in 1 2 3; do
+              git push && break || {
+                sleep 3
+                git pull --rebase origin main || true
+              }
+            done
+          fi
+
+      - name: 📋 요약
+        if: always()
+        run: |
+          echo "KST: $(TZ='Asia/Seoul' date)"
+          if [ -f data/youtube_mentions.json ]; then
+            python3 -c "
+import json
+d = json.load(open('data/youtube_mentions.json'))
+print(f'youtube_mentions: {len(d)}건')
+"
+          fi
