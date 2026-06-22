@@ -57,23 +57,31 @@ _ANALYSIS_SLEEP_SEC   = 1.5   # rate limit 방지 (1.0 → 1.5로 여유 확보)
 
 # ── 프롬프트 템플릿 ───────────────────────────────────────────────────────────
 _PROMPT_VIDEO = """
-이 유튜브 영상을 분석하여 주식 종목 언급을 모두 추출하세요.
+이 유튜브 영상을 분석하여 주식 종목 언급을 추출하세요.
+방송 제작용 데이터로 사용되므로, 정확성이 최우선입니다.
 
-추출 기준:
-- 발언자가 특정 종목을 언급하며 투자 의견, 전망, 리스크를 말한 경우만 포함
-- 단순히 종목명만 스쳐 지나가는 언급은 제외
-- 추측으로 내용을 채우지 말 것. 영상에서 명확히 들리지 않으면 confidence를 "낮음"으로 표시
+[분석 기준]
+- 출연자가 특정 종목에 대해 투자 의견/전망/리스크를 명확히 언급한 경우만 포함
+- 단순 종목명 언급, 지나가는 언급은 제외
+- 영상에서 확인되지 않은 내용은 절대 추가 금지
+
+[발언자 확인 방법]
+- 화면 하단 자막(이름/소속 표시)을 최우선으로 확인
+- 목소리와 화면 출연자를 매칭하여 누가 말했는지 특정
+- 발언자를 특정할 수 없으면 speaker를 빈 문자열로 둘 것
 
 JSON 형식으로만 응답하세요:
 {
   "video_summary": "영상 전체 주제 1~2문장",
-  "main_speaker": "주요 발언자 이름 또는 역할 (알 수 없으면 빈 문자열)",
+  "main_speaker": "주요 발언자 이름과 소속/직책 (예: 염승환 LS증권 이사)",
+  "speakers": ["출연자1 이름/소속", "출연자2 이름/소속"],
   "mentions": [
     {
       "stock_name": "종목명 (한국어 정식 명칭)",
-      "timestamp": "MM:SS (알 수 없으면 빈 문자열)",
-      "speaker": "발언자 이름 또는 역할",
-      "statement": "실제 발언 내용 — 요약 금지, 원문에 최대한 가깝게 작성",
+      "timestamp": "MM:SS (영상에서 확인된 경우만, 모르면 빈 문자열)",
+      "speaker": "발언자 이름과 소속/직책 (화면 자막 기준, 모르면 빈 문자열)",
+      "fact": "해당 종목에 대한 핵심 팩트 1문장 — 구체적 수치/전망 포함 (예: 목표주가 10만원 제시, 3분기 영업이익 15조 전망)",
+      "quote": "발언자의 실제 발언을 최대한 원문 그대로 1~2문장 (예: 지금 삼성전자 안 사면 평생 후회합니다)",
       "sentiment": "긍정|중립|부정 중 택1",
       "confidence": "높음|보통|낮음"
     }
@@ -83,23 +91,25 @@ JSON 형식으로만 응답하세요:
 
 _PROMPT_TRANSCRIPT = """
 아래는 유튜브 영상의 자막(transcript)입니다.
-주식 종목 언급을 모두 추출하세요.
+주식 종목 언급을 추출하세요. 방송 제작용 데이터입니다.
 
-추출 기준:
-- 특정 종목에 대한 투자 의견, 전망, 리스크 언급만 포함
-- 단순 종목명 나열은 제외
-- 자막에 없는 내용은 절대 추가하지 말 것
+[분석 기준]
+- 특정 종목에 대한 투자 의견/전망/수치가 있는 언급만 포함
+- 단순 종목명 나열 제외
+- 자막에 없는 내용 절대 추가 금지
 
 JSON 형식으로만 응답하세요:
 {{
   "video_summary": "영상 전체 주제 1~2문장",
-  "main_speaker": "주요 발언자 이름 (자막에서 확인된 경우만, 아니면 빈 문자열)",
+  "main_speaker": "주요 발언자 이름 (자막에서 확인된 경우만, 모르면 빈 문자열)",
+  "speakers": [],
   "mentions": [
     {{
       "stock_name": "종목명",
       "timestamp": "",
-      "speaker": "발언자 이름 (확인된 경우만)",
-      "statement": "자막 원문에서 해당 발언 발췌",
+      "speaker": "발언자 이름 (자막에서 확인된 경우만, 모르면 빈 문자열)",
+      "fact": "해당 종목 핵심 팩트 1문장 — 구체적 수치/전망 포함",
+      "quote": "자막 원문에서 발언자 말 그대로 1~2문장 발췌",
       "sentiment": "긍정|중립|부정 중 택1",
       "confidence": "높음|보통|낮음"
     }}
@@ -235,10 +245,11 @@ def analyze_youtube_items(
             result = _analyze_via_video_url(client, video_url)
 
         if result:
-            item["gemini_summary"]  = result.get("video_summary", "")
-            item["gemini_speaker"]  = result.get("main_speaker", "")
-            item["gemini_mentions"] = result.get("mentions", [])
-            item["gemini_analyzed"] = True
+            item["gemini_summary"]   = result.get("video_summary", "")
+            item["gemini_speaker"]   = result.get("main_speaker", "")
+            item["gemini_speakers"]  = result.get("speakers", [])
+            item["gemini_mentions"]  = result.get("mentions", [])
+            item["gemini_analyzed"]  = True
             analyzed_count += 1
 
             mention_count = len(item["gemini_mentions"])
@@ -270,12 +281,20 @@ def analyze_youtube_items(
 
 def expand_gemini_mentions(enriched_items: list) -> list:
     """
-    gemini_mentions에서 추출된 발언을 별도 항목으로 확장하여
-    ai_analyzer.py의 extract_mentions()가 읽을 수 있는 형태로 변환.
+    gemini_mentions에서 추출된 발언을 별도 항목으로 확장.
 
-    기존 항목은 유지하고, 각 mention을 추가 항목으로 append.
+    변경사항:
+    - fact/quote 필드 추가 (방송 제작용)
+    - data/youtube_mentions.json 별도 저장 (외부 앱 연동용)
+    - speakers 필드(출연자 목록) 저장
     """
-    expanded = list(enriched_items)  # 기존 항목 유지
+    import os
+    import json
+    from datetime import datetime, timezone, timedelta
+    KST = timezone(timedelta(hours=9))
+
+    expanded       = list(enriched_items)
+    youtube_export = []  # 외부 앱 연동용 별도 저장 데이터
 
     for item in enriched_items:
         mentions = item.get("gemini_mentions", [])
@@ -286,22 +305,37 @@ def expand_gemini_mentions(enriched_items: list) -> list:
         source_name = item.get("source_name", "")
         source_type = item.get("source_type", "유튜브")
         published   = item.get("published", "")
-        speaker     = item.get("gemini_speaker", "")
+        main_speaker = item.get("gemini_speaker", "")
+        speakers    = item.get("gemini_speakers", [])
+        video_summary = item.get("gemini_summary", "")
 
         for mention in mentions:
             stock_name = mention.get("stock_name", "")
+            fact       = mention.get("fact", "")
+            quote      = mention.get("quote", "")
+            # 구버전 호환: statement가 있으면 fact/quote 폴백
             statement  = mention.get("statement", "")
+            if not fact and statement:
+                fact = statement
             timestamp  = mention.get("timestamp", "")
-            m_speaker  = mention.get("speaker") or speaker
+            m_speaker  = mention.get("speaker") or main_speaker
             sentiment  = mention.get("sentiment", "중립")
             confidence = mention.get("confidence", "보통")
 
-            if not stock_name or not statement:
+            if not stock_name or (not fact and not quote):
                 continue
 
             timestamp_url = f"{base_url}&t={timestamp}" if timestamp else base_url
 
-            summary = f"[{m_speaker}] {statement}" if m_speaker else statement
+            # 브리핑용 summary (기존 흐름 유지)
+            summary_parts = []
+            if m_speaker:
+                summary_parts.append(f"[{m_speaker}]")
+            if fact:
+                summary_parts.append(fact)
+            if quote:
+                summary_parts.append(f'"{quote}"')
+            summary = " ".join(summary_parts)
             if sentiment != "중립":
                 summary += f" (감성:{sentiment})"
 
@@ -310,16 +344,49 @@ def expand_gemini_mentions(enriched_items: list) -> list:
                 "source_name":       source_name,
                 "title":             f"{m_speaker or source_name}: {stock_name} 언급",
                 "summary":           summary,
-                "content":           statement,
+                "content":           fact or quote,
                 "link":              timestamp_url,
                 "url":               timestamp_url,
                 "published":         published,
                 "stock_name":        stock_name,
                 "gemini_speaker":    m_speaker,
+                "gemini_fact":       fact,
+                "gemini_quote":      quote,
                 "gemini_sentiment":  sentiment,
                 "gemini_confidence": confidence,
                 "_from_gemini":      True,
             })
+
+            # 외부 앱 연동용 데이터 축적
+            youtube_export.append({
+                "date":          datetime.now(KST).strftime("%Y-%m-%d"),
+                "channel":       source_name,
+                "video_url":     base_url,
+                "video_title":   item.get("title", ""),
+                "video_summary": video_summary,
+                "published":     published,
+                "speakers":      speakers,
+                "main_speaker":  main_speaker,
+                "stock_name":    stock_name,
+                "timestamp":     timestamp,
+                "timestamp_url": timestamp_url,
+                "speaker":       m_speaker,
+                "fact":          fact,
+                "quote":         quote,
+                "sentiment":     sentiment,
+                "confidence":    confidence,
+            })
+
+    # 외부 앱 연동용 JSON 저장
+    if youtube_export:
+        os.makedirs("data", exist_ok=True)
+        export_path = "data/youtube_mentions.json"
+        try:
+            with open(export_path, "w", encoding="utf-8") as f:
+                json.dump(youtube_export, f, ensure_ascii=False, indent=2)
+            print(f"[GeminiYT] 방송제작용 데이터 저장: {export_path} ({len(youtube_export)}건)")
+        except Exception as e:
+            print(f"[GeminiYT] 방송제작용 데이터 저장 실패: {e}")
 
     original_count = len(enriched_items)
     expanded_count = len(expanded) - original_count
