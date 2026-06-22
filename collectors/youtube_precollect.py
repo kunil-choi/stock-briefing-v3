@@ -102,6 +102,40 @@ def run():
             all_mentions = json.load(f)
         print(f"[사전수집] 최종 누적: {len(all_mentions)}건")
     
+    # 후보 수집 — 패널리스트 + 채널 후보 추출
+    try:
+        from collectors.candidate_collector import (
+            collect_pending_names,
+            collect_pending_channels,
+        )
+        from config import POPULAR_PANELISTS
+
+        # youtube_mentions.json에서 Gemini 발견 데이터 로드
+        gemini_found = []
+        if os.path.exists(MENTIONS_FILE):
+            with open(MENTIONS_FILE, "r", encoding="utf-8") as f:
+                gemini_found = json.load(f)
+
+        # 기존 등록 채널명 집합
+        channels_data = load_channels()
+        known_ch_names = set()
+        for cat in ["broadcast", "youtuber", "securities"]:
+            for ch in channels_data.get(cat, []):
+                if isinstance(ch, dict):
+                    known_ch_names.add(ch.get("name", ""))
+
+        collect_pending_names(
+            youtube_raw,
+            known_panelists=POPULAR_PANELISTS,
+            gemini_mentions=gemini_found,
+        )
+        collect_pending_channels(
+            youtube_raw,
+            known_channel_ids=known_ch_names,
+        )
+    except Exception as e:
+        print(f"[후보수집] 오류 (계속 진행): {e}")
+
     elapsed = int((datetime.now(KST) - now_kst).total_seconds())
     print(f"=== 사전 수집 완료 (소요: {elapsed}초) ===")
 
