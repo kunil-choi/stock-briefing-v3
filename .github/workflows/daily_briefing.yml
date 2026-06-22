@@ -2,7 +2,7 @@ name: Daily Stock Briefing v3
 
 on:
   schedule:
-    - cron: '30 21 * * 0-4'   # KST 월~금 06:30 (UTC 전날 21:30)
+    - cron: '0 22 * * 0-4'    # KST 월~금 07:00 (UTC 전날 22:00) — retry 루프가 08:00까지 대기
   workflow_dispatch:
     inputs:
       force_run:
@@ -27,7 +27,7 @@ permissions:
 jobs:
   generate-briefing:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 120   # retry 루프 최대 90분 + 브리핑 생성 30분
 
     steps:
       - name: 🔁 중복 실행 체크
