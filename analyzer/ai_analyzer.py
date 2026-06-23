@@ -523,8 +523,18 @@ def extract_hidden_picks(mentions: dict, filtered_names: set,
         })
 
     candidates.sort(key=lambda x: x["weighted_score"], reverse=True)
-    result = candidates[:max_picks]
-    print(f"[히든픽] 후보 {len(candidates)}개 중 {len(result)}개 선택")
+    # 동일 채널 최대 1개 제한 (채널 다양성 보장)
+    result = []
+    used_channels = set()
+    for c in candidates:
+        ch = c["channel_type"]
+        if ch in used_channels:
+            continue
+        result.append(c)
+        used_channels.add(ch)
+        if len(result) >= max_picks:
+            break
+    print(f"[히든픽] 후보 {len(candidates)}개 중 {len(result)}개 선택 (채널 다양성 적용)")
     return result
 
 
@@ -864,7 +874,8 @@ p   {{ color:#8b949e; font-size:.9rem; }}
 def _get_price_label(now: datetime) -> str:
     """
     한국 주식시장 시간대별 가격 라벨 반환.
-      - 09:00 이전          → "전일종가"
+      - 08:00 이전          → "전일종가"
+      - 08:00 ~ 08:59       → "현재가" (장전 동시호가/ETF·선물 등 08:00 거래)
       - 09:00 ~ 15:29       → "현재가"
       - 15:30 이후 (장마감)  → "종가"
     주말(토·일)은 항상 "전일종가".
@@ -872,7 +883,7 @@ def _get_price_label(now: datetime) -> str:
     if now.weekday() >= 5:
         return "전일종가"
     h, m = now.hour, now.minute
-    if h < 9:
+    if h < 8:
         return "전일종가"
     if h < 15 or (h == 15 and m < 30):
         return "현재가"
