@@ -1,4 +1,5 @@
 # collectors/youtube_collector.py
+# - FIX-SHORTS-1: 유튜브 쇼츠 필터링 추가 (is_shorts 함수, 채널/패널리스트 두 경로 모두 적용)
 """
 수정 이력:
 - BUG-1: collect_panelist_youtube()의 publishedAfter UTC 변환 오류 수정
@@ -216,6 +217,22 @@ def is_ad_content(title: str) -> bool:
     return any(kw in title for kw in AD_KEYWORDS)
 
 
+def is_shorts(title: str, video_id: str = "") -> bool:
+    """
+    유튜브 쇼츠 여부 판별.
+    FIX-SHORTS-1: 쇼츠는 본편과 동일 채널 플레이리스트에 포함되므로
+    별도 필터링이 필요함. 제목의 #Shorts/#shorts 태그로 1차 판별.
+    video_id를 통한 URL 패턴 확인은 현재 수집 구조에서 불필요
+    (playlist API는 video_id만 반환하고 /shorts/ URL이 아님).
+    """
+    title_lower = title.lower()
+    return (
+        "#shorts" in title_lower
+        or "#short" in title_lower
+        or "# shorts" in title_lower
+    )
+
+
 def has_popular_panelist(title: str, transcript: str = "") -> bool:
     combined = title + " " + transcript
     return any(name in combined for name in POPULAR_PANELISTS)
@@ -282,6 +299,9 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
             for v in videos:
                 title = v.get("title", "")
                 if is_ad_content(title):
+                    continue
+                if is_shorts(title):
+                    print(f"    [쇼츠 제외] {title[:40]}")
                     continue
 
                 if is_stock_related(title):
@@ -400,6 +420,9 @@ def collect_panelist_youtube(youtube) -> list:
 
             if not title or is_ad_content(title):
                 continue
+            if is_shorts(title, video_id):
+                print(f"    [쇼츠 제외] {title[:40]}")
+                continue
 
             transcript = get_transcript(video_id)
             summary    = transcript[:500] if transcript else title
@@ -446,4 +469,5 @@ def collect_panelist_youtube(youtube) -> list:
     print(f"  [패널리스트 검색] 총 {len(all_items)}건 (중복 제거 후, "
           f"실제 사용 quota: {len(batches) * 100}유닛)")
     return all_items
+
 
