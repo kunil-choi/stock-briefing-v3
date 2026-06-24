@@ -10,6 +10,8 @@ AI 주식 브리핑 분석 엔진
 - V2-PROMPT        : Claude 프롬프트를 V2 수준으로 개선
 - V2-SYNC          : channel_mentions → reasons 동기화 블록 추가
 - FIX-ANA-2        : generate_market_summary 데드코드 제거
+- FIX-PRICE-LABEL-2: _get_price_label 08:00~08:59 구간 "현재가" 오표시 수정 → 09:00 이전 모두 "전일종가"
+- FIX-PARA-1       : market_summary 5단락→4단락, "투자 포인트"+"리스크 요인"을 "핵심 포인트"로 통합
 - FIX-API-1        : Claude API 호출 실패 시 fallback HTML 반환
 - FIX-STRAT        : ai_strategy 구조화 JSON 객체 전환
 - FIX-MAX-1        : 관심종목 최대 10개로 확대
@@ -666,7 +668,7 @@ def build_analysis_prompt(
     prompt_json_structure = (
         '{\n'
         f'  "briefing_date": "{today_date}",\n'
-        '  "market_summary": "시장 전체 분석 (5개 단락, \\n\\n 구분, 각 단락 3~4문장. 400자 이상)",\n'
+        '  "market_summary": "시장 전체 분석 (4개 단락, \\n\\n 구분, 각 단락 3~4문장. 400자 이상. 단락순서: 1)시장개요 2)주요이슈 3)핵심포인트(긍정부정 균형있게 통합서술) 4)전망)",\n'
         '  "hot_sectors": [{"name": "섹터이름", "reason": "이유 1~2단어"}],\n'
         '  "stocks": [\n'
         '    {\n'
@@ -725,7 +727,7 @@ def build_analysis_prompt(
         "   - 그 외 → 중립\n"
         "4. channel_mentions: 실제 언급 채널/기사 내용 최대 4개. reasons는 빈 배열 [] 유지.\n"
         "5. hidden_picks: [히든픽 후보] 목록에 종목이 있으면 반드시 포함. 후보 목록이 \"해당 없음\"일 때만 [].\n"
-        "6. market_summary: 5단락, \\n\\n 구분, 각 단락 3~4문장, 400자 이상.\n"
+        "6. market_summary: 4단락(\\n\\n 구분), 각 단락 3~4문장, 400자 이상. 순서: 1)시장개요 2)주요이슈 3)핵심포인트(긍정·부정 균형 서술, 리스크와 기회 모두 포함) 4)전망.\n"
         "7. ai_strategy: 수집 데이터 기반으로만 작성. 임의 수치 생성 금지.\n"
         "8. URL은 출처 데이터에 있는 것만 사용. 없으면 빈 문자열.\n"
         "9. 순수 JSON만 출력. 설명문·마크다운 코드블록 제거.\n"
@@ -874,16 +876,19 @@ p   {{ color:#8b949e; font-size:.9rem; }}
 def _get_price_label(now: datetime) -> str:
     """
     한국 주식시장 시간대별 가격 라벨 반환.
-      - 08:00 이전          → "전일종가"
-      - 08:00 ~ 08:59       → "현재가" (장전 동시호가/ETF·선물 등 08:00 거래)
+      - 09:00 이전          → "전일종가" (장 미개장)
       - 09:00 ~ 15:29       → "현재가"
       - 15:30 이후 (장마감)  → "종가"
     주말(토·일)은 항상 "전일종가".
+
+    FIX-PRICE-LABEL-2: 08:00~08:59 구간을 "현재가"로 표시하던 버그 수정.
+      개별 주식 시세는 09:00 개장 전에 없으므로, 09:00 이전은 모두 "전일종가".
+      (기존: 08:00 이후 → "현재가" → 브리핑 08:34 생성 시 "현재가" 오표시)
     """
     if now.weekday() >= 5:
         return "전일종가"
     h, m = now.hour, now.minute
-    if h < 8:
+    if h < 9:
         return "전일종가"
     if h < 15 or (h == 15 and m < 30):
         return "현재가"
@@ -1060,3 +1065,4 @@ def analyze_and_generate_html(
     return generate_html(
         result, channels_data, gh_repo, gh_token, market_overview, all_data
     )
+
