@@ -8,6 +8,7 @@
 - FIX-MKT-3  : collect_market_overview() 함수 내 들여쓰기 버그 수정
 - FIX-MKT-4  : KOSPI/KOSDAQ도 yfinance 우선으로 변경
 - BUG-8 FIX  : 야간선물 수집 전면 재작성
+- FIX-MKT-12 : _fetch_yf period→start/end 명시 + 수집 날짜 로그 출력 (날짜 오류 추적용)
 - FIX-MKT-5  : 장 시작 전(09:00 KST 이전)에는 전일 종가 + "전일종가" 라벨 표시
 - FIX-MKT-6  : _is_premarket() 주말(토·일) 처리 추가
 - FIX-MKT-7  : 나스닥/S&P500/다우존스/달러원은 is_premarket=False 고정
@@ -97,17 +98,37 @@ def _fetch_yf(ticker: str):
     NaN 종가를 포함한 placeholder 행을 반환하는 경우가 있음.
     NaN을 그대로 통과시키면 화면에 "nan"으로 표출되므로,
     NaN인 경우 수집 실패(None, None)로 명확히 처리한다.
+
+    FIX-MKT-12: period="5d" 대신 start/end 날짜를 명시적으로 지정하여
+    yfinance가 잘못된 날짜를 반환하는 버그를 방지한다.
+    수집된 날짜를 로그로 출력해 오류 추적이 가능하도록 한다.
     """
     if not _YF_AVAILABLE:
         return None, None
     try:
+        # 오늘 KST 날짜 기준으로 최근 10 캘린더일 범위를 명시 지정
+        # (주말/공휴일 고려해 여유 있게 10일 요청)
+        now_kst   = datetime.now(KST)
+        end_date  = (now_kst + timedelta(days=1)).strftime("%Y-%m-%d")   # 내일 (exclusive)
+        start_date = (now_kst - timedelta(days=10)).strftime("%Y-%m-%d") # 10일 전
+
         tk   = yf.Ticker(ticker)
-        hist = tk.history(period="5d")
+        hist = tk.history(start=start_date, end=end_date)
         if hist.empty or len(hist) < 2:
+            print(f"  [yfinance] {ticker} 데이터 부족 (행수={len(hist)})")
             return None, None
+
+        # 날짜 인덱스를 문자열로 변환해 로그 출력 (날짜 오류 추적용)
+        try:
+            dates = [str(d)[:10] for d in hist.index]
+            print(f"  [yfinance] {ticker} 수집 날짜: {dates[-2]} → {dates[-1]}")
+        except Exception:
+            pass
+
         close_prev = float(hist["Close"].iloc[-2])
         close_now  = float(hist["Close"].iloc[-1])
         if math.isnan(close_prev) or math.isnan(close_now):
+            print(f"  [yfinance] {ticker} NaN 감지 → 수집 실패 처리")
             return None, None
         return close_now, _pct(close_now, close_prev)
     except Exception as e:
@@ -428,3 +449,4 @@ def collect_market_overview() -> dict:
     print(f"[시장수집] 완료 (전체 {len(result)}개 지표 / 실제 수집 {available}개)")
 
     return result
+
