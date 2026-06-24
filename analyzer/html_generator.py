@@ -21,7 +21,10 @@ import html as _he
 from datetime import datetime, timedelta, timezone
 
 KST         = timezone(timedelta(hours=9))
-PARA_TITLES = ["📌 시장 개요", "📊 주요 이슈", "🔍 투자 포인트", "⚠️ 리스크 요인", "💡 전망"]
+PARA_TITLES = ["📌 시장 개요", "📊 주요 이슈", "🔍 핵심 포인트", "💡 전망"]
+# FIX-PARA-1: "투자 포인트" + "리스크 요인" 두 단락을 "핵심 포인트" 하나로 통합.
+# 기존 5단락 구조에서 긍정/부정 내용이 제목과 뒤집혀 표출되던 문제 해결.
+# 프롬프트도 4단락으로 맞춰 수정 (ai_analyzer.py FIX-PARA-1 연동).
 
 _HP_SOURCE_META = {
     "애널리스트": {"color": "#51cf66", "icon": "📊", "label": "애널리스트"},
@@ -284,6 +287,7 @@ def _build_analyst_html(all_data: list) -> str:
         broker      = (", ".join(brokers_raw)
                        if isinstance(brokers_raw, list) else str(brokers_raw))
         link        = r.get("link", "")
+        date_str    = r.get("date", "")  # FIX-RPT-DATE-1: 날짜 표시 추가
 
         if not link and stock:
             enc  = stock.replace(" ", "+")
@@ -296,6 +300,10 @@ def _build_analyst_html(all_data: list) -> str:
                       f'style="background:{accent}22;color:{accent};'
                       f'border:1px solid {accent}55;">{meta["badge"]}</span>'
                       if meta["badge"] else "")
+        # FIX-RPT-DATE-1: 날짜 배지 추가
+        date_badge = (f'<span style="font-size:.72rem;color:#868e96;margin-left:auto;">'
+                      f'📅 {_he.escape(date_str)}</span>'
+                      if date_str else "")
         title_html = (
             f'<a href="{link}" target="_blank" rel="noopener" '
             f'class="analyst-title-link">{_he.escape(title)}</a>'
@@ -312,13 +320,14 @@ def _build_analyst_html(all_data: list) -> str:
 
         return (
             f'<div class="analyst-card" style="border-left-color:{accent};">'
-            f'<div class="analyst-card-meta">'
+            f'<div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;">'
             f'<span class="analyst-stock" style="color:{accent};">'
             f'{_he.escape(stock)}</span>'
             f'<span class="analyst-broker" '
             f'style="background:{accent}1a;color:{accent};">'
             f'🏦 {_he.escape(broker)}</span>'
             f'{cat_badge}'
+            f'{date_badge}'
             f'</div>'
             f'<div class="analyst-card-title">{title_html}</div>'
             f'{summary_html}'
@@ -1178,3 +1187,4 @@ document.getElementById('chartModal').addEventListener('click', function(e) {{
 
 </body>
 </html>"""
+
