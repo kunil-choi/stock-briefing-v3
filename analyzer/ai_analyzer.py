@@ -568,6 +568,8 @@ def build_analysis_prompt(
     today_date: str,
     now_kst: str,
     stock_prices: dict = None,
+    yesterday_date: str = "",
+    day_before_date: str = "",
 ) -> str:
 
     analyst_summary_map = _build_analyst_summary_map(all_data)
@@ -734,7 +736,9 @@ def build_analysis_prompt(
     )
 
     return (
-        f"오늘 날짜: {today_date} ({now_kst} KST)\n\n"
+        f"오늘 날짜: {today_date} ({now_kst} KST)\n"
+        f"어제(전일): {yesterday_date} / 그제(전전일): {day_before_date}\n"
+        f"※ market_summary 작성 시 날짜 표현('전일', '전전일' 등)은 오늘 날짜 기준으로 정확히 사용할 것.\n\n"
         f"[최근 주요 헤드라인]\n{headlines_text}\n\n"
         f"[관심종목 후보 (가중점수 순)]\n{stocks_text}\n\n"
         f"[히든픽 후보]\n{hidden_text}\n\n"
@@ -914,10 +918,12 @@ def analyze_and_generate_html(
     except ImportError:
         GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 
-    now_kst       = datetime.now(KST)
-    today_date    = now_kst.strftime("%Y년 %m월 %d일")
-    now_kst_str   = now_kst.strftime("%H:%M")
-    briefing_date = today_date
+    now_kst          = datetime.now(KST)
+    today_date       = now_kst.strftime("%Y년 %m월 %d일")
+    yesterday_date   = (now_kst - timedelta(days=1)).strftime("%Y년 %m월 %d일")
+    day_before_date  = (now_kst - timedelta(days=2)).strftime("%Y년 %m월 %d일")
+    now_kst_str      = now_kst.strftime("%H:%M")
+    briefing_date    = today_date
 
     stock_map = load_stock_names()
     mentions  = extract_mentions(all_data, stock_map, channels_data)
@@ -971,6 +977,8 @@ def analyze_and_generate_html(
     prompt = build_analysis_prompt(
         filtered, hidden_candidates, all_data, today_date, now_kst_str,
         stock_prices=stock_prices,
+        yesterday_date=yesterday_date,
+        day_before_date=day_before_date,
     )
     print(f"[Claude] 프롬프트 길이: {len(prompt)}자")
 
