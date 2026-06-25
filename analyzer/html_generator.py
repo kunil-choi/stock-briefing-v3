@@ -741,7 +741,7 @@ def generate_html(
         naver_url    = leader.get("naver_url", "")
 
         sig_class, sig_color, signal_label = _resolve_signal(signal)
-        price_html   = _render_price(leader)
+        price_html   = _render_price_html(leader)
         chart_btn_html = ""
         source_tags_html = "".join(
             f'<span class="source-tag" style="background:{_TAG_META.get(ct, {}).get("bg","#2d3a4a")};'
