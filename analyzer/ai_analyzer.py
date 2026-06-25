@@ -1054,6 +1054,8 @@ def analyze_and_generate_html(
         _restore_source_url(hp, all_data)
 
     # ── 결과 저장 ──────────────────────────────────────────────────────────
+    if market_overview:
+        result["market_data"] = market_overview
     os.makedirs("data", exist_ok=True)
     try:
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
