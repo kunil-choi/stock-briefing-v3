@@ -570,6 +570,7 @@ def build_analysis_prompt(
     stock_prices: dict = None,
     yesterday_date: str = "",
     day_before_date: str = "",
+    market_leaders_raw: list = None,
 ) -> str:
 
     analyst_summary_map = _build_analyst_summary_map(all_data)
@@ -672,6 +673,24 @@ def build_analysis_prompt(
         f'  "briefing_date": "{today_date}",\n'
         '  "market_summary": "시장 전체 분석 (4개 단락, \\n\\n 구분, 각 단락 3~4문장. 400자 이상. 단락순서: 1)시장개요 2)주요이슈 3)핵심포인트(긍정부정 균형있게 통합서술) 4)전망)",\n'
         '  "hot_sectors": [{"name": "섹터이름", "reason": "이유 1~2단어"}],\n'
+        '  "market_leaders": [\n'
+        '    {\n'
+        '      "rank": 1,\n'
+        '      "name": "종목명",\n'
+        '      "code": "종목코드",\n'
+        '      "signal": "긍정|중립|부정 중 택1",\n'
+        '      "summary": "종목 핵심 요약 2~3문장",\n'
+        '      "catalyst": "상승 촉매 2~3문장",\n'
+        '      "risk": "주요 리스크 1~2문장",\n'
+        '      "channel_mentions": [\n'
+        '        {"source_type": "뉴스|경제방송|경제방송TV|유튜브|증권사|애널리스트 중 택1",\n'
+        '         "source_name": "채널명", "content": "언급 내용 1~2문장",\n'
+        '         "url": "URL 없으면 빈 문자열"}\n'
+        '      ],\n'
+        '      "channel_counts": {}, "total_count": 0,\n'
+        '      "weighted_score": 0.0, "overlap_count": 0, "reasons": []\n'
+        '    }\n'
+        '  ],\n'
         '  "stocks": [\n'
         '    {\n'
         '      "rank": 1,\n'
@@ -718,11 +737,29 @@ def build_analysis_prompt(
         '}'
     )
 
+    # 대형 주도주 텍스트 구성
+    market_leaders_raw = market_leaders_raw or []
+    if market_leaders_raw:
+        leader_info_lines = []
+        for name, data in market_leaders_raw:
+            code = data.get("code", "")
+            score = round(data.get("weighted_score", 0.0), 1)
+            leader_info_lines.append(f"- {name} (코드:{code}, 가중점수:{score})")
+        leaders_text = "\n".join(leader_info_lines)
+        leaders_rule = (
+            f"0. market_leaders 배열에 아래 대형 주도주 {len(market_leaders_raw)}개를 반드시 포함.\n"
+            f"   (오늘 가장 높은 언급 점수를 받은 시장 주도 대형주)\n"
+            f"{leaders_text}\n"
+        )
+    else:
+        leaders_rule = "0. market_leaders는 빈 배열 []로.\n"
+
     rules = (
         "[작성 규칙]\n"
+        + leaders_rule +
         f"1. stocks 배열에 아래 종목 전체를 반드시 포함. 임의 제외 금지.\n"
         f"   필수 포함 종목({len(stock_name_list)}개): {stock_list_str}\n"
-        "2. 각 stocks 항목의 \"name\" 필드는 반드시 위 종목명을 그대로 사용.\n"
+        "2. 각 stocks 항목의\"name\" 필드는 반드시 위 종목명을 그대로 사용.\n"
         "3. signal: 긍정|중립|부정 중 택1\n"
         "   - 애널리스트 매수 의견 있으면 → 긍정\n"
         "   - 매도/부정 의견 있으면 → 부정\n"
@@ -935,6 +972,16 @@ def analyze_and_generate_html(
     filtered       = filter_mentions(mentions)
     filtered_names = {name for name, _ in filtered}
 
+    # ── 대형 주도주 분리: 가중점수 상위 2개를 market_leaders로 별도 처리 ──
+    # 나머지에서 관심종목 10개를 선발해 다양성 확보
+    if len(filtered) > 2:
+        market_leaders_raw = filtered[:2]
+        filtered           = filtered[2:]
+        filtered_names     = {name for name, _ in filtered}
+    else:
+        market_leaders_raw = []
+    print(f"[주도주] 대형 주도주: {[n for n,_ in market_leaders_raw]}")
+
     if not filtered:
         print("[분석] 관심종목 0개 — 히든픽 및 시장 요약만 생성")
 
@@ -944,8 +991,9 @@ def analyze_and_generate_html(
 
     # ── 관심종목 주가 조회 ─────────────────────────────────────────────────
     stock_prices = {}
-    print(f"[주가조회] 관심종목 {len(filtered)}개 주가 조회 시작")
-    for name, data in filtered:
+    all_stocks_for_price = market_leaders_raw + filtered
+    print(f"[주가조회] 관심종목 {len(all_stocks_for_price)}개 주가 조회 시작")
+    for name, data in all_stocks_for_price:
         code = data.get("code", "")
         if not code:
             continue
@@ -979,6 +1027,7 @@ def analyze_and_generate_html(
         stock_prices=stock_prices,
         yesterday_date=yesterday_date,
         day_before_date=day_before_date,
+        market_leaders_raw=market_leaders_raw,
     )
     print(f"[Claude] 프롬프트 길이: {len(prompt)}자")
 
@@ -1011,6 +1060,30 @@ def analyze_and_generate_html(
     ai_strat = result.get("ai_strategy")
     if isinstance(ai_strat, dict):
         result["ai_strategy"] = _format_ai_strategy(ai_strat)
+
+    # ── market_leaders 주가 병합 ─────────────────────────────────────────
+    ml_lookup = dict(market_leaders_raw)
+    for leader in result.get("market_leaders", []):
+        name = leader.get("name", "")
+        price_info = stock_prices.get(name)
+        if price_info and isinstance(price_info, dict) and price_info.get("price", 0) > 0:
+            leader["price"]       = price_info["price"]
+            leader["change_pct"]  = price_info.get("change_pct", 0.0)
+            leader["price_label"] = price_info.get("price_label", price_label_default)
+        else:
+            leader["price"]       = 0
+            leader["change_pct"]  = 0.0
+            leader["price_label"] = price_label_default
+        if name in ml_lookup:
+            data = ml_lookup[name]
+            leader["channel_counts"] = {
+                ch_type: len(items)
+                for ch_type, items in data["channels"].items()
+            }
+            leader["total_count"]    = data["total_count"]
+            leader["weighted_score"] = round(data["weighted_score"], 2)
+            leader["overlap_count"]  = len(data["non_news_channel_types"])
+        _restore_source_url(leader, all_data)
 
     # ── FIX-PRICE-4/5: result["stocks"]에 주가 병합 ──────────────────────
     for stock in result.get("stocks", []):
