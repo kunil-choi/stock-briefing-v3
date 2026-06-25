@@ -252,20 +252,24 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
 
     # 3. [2순위] sise_day 일별 데이터 최신 종가
     print(f"[naver_finance] {stock_name}: API 폴백 → sise_day 사용")
-    daily = fetch_naver_daily_prices(code, days=1)
+    daily = fetch_naver_daily_prices(code, days=2)
     if daily:
         price = daily[0].get("close", 0)
         if price > 0:
+            # 전일 종가가 있으면 변동폭 계산, 없으면 0.0
+            prev_price = daily[1].get("close", 0) if len(daily) >= 2 else 0
+            change     = price - prev_price if prev_price > 0 else 0
+            change_pct = round(change / prev_price * 100, 2) if prev_price > 0 else 0.0
             print(
                 f"[naver_finance] {stock_name}({code}): "
-                f"{price:,}원 [sise_day]"
+                f"{price:,}원 ({change_pct:+.2f}%) [sise_day]"
             )
             return {
                 "name":       stock_name,
                 "code":       code,
                 "price":      price,
-                "change":     0,
-                "change_pct": 0.0,
+                "change":     change,
+                "change_pct": change_pct,
                 "url":        naver_url,
             }
 
