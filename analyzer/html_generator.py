@@ -686,7 +686,7 @@ def generate_html(
     all_data=None,
 ) -> str:
     data            = data or {}
-    market_overview = market_overview or {}
+    market_overview = market_overview or data.get("market_data", {}) or {}
     all_data        = all_data or []
 
     stocks        = data.get("stocks",         [])
