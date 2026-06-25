@@ -689,12 +689,13 @@ def generate_html(
     market_overview = market_overview or data.get("market_data", {}) or {}
     all_data        = all_data or []
 
-    stocks        = data.get("stocks",         [])
-    hidden_picks  = data.get("hidden_picks",   [])
-    market_sum    = data.get("market_summary", "")
-    hot_sectors   = data.get("hot_sectors",    [])
-    ai_strategy   = data.get("ai_strategy",    "")
-    briefing_date = data.get("briefing_date",  "")
+    stocks         = data.get("stocks",         [])
+    hidden_picks   = data.get("hidden_picks",   [])
+    market_sum     = data.get("market_summary", "")
+    hot_sectors    = data.get("hot_sectors",    [])
+    ai_strategy    = data.get("ai_strategy",    "")
+    briefing_date  = data.get("briefing_date",  "")
+    market_leaders = data.get("market_leaders", [])
 
     now_kst = datetime.now(KST)
     if not briefing_date:
@@ -728,7 +729,47 @@ def generate_html(
             )
 
     chart_data_dict = {}
-    stocks_html     = ""
+
+    # ── 대형 주도주 HTML ─────────────────────────────────────────────────
+    leaders_html = ""
+    for rank, leader in enumerate(market_leaders, 1):
+        name         = leader.get("name", "")
+        signal       = leader.get("signal", "")
+        overlap      = leader.get("overlap_count", 0)
+        channel_cnts = leader.get("channel_counts", {})
+        naver_code   = leader.get("naver_code") or leader.get("code", "")
+        naver_url    = leader.get("naver_url", "")
+
+        sig_class, sig_color, signal_label = _resolve_signal(signal)
+        price_html   = _render_price(leader)
+        chart_btn_html = ""
+        source_tags_html = "".join(
+            f'<span class="source-tag" style="background:{_TAG_META.get(ct, {}).get("bg","#2d3a4a")};'
+            f'color:{_TAG_META.get(ct, {}).get("color","#74c0fc")};">'
+            f'{_TAG_META.get(ct, {}).get("label", ct)}</span>'
+            for ct in channel_cnts
+        )
+        detail_html = _render_stock_detail(leader)
+        leaders_html += f"""
+<div class="stock-card market-leader-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#{rank}</div>
+    <div class="stock-name-block">
+      <a href="{naver_url}" target="_blank" rel="noopener"
+         class="stock-name">{_he.escape(name)}</a>
+      <span class="signal-badge {sig_class}"
+            style="border-color:{sig_color};color:{sig_color};">{signal_label}</span>
+    </div>
+    <div class="overlap-badge" title="비뉴스 채널 중복 언급 수">🔥 {overlap}개</div>
+  </div>
+  <div class="stock-card-body">
+    <div class="source-tags">{source_tags_html}</div>
+    <div class="price-row">{price_html}{chart_btn_html}</div>
+    {detail_html}
+  </div>
+</div>"""
+
+    stocks_html = ""
 
     for rank, stock in enumerate(filtered_stocks, 1):
         name         = stock.get("name", "")
@@ -917,6 +958,12 @@ a:hover { text-decoration: underline; }
 .briefing-header h1 { font-size: 1.8rem; font-weight: 700; }
 .subtitle { color: var(--text-muted); font-size: .9rem; margin-top: .4rem; }
 .section { margin-bottom: 2.5rem; }
+.market-leader-card {
+  border-left: 3px solid #ffd43b;
+}
+.market-leader-card .stock-rank {
+  color: #ffd43b;
+}
 .section-title {
   font-size: 1.15rem; font-weight: 700; color: var(--text);
   border-left: 4px solid var(--accent);
@@ -1128,6 +1175,8 @@ a:hover { text-decoration: underline; }
   </div>
 
   <div class="section">
+    <div class="section-title">🏆 오늘의 대형 주도주</div>
+    {leaders_html}
     <div class="section-title">👀 오늘의 관심종목</div>
     {stocks_html}
   </div>
