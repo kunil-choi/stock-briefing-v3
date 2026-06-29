@@ -227,7 +227,36 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
 
     naver_url = f"https://finance.naver.com/item/main.naver?code={code}"
 
-    # 2. [1순위] Naver Stock API (JSON)
+    # FIX-PRICE-8: 09:00 이전(브리핑 생성 시각)에는 Naver API fluctuationsRatio=0
+    # → sise_day에서 전일·전전일 종가 2개를 가져와 전전일 대비 변동폭 직접 계산
+    now_kst        = datetime.now(KST)
+    is_before_open = (now_kst.hour < 9)
+
+    if is_before_open:
+        print(f"[naver_finance] {stock_name}: 장 전 → sise_day로 전전일 대비 변동폭 계산")
+        daily = fetch_naver_daily_prices(code, days=2)
+        if daily and len(daily) >= 1:
+            price      = daily[0].get("close", 0)
+            prev_price = daily[1].get("close", 0) if len(daily) >= 2 else 0
+            if price > 0:
+                change     = price - prev_price if prev_price > 0 else 0
+                change_pct = round(change / prev_price * 100, 2) if prev_price > 0 else 0.0
+                print(
+                    f"[naver_finance] {stock_name}({code}): "
+                    f"{price:,}원 ({change_pct:+.2f}%) [sise_day 전전일비]"
+                )
+                return {
+                    "name":       stock_name,
+                    "code":       code,
+                    "price":      price,
+                    "change":     change,
+                    "change_pct": change_pct,
+                    "url":        naver_url,
+                }
+        # sise_day 실패 시 API 폴백 (변동폭은 0이지만 가격은 표시)
+        print(f"[naver_finance] {stock_name}: sise_day 실패 → API 폴백 (변동폭 0)")
+
+    # 2. [1순위] Naver Stock API (JSON) — 09:00 이후 또는 sise_day 실패 시
     api_url = f"https://api.stock.naver.com/stock/{code}/basic"
     data    = _get_json(api_url)
 
@@ -250,13 +279,12 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
         except Exception as e:
             print(f"[naver_finance] API 파싱 오류 ({stock_name}): {e}")
 
-    # 3. [2순위] sise_day 일별 데이터 최신 종가
+    # 3. [2순위] sise_day 일별 데이터 최신 종가 (09:00 이후 폴백)
     print(f"[naver_finance] {stock_name}: API 폴백 → sise_day 사용")
     daily = fetch_naver_daily_prices(code, days=2)
     if daily:
         price = daily[0].get("close", 0)
         if price > 0:
-            # 전일 종가가 있으면 변동폭 계산, 없으면 0.0
             prev_price = daily[1].get("close", 0) if len(daily) >= 2 else 0
             change     = price - prev_price if prev_price > 0 else 0
             change_pct = round(change / prev_price * 100, 2) if prev_price > 0 else 0.0
