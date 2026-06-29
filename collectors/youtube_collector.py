@@ -1,10 +1,17 @@
 # collectors/youtube_collector.py
 # - FIX-SHORTS-1: 유튜브 쇼츠 필터링 추가 (is_shorts 함수, 채널/패널리스트 두 경로 모두 적용)
+# - CHANNEL-FILTER-1: 패널리스트 검색 결과에서 비등록 채널 품질 필터링 추가
+#   등록 채널(화이트리스트) → 무조건 통과
+#   비등록 채널 → channels.list API로 구독자 수 배치 조회 (1유닛/채널)
+#   구독자 미달(_PANELIST_MIN_SUBSCRIBERS 미만) 또는 블랙리스트 → 제외
 """
 수정 이력:
 - BUG-1: collect_panelist_youtube()의 publishedAfter UTC 변환 오류 수정
          KST 시각을 UTC 포맷으로 전달하던 문제 → UTC 기준으로 cutoff 계산
+- CHANNEL-FILTER-1: 패널리스트 검색 결과 채널 품질 필터 추가
+         등록 채널 화이트리스트, 구독자 수 기준(5만 이상), 블랙리스트 차단
 """
+import json
 import os
 import time
 from datetime import datetime, timedelta, timezone
@@ -69,6 +76,95 @@ _PANELIST_HOURS = 24
 # 한 번의 OR 검색에 묶을 패널리스트 수.
 # 22명 ÷ 5명 = 배치 5회 × 100유닛 = 500유닛 (기존 최악 11,000유닛 대비 22배 절감)
 _PANELIST_BATCH_SIZE = 5
+
+# CHANNEL-FILTER-1: 비등록 채널 최소 구독자 수 기준
+# 이 값 미만이면 "저품질/복제 채널"로 간주하고 패널리스트 검색 결과에서 제외
+_PANELIST_MIN_SUBSCRIBERS = 50_000  # 5만 명
+
+# channels.json 경로 (CHANNEL-FILTER-1)
+_CHANNELS_JSON_PATH = os.path.join(os.path.dirname(__file__), "..", "channels.json")
+
+
+def _load_channel_filter_sets() -> tuple:
+    """
+    CHANNEL-FILTER-1:
+    channels.json에서 등록 채널 ID 화이트리스트와 블랙리스트를 로드.
+
+    반환: (whitelist_ids: set, blacklist_ids: set, blacklist_names: set)
+    - whitelist_ids: 등록 채널 채널ID 집합 → 구독자 체크 없이 통과
+    - blacklist_ids: 차단 채널ID 집합 → 무조건 제외
+    - blacklist_names: 차단 채널명 집합 → 채널ID 미등록 시 이름으로도 차단
+    """
+    whitelist_ids  = set()
+    blacklist_ids  = set()
+    blacklist_names = set()
+
+    try:
+        path = os.path.abspath(_CHANNELS_JSON_PATH)
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+
+        # 등록 채널 화이트리스트
+        for section in ("broadcast", "youtuber", "securities"):
+            for ch in data.get(section, []):
+                cid = ch.get("id", "").strip()
+                if cid and not cid.startswith("@"):
+                    whitelist_ids.add(cid)
+
+        # 블랙리스트
+        for ch in data.get("blacklist", []):
+            cid  = ch.get("id", "").strip()
+            name = ch.get("name", "").strip()
+            if cid:
+                blacklist_ids.add(cid)
+            if name:
+                blacklist_names.add(name)
+
+        print(f"  [채널필터] 화이트리스트 {len(whitelist_ids)}개, "
+              f"블랙리스트 ID {len(blacklist_ids)}개 / 이름 {len(blacklist_names)}개")
+    except Exception as e:
+        print(f"  [채널필터] channels.json 로드 실패: {e}")
+
+    return whitelist_ids, blacklist_ids, blacklist_names
+
+
+def _batch_fetch_subscriber_counts(youtube, channel_ids: list) -> dict:
+    """
+    CHANNEL-FILTER-1:
+    YouTube channels.list API로 채널 ID 목록의 구독자 수를 배치 조회.
+    최대 50개씩 묶어 호출 (API 제한).
+    quota 비용: 1유닛/호출 (search.list의 100유닛 대비 매우 저렴)
+
+    반환: {channel_id: subscriber_count, ...}
+    조회 실패한 채널은 결과에서 누락됨.
+    """
+    result = {}
+    if not channel_ids:
+        return result
+
+    # 중복 제거 및 최대 50개씩 배치
+    unique_ids = list(set(channel_ids))
+    batch_size = 50
+
+    for i in range(0, len(unique_ids), batch_size):
+        batch = unique_ids[i:i + batch_size]
+        try:
+            resp = youtube.channels().list(
+                part="statistics",
+                id=",".join(batch),
+                maxResults=batch_size,
+            ).execute()
+            for ch in resp.get("items", []):
+                cid   = ch.get("id", "")
+                stats = ch.get("statistics", {})
+                # hiddenSubscriberCount=True인 경우 subscriberCount 키 없음 → 0
+                count = int(stats.get("subscriberCount", 0))
+                result[cid] = count
+        except Exception as e:
+            print(f"  [채널필터] 구독자 수 조회 실패 (배치 {i//batch_size+1}): {e}")
+        time.sleep(0.2)
+
+    return result
 
 
 def get_youtube_client(api_key: str = None):
@@ -359,6 +455,13 @@ def collect_panelist_youtube(youtube) -> list:
     가벼운 주식관련성 체크(is_stock_related)만 거쳐 후보로 채택 —
     실제 누가 무슨 말을 했는지는 Gemini가 영상을 직접 보고 판단하게 함.
 
+    CHANNEL-FILTER-1: 채널 품질 필터 추가.
+    패널리스트 이름이 제목에 들어있어도 복제·저품질 채널일 수 있으므로:
+    1. 블랙리스트 채널 (ID 또는 이름 기준) → 즉시 제외
+    2. 등록 채널 화이트리스트 (channels.json broadcast/youtuber/securities) → 통과
+    3. 비등록 채널 → channels.list로 구독자 수 배치 조회 (1유닛/호출)
+       → _PANELIST_MIN_SUBSCRIBERS 미만이면 제외
+
     - 수집 기간: _PANELIST_HOURS (24h, 사용자 요청 반영)
     - source_type: "유튜브"
     - 중복 제거: video_id 기준
@@ -367,6 +470,9 @@ def collect_panelist_youtube(youtube) -> list:
     if not youtube:
         print("  [패널리스트 검색] YouTube 클라이언트 없음 → 스킵")
         return []
+
+    # CHANNEL-FILTER-1: 채널 필터 세트 로드
+    whitelist_ids, blacklist_ids, blacklist_names = _load_channel_filter_sets()
 
     # BUG-1 수정: KST → UTC 기준으로 변경
     # publishedAfter 파라미터는 UTC 기준 RFC3339 포맷("Z" suffix)을 요구함
@@ -384,9 +490,12 @@ def collect_panelist_youtube(youtube) -> list:
     print(f"  [패널리스트 검색] {len(POPULAR_PANELISTS)}명 → {len(batches)}배치, "
           f"최근 {_PANELIST_HOURS}h (예상 quota: {len(batches) * 100}유닛)")
 
+    # CHANNEL-FILTER-1: 1단계 — 검색 후보를 수집하되 채널 ID를 기록해둠
+    # 구독자 수 조회는 배치로 한꺼번에 처리 (quota 최소화)
+    raw_candidates = []  # [(item_dict, channel_id, channel_name), ...]
+
     for batch_idx, batch in enumerate(batches, start=1):
         query = "|".join(batch)
-        collected = 0
 
         try:
             resp = youtube.search().list(
@@ -407,14 +516,16 @@ def collect_panelist_youtube(youtube) -> list:
             continue
 
         items = resp.get("items", [])
+        batch_count = 0
 
         for item in items:
-            snippet  = item.get("snippet", {})
-            video_id = item.get("id", {}).get("videoId", "")
+            snippet    = item.get("snippet", {})
+            video_id   = item.get("id", {}).get("videoId", "")
             if not video_id or video_id in seen_ids:
                 continue
 
             title        = snippet.get("title", "").strip()
+            channel_id   = snippet.get("channelId", "").strip()
             channel_name = snippet.get("channelTitle", "").strip()
             published_at = snippet.get("publishedAt", "")
 
@@ -424,20 +535,23 @@ def collect_panelist_youtube(youtube) -> list:
                 print(f"    [쇼츠 제외] {title[:40]}")
                 continue
 
-            transcript = get_transcript(video_id)
-            summary    = transcript[:500] if transcript else title
-
-            # 주식/경제 관련성 체크 (이름 정확 일치 강제는 하지 않음 —
-            # 실제 발언자/내용 확인은 Gemini 분석 단계에서 처리)
-            if not is_stock_related(title, transcript):
+            # CHANNEL-FILTER-1: 블랙리스트 즉시 차단 (ID 또는 이름)
+            if channel_id and channel_id in blacklist_ids:
+                print(f"    [블랙리스트 차단] {channel_name} ({channel_id}): {title[:40]}")
+                continue
+            if channel_name and channel_name in blacklist_names:
+                print(f"    [블랙리스트 차단] {channel_name}: {title[:40]}")
                 continue
 
-            # 어떤 패널리스트와 매칭됐는지 추정 (제목 기준, 추적용 메타데이터.
-            # 못 찾아도 후보에서 제외하지 않음 — Gemini가 실제 발언자를 판단)
+            # 주식 관련성 체크 (자막은 구독자 필터 통과 후에 가져옴)
+            if not is_stock_related(title):
+                continue
+
+            # 패널리스트 매칭 태그 (추적용)
             matched = [name for name in batch if name in title]
             panelist_tag = ", ".join(matched) if matched else f"배치{batch_idx}({'/'.join(batch)})"
 
-            # 발행일 파싱 (API 응답은 항상 UTC "Z" 포맷)
+            # 발행일 파싱
             try:
                 pub_dt = datetime.fromisoformat(
                     published_at.replace("Z", "+00:00")
@@ -447,27 +561,84 @@ def collect_panelist_youtube(youtube) -> list:
                 pub_str = published_at
 
             desc = snippet.get("description", "")[:1000]
-            # transcript 우선, 없으면 description, 없으면 title
-            final_summary = summary if summary else (desc[:500] if desc else title)
-            seen_ids.add(video_id)
-            all_items.append({
-                "source_type":    "유튜브",
-                "source_name":    channel_name,
-                "title":          title,
-                "summary":        final_summary,
-                "description":    desc,
-                "link":           f"https://www.youtube.com/watch?v={video_id}",
-                "published":      pub_str,
-                "_panelist":      panelist_tag,
-                "has_transcript": bool(transcript),
-            })
-            collected += 1
 
-        print(f"    배치 {batch_idx}/{len(batches)} [{'/'.join(batch)}]: {collected}건")
+            seen_ids.add(video_id)
+            raw_candidates.append({
+                "video_id":    video_id,
+                "title":       title,
+                "channel_id":  channel_id,
+                "channel_name": channel_name,
+                "published":   pub_str,
+                "description": desc,
+                "_panelist":   panelist_tag,
+            })
+            batch_count += 1
+
+        print(f"    배치 {batch_idx}/{len(batches)} [{'/'.join(batch)}]: {batch_count}건 후보")
         time.sleep(0.3)
 
-    print(f"  [패널리스트 검색] 총 {len(all_items)}건 (중복 제거 후, "
-          f"실제 사용 quota: {len(batches) * 100}유닛)")
+    print(f"  [패널리스트 검색] 1차 후보 {len(raw_candidates)}건 → 채널 품질 필터 시작")
+
+    # CHANNEL-FILTER-1: 2단계 — 비등록 채널만 추려서 구독자 수 배치 조회
+    unregistered_ids = [
+        c["channel_id"] for c in raw_candidates
+        if c["channel_id"] and c["channel_id"] not in whitelist_ids
+    ]
+    unregistered_ids = list(set(unregistered_ids))
+
+    subscriber_map = {}
+    if unregistered_ids:
+        print(f"  [채널필터] 비등록 채널 {len(unregistered_ids)}개 구독자 수 조회 중... "
+              f"(예상 quota: {(len(unregistered_ids) + 49) // 50}유닛)")
+        subscriber_map = _batch_fetch_subscriber_counts(youtube, unregistered_ids)
+
+    # CHANNEL-FILTER-1: 3단계 — 필터 적용 및 자막 수집
+    filtered_count  = 0
+    rejected_count  = 0
+
+    for c in raw_candidates:
+        cid  = c["channel_id"]
+        name = c["channel_name"]
+
+        # 등록 채널이면 무조건 통과
+        if cid in whitelist_ids:
+            pass
+        else:
+            # 비등록 채널: 구독자 수 확인
+            subs = subscriber_map.get(cid, -1)
+            if subs == -1:
+                # 조회 실패 → 보수적으로 통과 (차단하면 정상 채널도 잃을 수 있음)
+                print(f"    [채널필터] 구독자 조회 실패 → 통과: {name}")
+            elif subs < _PANELIST_MIN_SUBSCRIBERS:
+                print(f"    [채널필터] 구독자 부족 ({subs:,}명 < {_PANELIST_MIN_SUBSCRIBERS:,}명) → 제외: {name}")
+                rejected_count += 1
+                continue
+            else:
+                print(f"    [채널필터] 비등록 채널 통과 ({subs:,}명): {name}")
+
+        # 자막 수집 (필터 통과 후에 가져옴)
+        transcript = get_transcript(c["video_id"])
+        summary    = transcript[:500] if transcript else (c["description"][:500] if c["description"] else c["title"])
+
+        # 자막 포함 시 주식 관련성 재확인 (제목에 없던 경우 보완)
+        if not is_stock_related(c["title"], transcript):
+            continue
+
+        all_items.append({
+            "source_type":    "유튜브",
+            "source_name":    name,
+            "title":          c["title"],
+            "summary":        summary,
+            "description":    c["description"],
+            "link":           f"https://www.youtube.com/watch?v={c['video_id']}",
+            "published":      c["published"],
+            "_panelist":      c["_panelist"],
+            "has_transcript": bool(transcript),
+        })
+        filtered_count += 1
+
+    print(f"  [패널리스트 검색] 최종 {filtered_count}건 "
+          f"(채널 품질 필터로 {rejected_count}건 제외, "
+          f"실제 사용 quota: 검색 {len(batches) * 100}유닛 + "
+          f"채널조회 {(len(unregistered_ids) + 49) // 50 if unregistered_ids else 0}유닛)")
     return all_items
-
-
