@@ -4,7 +4,8 @@
     "description": "주식 브리핑 유튜브 채널 목록",
     "source": "수동 검증 + playlist.co + socialertus.com",
     "criteria": "주식/경제방송 채널, 구독자 기준 10만 이상 또는 최소 10,000명",
-    "verified_threshold": 10000
+    "verified_threshold": 10000,
+    "blacklist_description": "패널리스트 검색에서 제외할 채널 목록. id(채널 ID) 또는 name(채널명) 기준으로 차단. AI 복제 채널, 저품질 채널 등"
   },
   "broadcast": [
     {
@@ -546,6 +547,14 @@
       "subscribers": 101000,
       "note": "NH투자증권 공식",
       "status": "confirmed"
+    }
+  ],
+  "blacklist": [
+    {
+      "id": "",
+      "name": "노을빛 순간들",
+      "reason": "머니올라 채널 AI 무단복제 채널",
+      "added": "2026-06-29"
     }
   ]
 }
