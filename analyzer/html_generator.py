@@ -656,13 +656,22 @@ def _render_price_html(item: dict) -> str:
             f'<span style="font-size:.7rem;color:#adb5bd;margin-left:.3rem;">'
             f'({price_label})</span>'
         )
+        # FIX-PRICE-8: 전일종가 표시 시(장 전) → "전전일 대비" 부연
+        if price_label == "전일종가":
+            pct_suffix = (
+                f'<span style="font-size:.7rem;color:#adb5bd;margin-left:.2rem;">'
+                f'(전전일 대비)</span>'
+            )
+        else:
+            pct_suffix = ""
         pct_html = (
             f'<span style="font-size:.82rem;color:{pct_color};margin-left:.35rem;">'
             f'{pct_arrow} {pct_num:+.2f}%</span>'
+            f'{pct_suffix}'
         )
         return (
             f'<span class="price-value">{int(price):,}원</span>'
-            f'{pct_html}{label_html}'
+            f'{label_html}{pct_html}'
         )
 
     # 레거시 호환: verified_price
