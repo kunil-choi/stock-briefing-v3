@@ -77,6 +77,10 @@ body { background: var(--bg); color: var(--text);
   border-bottom: 1px solid var(--border); }
 .registered-table td { padding: .5rem .75rem; border-bottom: 1px solid var(--border); }
 .registered-table tr:last-child td { border: none; }
+.btn-delete { background: var(--surface2); color: var(--red);
+  border: 1px solid #f8514944; }
+.btn-delete:hover { background: #f8514922; }
+.registered-table td.action-cell { width: 60px; text-align: center; }
 .expert-tag { display: inline-block; background: var(--purple); color: #000;
   font-size: .7rem; padding: .1rem .4rem; border-radius: 3px;
   font-weight: 700; margin: .1rem; }
@@ -510,9 +514,18 @@ async function loadRegistered() {
         <div class="section-title" style="margin-bottom:.75rem;">
           👤 패널리스트 (${panelists.length}명)
         </div>
-        <div style="display:flex;flex-wrap:wrap;gap:.4rem;">
-          ${panelists.map(p=>`<span class="expert-tag" style="background:var(--surface2);color:var(--accent);border:1px solid var(--border);">${p}</span>`).join("")}
-        </div>
+        <table class="registered-table">
+          <thead><tr><th>이름</th><th class="action-cell">삭제</th></tr></thead>
+          <tbody>
+            ${panelists.map(p=>`
+            <tr id="pr-${p}">
+              <td><span class="expert-tag" style="background:var(--surface2);color:var(--accent);border:1px solid var(--border);">${p}</span></td>
+              <td class="action-cell">
+                <button class="btn btn-delete btn-sm" onclick="deletePanelist('${p}')">🗑</button>
+              </td>
+            </tr>`).join("")}
+          </tbody>
+        </table>
       </div>
       <div>
         <div class="section-title" style="margin-bottom:.75rem;">📺 등록 채널</div>`;
@@ -525,9 +538,16 @@ async function loadRegistered() {
             ${label} (${chs.length}개)
           </div>
           <table class="registered-table">
-            <thead><tr><th>채널명</th><th>채널 ID</th></tr></thead>
+            <thead><tr><th>채널명</th><th>채널 ID</th><th class="action-cell">삭제</th></tr></thead>
             <tbody>
-              ${chs.map(c=>`<tr><td>${c.name||c}</td><td style="color:var(--muted);font-size:.78rem;">${c.id||""}</td></tr>`).join("")}
+              ${chs.map(c=>`
+              <tr id="cr-${encodeURIComponent(c.id||c)}">
+                <td>${c.name||c}</td>
+                <td style="color:var(--muted);font-size:.78rem;">${c.id||""}</td>
+                <td class="action-cell">
+                  <button class="btn btn-delete btn-sm" onclick="deleteChannel('${cat}','${c.id||""}','${(c.name||c).replace(/'/g,"\\'")}')">🗑</button>
+                </td>
+              </tr>`).join("")}
             </tbody>
           </table>
         </div>`;
@@ -537,6 +557,43 @@ async function loadRegistered() {
   } catch(e) {
     el.innerHTML = `<div class="empty" style="color:var(--red);">로드 실패: ${e.message}</div>`;
   }
+}
+
+// ── 패널리스트 삭제 ────────────────────────────────────────────────
+async function deletePanelist(name) {
+  if (!confirm(`"${name}" 패널리스트를 삭제할까요?`)) return;
+  try {
+    const cfg = await ghGet("config.py");
+    let cfgContent = decodeURIComponent(escape(atob(cfg.content)));
+    if (!cfgContent.includes(`"${name}"`)) {
+      showToast(`${name} 을(를) 찾을 수 없음`, "error"); return;
+    }
+    // 해당 이름이 포함된 줄 제거 (쉼표 포함 줄 전체)
+    cfgContent = cfgContent.split("\n")
+      .filter(line => !line.includes(`"${name}"`))
+      .join("\n");
+    await ghUpdate("config.py", cfgContent, cfg.sha, `feat: 패널리스트 삭제 — ${name}`);
+    document.getElementById(`pr-${name}`)?.remove();
+    showToast(`🗑 ${name} 패널리스트 삭제 완료`);
+  } catch(e) { showToast(`오류: ${e.message}`, "error"); }
+}
+
+// ── 채널 삭제 ─────────────────────────────────────────────────────
+async function deleteChannel(cat, chId, chName) {
+  if (!confirm(`"${chName}" 채널을 삭제할까요?`)) return;
+  try {
+    const cj = await ghGet("channels.json");
+    let channels = JSON.parse(decodeURIComponent(escape(atob(cj.content))));
+    const before = (channels[cat] || []).length;
+    channels[cat] = (channels[cat] || []).filter(c => (c.id || c) !== chId);
+    if (channels[cat].length === before) {
+      showToast("삭제할 채널을 찾을 수 없음", "error"); return;
+    }
+    await ghUpdate("channels.json", JSON.stringify(channels, null, 2), cj.sha,
+      `feat: 채널 삭제 — ${chName} (${cat})`);
+    document.getElementById(`cr-${encodeURIComponent(chId)}`)?.remove();
+    showToast(`🗑 ${chName} 채널 삭제 완료`);
+  } catch(e) { showToast(`오류: ${e.message}`, "error"); }
 }
 </script>
 </body>
