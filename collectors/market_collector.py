@@ -450,3 +450,48 @@ def collect_market_overview() -> dict:
 
     return result
 
+
+# ── 야간선물 캐시 전용 수집 (사전 수집 워크플로우용) ──────────────────────────
+
+def cache_night_futures() -> bool:
+    """
+    야간선물 데이터만 수집하여 캐시 파일에 저장한다.
+
+    KRX 야간선물 거래시간: 18:00~익일 05:00 KST
+    메인 브리핑(08:30 KST)은 거래 종료 후라 실시간 수집 불가.
+    → youtube_precollect.yml의 저녁 실행(KST 20:00, UTC 11:00)에서
+      이 함수를 호출해 캐시를 미리 저장해 두면,
+      다음 날 아침 브리핑에서 캐시 데이터를 사용할 수 있다.
+
+    반환: True(적어도 1개 수집 성공) / False(전체 실패)
+    """
+    print("\n[야간선물 캐시] 수집 시작...")
+    night_cache = _load_night_future_cache()
+    success     = False
+
+    # KOSPI200 야간선물
+    val, pct = _get_night_future("K2FA", "KOSPI200야간선물")
+    if val is not None:
+        night_cache["kospi200_night"] = {"value": val, "change_pct": pct}
+        print(f"  KOSPI200 야간선물: {val:,.2f} ({pct:+.2f}%) → 캐시 저장")
+        success = True
+    else:
+        print("  KOSPI200 야간선물: 수집 실패 (거래 시간 외일 수 있음)")
+
+    # KOSDAQ150 야간선물
+    val, pct = _get_night_future("KSFA", "KOSDAQ150야간선물")
+    if val is not None:
+        night_cache["kosdaq150_night"] = {"value": val, "change_pct": pct}
+        print(f"  KOSDAQ150 야간선물: {val:,.2f} ({pct:+.2f}%) → 캐시 저장")
+        success = True
+    else:
+        print("  KOSDAQ150 야간선물: 수집 실패 (거래 시간 외일 수 있음)")
+
+    if success:
+        _save_night_future_cache(night_cache)
+        print("[야간선물 캐시] 저장 완료")
+    else:
+        print("[야간선물 캐시] 수집된 데이터 없음 — 거래 시간(18:00~05:00 KST) 확인 필요")
+
+    return success
+
