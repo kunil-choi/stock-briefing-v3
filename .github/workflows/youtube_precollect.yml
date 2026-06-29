@@ -3,7 +3,7 @@ name: YouTube 사전 수집
 on:
   schedule:
     - cron: '0 5 * * 1-5'    # KST 14:00 월~금 (전날 영상 오후 수집)
-    - cron: '0 11 * * 1-5'   # KST 20:00 월~금 (저녁 영상 수집)
+    - cron: '0 11 * * 1-5'   # KST 20:00 월~금 (저녁 영상 수집 + 야간선물 캐시)
     - cron: '0 21 * * 0-4'   # KST 06:00 월~금 (새벽 영상 수집)
   workflow_dispatch:           # 수동 실행 가능
 
@@ -39,11 +39,23 @@ jobs:
           GEMINI_API_KEY:  ${{ secrets.GEMINI_API_KEY }}
         run: python collectors/youtube_precollect.py
 
+      - name: 🌙 야간선물 캐시 수집 (KST 20:00 저녁 실행 시)
+        # KRX 야간선물 거래: 18:00~익일 05:00 KST
+        # KST 20:00(UTC 11:00)에 실행 → 거래 중이므로 실시간 캐시 저장 가능
+        # KST 14:00(UTC 05:00), 06:00(UTC 21:00) 실행 시에는 거래 시간 외라 수집 실패하지만 무해
+        run: |
+          python3 -c "
+import sys
+sys.path.insert(0, '.')
+from collectors.market_collector import cache_night_futures
+cache_night_futures()
+"
+
       - name: 💾 결과 커밋
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add data/youtube_mentions.json data/pending_channels.json data/pending_names.json || true
+          git add data/youtube_mentions.json data/pending_channels.json data/pending_names.json data/night_future_cache.json || true
           if git diff --quiet && git diff --staged --quiet; then
             echo "변경사항 없음 → 스킵"
           else
@@ -65,5 +77,14 @@ jobs:
 import json
 d = json.load(open('data/youtube_mentions.json'))
 print(f'youtube_mentions: {len(d)}건')
+"
+          fi
+          if [ -f data/night_future_cache.json ]; then
+            python3 -c "
+import json
+d = json.load(open('data/night_future_cache.json'))
+print(f'야간선물 캐시 날짜: {d.get("date", "없음")}')
+k = d.get('kospi200_night', {})
+print(f'KOSPI200: {k.get("value", "없음")} ({k.get("change_pct", 0):+.2f}%)')
 "
           fi
