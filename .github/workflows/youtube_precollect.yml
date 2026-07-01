@@ -61,9 +61,5 @@ jobs:
         run: |
           echo "KST: $(TZ='Asia/Seoul' date)"
           if [ -f data/youtube_mentions.json ]; then
-            python3 -c "
-import json
-d = json.load(open('data/youtube_mentions.json'))
-print(f'youtube_mentions: {len(d)}건')
-"
+            python3 -c "import json; d=json.load(open('data/youtube_mentions.json')); print(f'youtube_mentions: {len(d)}건')"
           fi
