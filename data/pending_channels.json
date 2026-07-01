@@ -1,20 +1,5 @@
 [
   {
-    "channel_name": "PLUS TV (플러스 TV)",
-    "channel_id": "",
-    "count": 1,
-    "first_seen": "2026-07-01",
-    "last_seen": "2026-07-01",
-    "expert_appeared": [
-      "김장열",
-      "이효석"
-    ],
-    "sample_videos": [
-      "횡보장에 녹는 계좌 막는 법부터, 수급 읽는 법까지 (삼성·SK하이닉스 투자자 필독)"
-    ],
-    "status": "pending"
-  },
-  {
     "channel_name": "삼프로TV 3PROTV",
     "channel_id": "",
     "count": 2,
@@ -31,6 +16,56 @@
     "sample_videos": [
       "[26.07.01 오후 방송 전체보기] 코스닥 30주년 축하해!…생일 기념 빨간불? 하반기에도 달려줘~!",
       "박병창 대표의 7월 투자전략! 8:2 → 5:5 제시합니다 | 홍선애, 박병창 MP파트너스 대표"
+    ],
+    "status": "pending"
+  },
+  {
+    "channel_name": "교양이를 부탁해",
+    "channel_id": "",
+    "count": 1,
+    "first_seen": "2026-07-02",
+    "last_seen": "2026-07-02",
+    "expert_appeared": [
+      "홍춘욱"
+    ],
+    "sample_videos": [
+      "[지식뉴스] &quot;이미 타이밍을 놓쳤어요&quot;..이제 여기서부터 빠집니다, 국민연금 리밸런싱에 감"
+    ],
+    "status": "pending"
+  },
+  {
+    "channel_name": "주식초등학교",
+    "channel_id": "",
+    "count": 1,
+    "first_seen": "2026-07-02",
+    "last_seen": "2026-07-02",
+    "expert_appeared": [
+      "염승환"
+    ],
+    "sample_videos": [
+      "염승환 이사 ‖ 반도체 사이클은 끝나지 않았다! 급락장을 &#39;기회&#39;로 만드는 방법  (3부) /"
+    ],
+    "status": "pending"
+  },
+  {
+    "channel_name": "삼프로TV 3PROTV",
+    "channel_id": "",
+    "count": 4,
+    "first_seen": "2026-07-02",
+    "last_seen": "2026-07-02",
+    "expert_appeared": [
+      "박병창",
+      "이선엽",
+      "김장열",
+      "이권희",
+      "장우진",
+      "박명석"
+    ],
+    "sample_videos": [
+      "[26.07.01 오후 방송 전체보기] 코스닥 30주년 축하해!…생일 기념 빨간불? 하반기에도 달려줘~!",
+      "박병창 대표의 7월 투자전략! 8:2 → 5:5 제시합니다 | 홍선애, 박병창 MP파트너스 대표",
+      "[7월 1일 마감시황] 국내 증시 &#39;조울증&#39; 왔다? 서른 번째 생일 맞이한 코스닥! 분위기는 ",
+      "역대 가장 뜨거웠던 코스피…하반기도 승승장구 가능할까? | 박병창 MP파트너스 대표 [마켓 인사이드]"
     ],
     "status": "pending"
   }
