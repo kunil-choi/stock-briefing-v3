@@ -127,6 +127,7 @@ body { background: var(--bg); color: var(--text);
       <button class="tab" onclick="switchTab('channel')">📺 채널 후보 <span id="channel-cnt" class="count-badge">-</span></button>
       <button class="tab" onclick="switchTab('registered')">✅ 등록 현황</button>
       <button class="tab" onclick="switchTab('add')">➕ 직접 추가</button>
+      <button class="tab" onclick="switchTab('correct')">🩹 브리핑 교정</button>
     </div>
 
     <!-- 패널리스트 후보 탭 -->
@@ -151,6 +152,37 @@ body { background: var(--bg); color: var(--text);
     <div id="tab-registered" class="tab-content">
       <div class="section-title">✅ 현재 등록된 패널리스트 & 채널</div>
       <div id="registered-content"><div class="loading"><span class="spinner"></span>로딩 중...</div></div>
+    </div>
+
+    <!-- 브리핑 교정 탭 -->
+    <div id="tab-correct" class="tab-content">
+      <div class="section-title">🩹 브리핑 교정 <span class="badge badge-red">라이브 docs/index.html 직접 수정</span></div>
+      <div id="correct-status" style="font-size:.82rem;color:var(--muted);margin-bottom:1rem;"></div>
+
+      <div style="display:flex;gap:.75rem;margin-bottom:1.2rem;">
+        <button class="btn" style="background:var(--accent);color:#000;" onclick="loadBriefingForCorrection()">🔄 브리핑 불러오기</button>
+      </div>
+
+      <!-- 요약 단락 편집 -->
+      <div class="card" style="padding:1.1rem;margin-bottom:1rem;" id="correct-summary-card">
+        <div class="section-title" style="font-size:.9rem;margin-bottom:.75rem;">📝 시장 요약 단락 편집</div>
+        <div id="correct-summary-blocks"><div style="color:var(--muted);font-size:.82rem;">브리핑을 불러오면 단락이 표시됩니다.</div></div>
+        <div style="margin-top:.75rem;">
+          <button class="btn btn-approve btn-sm" onclick="saveSummaryEdits()">💾 요약 저장</button>
+        </div>
+      </div>
+
+      <!-- 종목 카드 삭제 -->
+      <div class="card" style="padding:1.1rem;margin-bottom:1rem;">
+        <div class="section-title" style="font-size:.9rem;margin-bottom:.75rem;">🗑 종목 카드 삭제</div>
+        <div id="correct-stock-list"><div style="color:var(--muted);font-size:.82rem;">브리핑을 불러오면 종목 목록이 표시됩니다.</div></div>
+      </div>
+
+      <!-- 교정 이력 -->
+      <div class="card" style="padding:1.1rem;">
+        <div class="section-title" style="font-size:.9rem;margin-bottom:.75rem;">📋 교정 이력</div>
+        <div id="correct-log"><div style="color:var(--muted);font-size:.82rem;">로딩 중...</div></div>
+      </div>
     </div>
 
     <!-- 직접 추가 탭 -->
@@ -324,10 +356,12 @@ function showToast(msg, type="success") {
 }
 
 // ── 탭 전환 ──────────────────────────────────────────────────────
+const TAB_NAMES = ["panelist","channel","registered","add","correct"];
 function switchTab(name) {
-  document.querySelectorAll(".tab").forEach((t,i) => t.classList.toggle("active", ["panelist","channel","registered","add"][i]===name));
+  document.querySelectorAll(".tab").forEach((t,i) => t.classList.toggle("active", TAB_NAMES[i]===name));
   document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
   document.getElementById(`tab-${name}`).classList.add("active");
+  if (name === "correct") { loadBriefingForCorrection(); loadCorrectionLog(); }
 }
 
 // ── 데이터 로드 ──────────────────────────────────────────────────
@@ -576,6 +610,169 @@ async function deletePanelist(name) {
     document.getElementById(`pr-${name}`)?.remove();
     showToast(`🗑 ${name} 패널리스트 삭제 완료`);
   } catch(e) { showToast(`오류: ${e.message}`, "error"); }
+}
+
+// ── 브리핑 교정 ───────────────────────────────────────────────────
+let _briefingHtml = "";   // 현재 로드된 docs/index.html 원본
+let _briefingSha  = "";   // GitHub SHA
+
+async function loadBriefingForCorrection() {
+  const statusEl = document.getElementById("correct-status");
+  statusEl.textContent = "불러오는 중...";
+  try {
+    const d = await ghGet("docs/index.html");
+    _briefingHtml = decodeURIComponent(escape(atob(d.content)));
+    _briefingSha  = d.sha;
+    statusEl.textContent = `✅ 로드 완료 (${new Date().toLocaleTimeString("ko-KR")})`;
+    _renderSummaryBlocks();
+    _renderStockList();
+  } catch(e) {
+    statusEl.textContent = `❌ 로드 실패: ${e.message}`;
+  }
+}
+
+function _renderSummaryBlocks() {
+  const container = document.getElementById("correct-summary-blocks");
+  // summary-block 내부 텍스트 추출
+  const re = /<div class="summary-block">[\s\S]*?<div class="summary-title">([^<]*)<\/div>[\s\S]*?<p class="summary-text">([^<]*)<\/p>[\s\S]*?<\/div>/g;
+  let m, html = "", idx = 0;
+  while ((m = re.exec(_briefingHtml)) !== null) {
+    const title = m[1];
+    const text  = m[2].replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">");
+    html += `
+      <div style="margin-bottom:.75rem;">
+        <div style="font-size:.78rem;color:var(--muted);margin-bottom:.25rem;">${title}</div>
+        <textarea id="sb-${idx}" rows="3" style="width:100%;padding:.5rem;background:var(--surface2);
+          border:1px solid var(--border);border-radius:6px;color:var(--text);
+          font-size:.82rem;resize:vertical;">${text}</textarea>
+      </div>`;
+    idx++;
+  }
+  container.innerHTML = html || '<div style="color:var(--muted);font-size:.82rem;">요약 단락을 찾을 수 없습니다.</div>';
+  container.dataset.count = idx;
+}
+
+async function saveSummaryEdits() {
+  if (!_briefingHtml) { showToast("먼저 브리핑을 불러오세요", "error"); return; }
+  const count = parseInt(document.getElementById("correct-summary-blocks").dataset.count || 0);
+  let updated = _briefingHtml;
+  const re = /(<div class="summary-block">[\s\S]*?<div class="summary-title">[^<]*<\/div>[\s\S]*?<p class="summary-text">)([^<]*)(<\/p>[\s\S]*?<\/div>)/g;
+  let idx = 0, result = "";
+  let lastIndex = 0;
+  let m;
+  re.lastIndex = 0;
+  while ((m = re.exec(updated)) !== null) {
+    const el = document.getElementById(`sb-${idx}`);
+    const newText = el ? el.value.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") : m[2];
+    result += updated.slice(lastIndex, m.index) + m[1] + newText + m[3];
+    lastIndex = m.index + m[0].length;
+    idx++;
+  }
+  result += updated.slice(lastIndex);
+  if (result === updated) { showToast("변경 내용 없음", "error"); return; }
+  try {
+    await ghUpdate("docs/index.html", result, _briefingSha,
+      "admin: 브리핑 교정 — 요약 단락 수정");
+    _briefingHtml = result;
+    await _appendCorrectionLog({ action: "edit_summary", detail: `${idx}개 단락 수정` });
+    showToast("✅ 요약 저장 완료");
+    const d = await ghGet("docs/index.html");
+    _briefingSha = d.sha;
+  } catch(e) { showToast(`오류: ${e.message}`, "error"); }
+}
+
+function _renderStockList() {
+  const container = document.getElementById("correct-stock-list");
+  // stock-card 내부 종목명 추출 (stock-name 클래스)
+  const re = /<div class="stock-card[^"]*">([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g;
+  const nameRe = /class="stock-name[^"]*">([^<]+)</;
+  let m, html = "", found = 0;
+  while ((m = re.exec(_briefingHtml)) !== null) {
+    const nm = nameRe.exec(m[0]);
+    const stockName = nm ? nm[1].trim() : `종목 #${found+1}`;
+    const safeKey = encodeURIComponent(stockName);
+    html += `
+      <div id="sc-${safeKey}" style="display:flex;align-items:center;gap:.75rem;
+        padding:.45rem .6rem;border-bottom:1px solid var(--border);">
+        <span style="flex:1;font-size:.88rem;">${stockName}</span>
+        <button class="btn btn-delete btn-sm" onclick="deleteStockCard('${stockName.replace(/'/g,"\\'")}')">🗑 삭제</button>
+      </div>`;
+    found++;
+  }
+  container.innerHTML = found
+    ? html
+    : '<div style="color:var(--muted);font-size:.82rem;">종목 카드를 찾을 수 없습니다.</div>';
+}
+
+async function deleteStockCard(stockName) {
+  if (!_briefingHtml) { showToast("먼저 브리핑을 불러오세요", "error"); return; }
+  if (!confirm(`"${stockName}" 종목 카드를 삭제할까요?`)) return;
+
+  // stock-name이 포함된 stock-card 블록 제거 (greedy하지 않게)
+  const escapedName = stockName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // stock-card div 전체를 찾아 제거
+  const cardRe = new RegExp(
+    `<div class="stock-card[^"]*">[\\s\\S]*?${escapedName}[\\s\\S]*?<\\/div>\\s*<\\/div>\\s*<\\/div>`, "g"
+  );
+  const updated = _briefingHtml.replace(cardRe, "");
+  if (updated === _briefingHtml) {
+    showToast("해당 종목 카드를 찾을 수 없습니다", "error"); return;
+  }
+  try {
+    await ghUpdate("docs/index.html", updated, _briefingSha,
+      `admin: 브리핑 교정 — 종목 카드 삭제 (${stockName})`);
+    _briefingHtml = updated;
+    await _appendCorrectionLog({ action: "delete_card", detail: stockName });
+    document.getElementById(`sc-${encodeURIComponent(stockName)}`)?.remove();
+    showToast(`🗑 ${stockName} 카드 삭제 완료`);
+    const d = await ghGet("docs/index.html");
+    _briefingSha = d.sha;
+  } catch(e) { showToast(`오류: ${e.message}`, "error"); }
+}
+
+async function _appendCorrectionLog(entry) {
+  const ts = new Date().toLocaleString("ko-KR", {timeZone:"Asia/Seoul"});
+  const newEntry = { timestamp: ts, ...entry };
+  try {
+    let entries = [];
+    let sha = null;
+    try {
+      const d = await ghGet("data/corrections_log.json");
+      entries = JSON.parse(decodeURIComponent(escape(atob(d.content))));
+      sha = d.sha;
+    } catch(e) { /* 파일 없으면 새로 생성 */ }
+    entries.push(newEntry);
+    // sha가 있으면 업데이트, 없으면 생성
+    const body = { message: `admin: 교정 이력 기록 — ${newEntry.action}`,
+                   content: btoa(unescape(encodeURIComponent(JSON.stringify(entries, null, 2)))),
+                   branch: BRANCH };
+    if (sha) body.sha = sha;
+    await fetch(`https://api.github.com/repos/${REPO}/contents/data/corrections_log.json`, {
+      method: "PUT",
+      headers: { Authorization: `token ${GH_TOKEN}`, Accept: "application/vnd.github.v3+json",
+                 "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    loadCorrectionLog();
+  } catch(e) { console.warn("교정 이력 저장 실패:", e); }
+}
+
+async function loadCorrectionLog() {
+  const el = document.getElementById("correct-log");
+  if (!el) return;
+  try {
+    const { data } = await readJson("data/corrections_log.json");
+    const entries  = Array.isArray(data) ? [...data].reverse().slice(0, 20) : [];
+    if (!entries.length) { el.innerHTML = '<div style="color:var(--muted);font-size:.82rem;">교정 이력이 없습니다.</div>'; return; }
+    el.innerHTML = entries.map(e => `
+      <div style="display:flex;gap:.75rem;padding:.4rem 0;border-bottom:1px solid var(--border);font-size:.8rem;">
+        <span style="color:var(--muted);flex-shrink:0;">${e.timestamp||""}</span>
+        <span style="color:var(--accent);">${e.action||""}</span>
+        <span>${e.detail||""}</span>
+      </div>`).join("");
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--muted);font-size:.82rem;">이력 로드 실패: ${e.message}</div>`;
+  }
 }
 
 // ── 채널 삭제 ─────────────────────────────────────────────────────
