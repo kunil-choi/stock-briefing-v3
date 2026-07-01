@@ -47,10 +47,5 @@ jobs:
         if: always()
         run: |
           if [ -f data/pending_channels.json ]; then
-            python3 -c "
-import json
-d = json.load(open('data/pending_channels.json'))
-pending = [x for x in d if x.get('status')=='pending']
-print(f'채널 후보 대기: {len(pending)}건')
-"
+            python3 -c "import json; d=json.load(open('data/pending_channels.json')); pending=[x for x in d if x.get('status')=='pending']; print(f'채널 후보 대기: {len(pending)}건')"
           fi
