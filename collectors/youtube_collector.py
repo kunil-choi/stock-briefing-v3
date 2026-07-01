@@ -32,6 +32,7 @@ from config import (
     YOUTUBER_HOURS,
     SECURITIES_HOURS,
     POPULAR_PANELISTS,
+    MIN_VIDEO_DURATION_SECONDS,
 )
 
 KST = ZoneInfo("Asia/Seoul")
@@ -315,11 +316,8 @@ def is_ad_content(title: str) -> bool:
 
 def is_shorts(title: str, video_id: str = "") -> bool:
     """
-    유튜브 쇼츠 여부 판별.
-    FIX-SHORTS-1: 쇼츠는 본편과 동일 채널 플레이리스트에 포함되므로
-    별도 필터링이 필요함. 제목의 #Shorts/#shorts 태그로 1차 판별.
-    video_id를 통한 URL 패턴 확인은 현재 수집 구조에서 불필요
-    (playlist API는 video_id만 반환하고 /shorts/ URL이 아님).
+    유튜브 쇼츠 여부 제목 기반 1차 판별 (빠른 사전 필터).
+    태그 없이 짧게 올리는 우회는 _fetch_video_durations()로 2차 필터링.
     """
     title_lower = title.lower()
     return (
@@ -327,6 +325,44 @@ def is_shorts(title: str, video_id: str = "") -> bool:
         or "#short" in title_lower
         or "# shorts" in title_lower
     )
+
+
+def _parse_iso_duration(duration: str) -> int:
+    """ISO 8601 duration (PT1H2M3S) → 초 단위 정수."""
+    import re as _re
+    m = _re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration or "")
+    if not m:
+        return 0
+    return int(m.group(1) or 0) * 3600 + int(m.group(2) or 0) * 60 + int(m.group(3) or 0)
+
+
+def _fetch_video_durations(youtube, video_ids: list) -> dict:
+    """
+    videos().list(contentDetails)로 재생시간 배치 조회.
+    반환: {video_id: duration_seconds}
+    조회 실패한 video_id는 결과에서 누락됨 (→ 보수적으로 통과 처리).
+    quota 비용: 1유닛/호출 (50개씩 배치).
+    """
+    result = {}
+    if not video_ids or not youtube:
+        return result
+    unique_ids = list(dict.fromkeys(video_ids))
+    for i in range(0, len(unique_ids), 50):
+        batch = unique_ids[i:i + 50]
+        try:
+            resp = youtube.videos().list(
+                part="contentDetails",
+                id=",".join(batch),
+                maxResults=50,
+            ).execute()
+            for item in resp.get("items", []):
+                vid = item.get("id", "")
+                dur = item.get("contentDetails", {}).get("duration", "PT0S")
+                result[vid] = _parse_iso_duration(dur)
+        except Exception as e:
+            print(f"  [duration조회] 배치 {i // 50 + 1} 실패: {e}")
+        time.sleep(0.2)
+    return result
 
 
 def has_popular_panelist(title: str, transcript: str = "") -> bool:
@@ -392,12 +428,21 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
 
             videos = get_recent_videos_via_playlist(youtube, channel_id, hours)
 
+            # 재생시간 배치 조회 → MIN_VIDEO_DURATION_SECONDS 미만 제외
+            dur_map = _fetch_video_durations(youtube, [v["video_id"] for v in videos])
+
             for v in videos:
-                title = v.get("title", "")
+                title    = v.get("title", "")
+                video_id = v.get("video_id", "")
                 if is_ad_content(title):
                     continue
                 if is_shorts(title):
-                    print(f"    [쇼츠 제외] {title[:40]}")
+                    print(f"    [쇼츠 제외-제목] {title[:40]}")
+                    continue
+                # 재생시간 기반 쇼츠 필터 (태그 없이 올린 우회 차단)
+                dur_sec = dur_map.get(video_id)
+                if dur_sec is not None and dur_sec < MIN_VIDEO_DURATION_SECONDS:
+                    print(f"    [쇼츠 제외-길이] {dur_sec}s < {MIN_VIDEO_DURATION_SECONDS}s: {title[:40]}")
                     continue
 
                 if is_stock_related(title):
@@ -577,7 +622,25 @@ def collect_panelist_youtube(youtube) -> list:
         print(f"    배치 {batch_idx}/{len(batches)} [{'/'.join(batch)}]: {batch_count}건 후보")
         time.sleep(0.3)
 
-    print(f"  [패널리스트 검색] 1차 후보 {len(raw_candidates)}건 → 채널 품질 필터 시작")
+    print(f"  [패널리스트 검색] 1차 후보 {len(raw_candidates)}건 → 재생시간 필터 시작")
+
+    # 재생시간 배치 조회 (쇼츠 어뷰징 필터: 태그 없이 짧게 올리는 우회 차단)
+    dur_map = _fetch_video_durations(youtube, [c["video_id"] for c in raw_candidates])
+    short_rejected = 0
+    filtered_candidates = []
+    for c in raw_candidates:
+        dur_sec = dur_map.get(c["video_id"])
+        if dur_sec is not None and dur_sec < MIN_VIDEO_DURATION_SECONDS:
+            print(f"    [쇼츠 제외-길이] {dur_sec}s: {c['title'][:40]}")
+            short_rejected += 1
+            continue
+        filtered_candidates.append(c)
+    if short_rejected:
+        print(f"  [패널리스트 검색] 재생시간 필터로 {short_rejected}건 제외 "
+              f"→ 남은 후보 {len(filtered_candidates)}건")
+    raw_candidates = filtered_candidates
+
+    print(f"  [패널리스트 검색] {len(raw_candidates)}건 → 채널 품질 필터 시작")
 
     # CHANNEL-FILTER-1: 2단계 — 비등록 채널만 추려서 구독자 수 배치 조회
     unregistered_ids = [

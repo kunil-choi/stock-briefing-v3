@@ -208,25 +208,39 @@ def _build_dawn_market_html(market_overview: dict) -> str:
     if kosdaq_night:
         pct   = _safe_float(kosdaq_night, "change_pct")
         val   = _safe_float(kosdaq_night, "value")
-        label, color, arrow = _direction_label(pct)
-        rows += (
-            f'<div class="dawn-row">'
-            f'<span class="dawn-icon">📈</span>'
-            f'<span class="dawn-name">K야간선물(코스닥)</span>'
-            f'<span class="dawn-val" style="color:{color};">'
-            f'{arrow} {val:,.2f} ({pct:+.2f}%) {label}</span>'
-            f'</div>'
-        )
+        # val==0 and pct==0 이면 수집 실패로 판단 (KOSPI200과 동일 가드)
+        if val == 0.0 and pct == 0.0:
+            rows += (
+                '<div class="dawn-row">'
+                '<span class="dawn-icon">📈</span>'
+                '<span class="dawn-name">K야간선물(코스닥)</span>'
+                '<span class="dawn-val" style="color:#adb5bd;">데이터 없음</span>'
+                '</div>'
+            )
+        else:
+            label, color, arrow = _direction_label(pct)
+            rows += (
+                f'<div class="dawn-row">'
+                f'<span class="dawn-icon">📈</span>'
+                f'<span class="dawn-name">K야간선물(코스닥)</span>'
+                f'<span class="dawn-val" style="color:{color};">'
+                f'{arrow} {val:,.2f} ({pct:+.2f}%) {label}</span>'
+                f'</div>'
+            )
 
     # FIX-MKT-13: 'usd_krw'는 상단 시장지표 그리드의 "달러/원"과 동일한 값이며
     # (별도 역외/NDF 소스가 아님), 종합판단(avg_pct) 로직에도 쓰이지 않으므로
     # 새벽시장 박스에서는 제거 — 야간선물 본연의 역할에 집중
 
-    kospi_pct  = _safe_float(kospi_night,  "change_pct") if kospi_night  else 0.0
-    kosdaq_pct = _safe_float(kosdaq_night, "change_pct") if kosdaq_night else 0.0
-    avg_pct    = (kospi_pct + kosdaq_pct) / max(
-        sum(1 for x in [kospi_night, kosdaq_night] if x), 1
-    )
+    # 실제 데이터가 있는 지표(val≠0 or pct≠0)만 평균에 포함
+    valid_pcts = []
+    for night in [kospi_night, kosdaq_night]:
+        if night:
+            v = _safe_float(night, "value")
+            p = _safe_float(night, "change_pct")
+            if not (v == 0.0 and p == 0.0):
+                valid_pcts.append(p)
+    avg_pct = sum(valid_pcts) / len(valid_pcts) if valid_pcts else 0.0
 
     if avg_pct >= 0.3:
         summary_color = "#ff6b6b"

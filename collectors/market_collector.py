@@ -92,7 +92,7 @@ def _pct(current, previous) -> float:
 
 # ── yfinance 기반 조회 ────────────────────────────────────────────────────────
 
-def _fetch_yf(ticker: str):
+def _fetch_yf(ticker: str, is_krx: bool = False):
     """
     FIX-MKT-11: yfinance가 당일 미개장(특히 미국장 개장 전) 구간에
     NaN 종가를 포함한 placeholder 행을 반환하는 경우가 있음.
@@ -102,6 +102,9 @@ def _fetch_yf(ticker: str):
     FIX-MKT-12: period="5d" 대신 start/end 날짜를 명시적으로 지정하여
     yfinance가 잘못된 날짜를 반환하는 버그를 방지한다.
     수집된 날짜를 로그로 출력해 오류 추적이 가능하도록 한다.
+
+    is_krx=True: KRX 지수(KOSPI/KOSDAQ)용. Yahoo의 3rd-party 피드 지연으로
+    최신 봉이 기대 거래일보다 오래된 경우 실패 처리 → 네이버 폴백 유도.
     """
     if not _YF_AVAILABLE:
         return None, None
@@ -121,9 +124,22 @@ def _fetch_yf(ticker: str):
         # 날짜 인덱스를 문자열로 변환해 로그 출력 (날짜 오류 추적용)
         try:
             dates = [str(d)[:10] for d in hist.index]
-            print(f"  [yfinance] {ticker} 수집 날짜: {dates[-2]} → {dates[-1]}")
+            latest_date_str = dates[-1]
+            print(f"  [yfinance] {ticker} 수집 날짜: {dates[-2]} → {latest_date_str}")
         except Exception:
-            pass
+            latest_date_str = ""
+
+        # KRX 지수: 최신 봉이 3일 이상 오래됐으면 피드 지연으로 판단 → 실패 처리
+        if is_krx and latest_date_str:
+            try:
+                latest_dt = datetime.strptime(latest_date_str, "%Y-%m-%d")
+                age_days  = (now_kst.date() - latest_dt.date()).days
+                if age_days > 3:
+                    print(f"  [yfinance] {ticker} KRX 피드 지연 의심 "
+                          f"(최신봉={latest_date_str}, {age_days}일 전) → 실패 처리")
+                    return None, None
+            except Exception:
+                pass
 
         close_prev = float(hist["Close"].iloc[-2])
         close_now  = float(hist["Close"].iloc[-1])
@@ -165,6 +181,38 @@ def _fetch_naver_index(symbol: str):
         return value, pct
     except Exception as e:
         print(f"  [Naver] {symbol} 조회 실패: {e}")
+        return None, None
+
+
+def _fetch_naver_index_day_over_day(symbol: str):
+    """
+    네이버 차트 API에서 일봉 데이터를 2개 가져와 전일 대비 등락률을 직접 계산.
+    _fetch_naver_index()의 페이지 파싱보다 안정적인 대안.
+    반환: (현재가, 등락률%) 또는 (None, None)
+    """
+    if not _REQUESTS_AVAILABLE:
+        return None, None
+    url = (
+        f"https://fchart.stock.naver.com/sise.nhn"
+        f"?symbol={symbol}&timeframe=day&count=5&requestType=0"
+    )
+    try:
+        resp = requests.get(url, headers=_NAVER_HEADERS, timeout=10)
+        resp.raise_for_status()
+        # XML: <item data="20240101|open|high|low|close|volume"/>
+        items = re.findall(r'<item data="([^"]+)"', resp.text)
+        if len(items) < 2:
+            print(f"  [Naver차트] {symbol} 데이터 부족 ({len(items)}개)")
+            return None, None
+        prev_close = float(items[-2].split("|")[4])
+        now_close  = float(items[-1].split("|")[4])
+        if prev_close == 0:
+            return None, None
+        pct = round((now_close - prev_close) / prev_close * 100, 2)
+        print(f"  [Naver차트] {symbol}: {prev_close} → {now_close} ({pct:+.2f}%)")
+        return now_close, pct
+    except Exception as e:
+        print(f"  [Naver차트] {symbol} 조회 실패: {e}")
         return None, None
 
 
@@ -380,13 +428,20 @@ def collect_market_overview() -> dict:
             print(f"  {label}: 데이터 없음")
 
     # ── KOSPI ─────────────────────────────────────────────────────────────────
-    val, pct = _fetch_yf("^KS11")
+    # is_krx=True: 피드 지연(날짜 오래됨) 감지 시 None 반환 → 네이버 폴백
+    val, pct = _fetch_yf("^KS11", is_krx=True)
+    if val is None:
+        print("  [KOSPI] yfinance 실패/지연 → 네이버 차트 폴백")
+        val, pct = _fetch_naver_index_day_over_day("KOSPI")
     if val is None:
         val, pct = _fetch_naver_index("KOSPI")
     _set("kospi", "KOSPI", val, pct, premarket)
 
     # ── KOSDAQ ────────────────────────────────────────────────────────────────
-    val, pct = _fetch_yf("^KQ11")
+    val, pct = _fetch_yf("^KQ11", is_krx=True)
+    if val is None:
+        print("  [KOSDAQ] yfinance 실패/지연 → 네이버 차트 폴백")
+        val, pct = _fetch_naver_index_day_over_day("KOSDAQ")
     if val is None:
         val, pct = _fetch_naver_index("KOSDAQ")
     _set("kosdaq", "KOSDAQ", val, pct, premarket)
@@ -404,7 +459,12 @@ def collect_market_overview() -> dict:
     _set("dow", "DOW", val, pct, False)
 
     # ── KOSPI200 야간선물 (FIX-MKT-9/10: 캐시 + 항상 표출) ───────────────────
+    # 진단: K2FA/KSFA 심볼은 2025년 6월 KRX 자체운영 전환 이후 무효화됐을 수 있음
+    # 다음 실행 로그에서 "페이지 파싱 실패 → API 방식 시도" → "API 조회 실패" 패턴이면
+    # 심볼 코드를 확인하고 업데이트 필요
     night_cache = _load_night_future_cache()
+    print(f"  [야간선물진단] 캐시={bool(night_cache)}, "
+          f"캐시키={list(night_cache.keys()) if night_cache else '없음'}")
 
     val, pct = _get_night_future("K2FA", "KOSPI200야간선물")
     if val is not None:

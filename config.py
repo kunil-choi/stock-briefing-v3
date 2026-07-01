@@ -29,6 +29,7 @@ OUTPUT_FILE   = "data/briefing_data.json"
 PANEL_PASSWORD = os.getenv("ADMIN_PASSWORD", "stock2026!")
 
 # ── 수집 시간 범위 (시간 단위) ──────────────────────────────────
+MIN_VIDEO_DURATION_SECONDS = 180   # YouTube 공식 쇼츠 기준(180초) 미만 제외
 BROADCAST_HOURS  = 24
 YOUTUBER_HOURS   = 24
 SECURITIES_HOURS = 24
