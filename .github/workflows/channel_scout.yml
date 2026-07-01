@@ -29,7 +29,7 @@ jobs:
       - name: 🔍 신규 채널 탐색
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
-        run: python collectors/channel_scout.py
+        run: python -m collectors.channel_scout
 
       - name: 💾 결과 커밋
         run: |
