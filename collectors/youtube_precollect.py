@@ -136,27 +136,6 @@ def run():
     except Exception as e:
         print(f"[후보수집] 오류 (계속 진행): {e}")
 
-    # 야간선물 캐시 수집 — 18:00~05:00 거래시간 중 실행 시 저장
-    try:
-        from collectors.market_collector import _get_night_future, _save_night_future_cache, _load_night_future_cache
-        night_cache = _load_night_future_cache()
-        val_k, pct_k = _get_night_future("K2FA",  "KOSPI200야간선물")
-        val_q, pct_q = _get_night_future("KSFA", "KOSDAQ150야간선물")
-        updated = False
-        if val_k and val_k > 0:
-            night_cache["kospi200_night"]  = {"value": val_k, "change_pct": pct_k}
-            updated = True
-        if val_q and val_q > 0:
-            night_cache["kosdaq150_night"] = {"value": val_q, "change_pct": pct_q}
-            updated = True
-        if updated:
-            _save_night_future_cache(night_cache)
-            print(f"[사전수집] 야간선물 캐시 업데이트 완료")
-        else:
-            print(f"[사전수집] 야간선물 거래시간 외 — 캐시 유지")
-    except Exception as e:
-        print(f"[사전수집] 야간선물 캐시 수집 실패 (계속 진행): {e}")
-
     elapsed = int((datetime.now(KST) - now_kst).total_seconds())
     print(f"=== 사전 수집 완료 (소요: {elapsed}초) ===")
 

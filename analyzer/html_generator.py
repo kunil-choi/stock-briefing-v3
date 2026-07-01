@@ -41,9 +41,6 @@ _INDICATOR_DEFS = [
     ("S&P500",   ["sp500",  "SP500", "s&p500"]),
     ("다우존스", ["dow",    "DOW",   "dow_jones"]),
     ("달러/원",  ["usd_krw", "USD_KRW", "usd"]),
-    # FIX-MKT-12: KOSPI200/KOSDAQ150 야간선물은 _build_dawn_market_html()의
-    # "새벽시장 포인트" 박스에서 방향성 해석과 함께 항상 표시되므로
-    # 상단 그리드에서는 제거 (중복 + 데이터 없을 때 어색한 placeholder 방지)
 ]
 
 _TAG_META = {
@@ -160,108 +157,6 @@ def _build_market_indicators(market_overview: dict) -> str:
         return ('<div class="market-indicators">'
                 '<p style="color:#666;font-size:.85em;">시장 데이터 없음</p></div>')
     return f'<div class="market-indicators">{badges}</div>'
-
-
-def _build_dawn_market_html(market_overview: dict) -> str:
-    if not market_overview:
-        return ""
-
-    kospi_night  = market_overview.get("kospi200_night")
-    kosdaq_night = market_overview.get("kosdaq150_night")
-
-    if not kospi_night and not kosdaq_night:
-        return ""
-
-    def _direction_label(pct: float) -> tuple:
-        if pct >= 0.3:
-            return "상승 → 콜 방향",   "#ff6b6b", "▲"
-        elif pct <= -0.3:
-            return "하락 → 풋 방향",   "#74c0fc", "▼"
-        else:
-            return "보합 → 중립 방향", "#adb5bd", "━"
-
-    rows = ""
-
-    if kospi_night:
-        pct   = _safe_float(kospi_night,  "change_pct")
-        val   = _safe_float(kospi_night,  "value")
-        # val==0 and pct==0 이면 수집 실패로 판단
-        if val == 0.0 and pct == 0.0:
-            rows += (
-                '<div class="dawn-row">'
-                '<span class="dawn-icon">📈</span>'
-                '<span class="dawn-name">K야간선물(코스피)</span>'
-                '<span class="dawn-val" style="color:#adb5bd;">데이터 없음</span>'
-                '</div>'
-            )
-        else:
-            label, color, arrow = _direction_label(pct)
-            rows += (
-                f'<div class="dawn-row">'
-                f'<span class="dawn-icon">📈</span>'
-                f'<span class="dawn-name">K야간선물(코스피)</span>'
-                f'<span class="dawn-val" style="color:{color};">'
-                f'{arrow} {val:,.2f} ({pct:+.2f}%) {label}</span>'
-                f'</div>'
-            )
-
-    if kosdaq_night:
-        pct   = _safe_float(kosdaq_night, "change_pct")
-        val   = _safe_float(kosdaq_night, "value")
-        # val==0 and pct==0 이면 수집 실패로 판단 (KOSPI200과 동일 가드)
-        if val == 0.0 and pct == 0.0:
-            rows += (
-                '<div class="dawn-row">'
-                '<span class="dawn-icon">📈</span>'
-                '<span class="dawn-name">K야간선물(코스닥)</span>'
-                '<span class="dawn-val" style="color:#adb5bd;">데이터 없음</span>'
-                '</div>'
-            )
-        else:
-            label, color, arrow = _direction_label(pct)
-            rows += (
-                f'<div class="dawn-row">'
-                f'<span class="dawn-icon">📈</span>'
-                f'<span class="dawn-name">K야간선물(코스닥)</span>'
-                f'<span class="dawn-val" style="color:{color};">'
-                f'{arrow} {val:,.2f} ({pct:+.2f}%) {label}</span>'
-                f'</div>'
-            )
-
-    # FIX-MKT-13: 'usd_krw'는 상단 시장지표 그리드의 "달러/원"과 동일한 값이며
-    # (별도 역외/NDF 소스가 아님), 종합판단(avg_pct) 로직에도 쓰이지 않으므로
-    # 새벽시장 박스에서는 제거 — 야간선물 본연의 역할에 집중
-
-    # 실제 데이터가 있는 지표(val≠0 or pct≠0)만 평균에 포함
-    valid_pcts = []
-    for night in [kospi_night, kosdaq_night]:
-        if night:
-            v = _safe_float(night, "value")
-            p = _safe_float(night, "change_pct")
-            if not (v == 0.0 and p == 0.0):
-                valid_pcts.append(p)
-    avg_pct = sum(valid_pcts) / len(valid_pcts) if valid_pcts else 0.0
-
-    if avg_pct >= 0.3:
-        summary_color = "#ff6b6b"
-        summary_text  = "콜 방향이며, 갭 상승 출발 예상됩니다."
-    elif avg_pct <= -0.3:
-        summary_color = "#74c0fc"
-        summary_text  = "풋 방향이며, 갭 하락 출발 예상됩니다."
-    else:
-        summary_color = "#adb5bd"
-        summary_text  = "보합권으로, 방향성 불분명합니다."
-
-    return f"""
-<div class="dawn-market-box">
-  <div class="dawn-header">🌙 새벽시장 포인트!</div>
-  {rows}
-  <div class="dawn-summary">
-    <span class="dawn-star">✦</span>
-    내용대로라면
-    <strong style="color:{summary_color};">{summary_text}</strong>
-  </div>
-</div>"""
 
 
 def _render_market_summary(market_summary: str) -> str:
@@ -735,7 +630,6 @@ def generate_html(
 
     market_indicators_html = _build_market_indicators(market_overview)
     market_summary_html    = _render_market_summary(market_sum)
-    dawn_market_html       = _build_dawn_market_html(market_overview)
 
     sector_badges_html = ""
     for sector in hot_sectors:
@@ -1001,28 +895,6 @@ a:hover { text-decoration: underline; }
 .ind-label { font-size: .75rem; color: var(--text-muted); margin-bottom: .15rem; }
 .ind-value { font-size: .95rem; font-weight: 600; }
 .ind-pct   { font-size: .8rem;  margin-top: .1rem; }
-.dawn-market-box {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  border: 1px solid #2d4a6e; border-radius: 12px;
-  padding: 1.2rem 1.4rem; margin-bottom: 1.5rem;
-}
-.dawn-header {
-  font-size: 1.05rem; font-weight: 700; color: #74c0fc;
-  margin-bottom: .85rem; letter-spacing: .02em;
-}
-.dawn-row {
-  display: flex; align-items: baseline; gap: .6rem;
-  margin-bottom: .5rem; flex-wrap: wrap;
-}
-.dawn-icon { font-size: .9rem; flex-shrink: 0; }
-.dawn-name { font-size: .9rem; color: var(--text-muted); min-width: 160px; flex-shrink: 0; }
-.dawn-val  { font-size: .9rem; font-weight: 600; }
-.dawn-summary {
-  margin-top: .9rem; padding-top: .7rem;
-  border-top: 1px solid #2d4a6e;
-  font-size: .9rem; color: var(--text-muted);
-}
-.dawn-star { color: #74c0fc; margin-right: .3rem; }
 .summary-block { margin-bottom: 1.2rem; }
 .summary-title {
   font-size: .85rem; font-weight: 700; color: var(--accent);
@@ -1184,8 +1056,6 @@ a:hover { text-decoration: underline; }
     <div class="section-title">📊 시장 지표</div>
     {market_indicators_html}
   </div>
-
-  {dawn_market_html}
 
   <div class="section">
     <div class="section-title">🗞 오늘의 시장 요약</div>
