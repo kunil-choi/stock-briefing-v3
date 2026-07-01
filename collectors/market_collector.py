@@ -92,6 +92,21 @@ def _pct(current, previous) -> float:
 
 # ── yfinance 기반 조회 ────────────────────────────────────────────────────────
 
+def _expected_last_trading_date(ref: datetime) -> str:
+    """
+    ref 시각(KST) 기준으로 "가장 최근에 마감했어야 할 KRX 거래일"을 반환.
+    - 09:00 이전 → 어제부터 역산
+    - 09:00 이후 → 오늘부터 역산
+    - 토·일이면 그 이전 평일(금요일 등)까지 거슬러 올라감
+    반환 형식: "YYYY-MM-DD"
+    """
+    candidate = ref.date() if ref.hour >= 9 else (ref - timedelta(days=1)).date()
+    # 공휴일은 별도 처리하지 않고 토·일만 건너뜀
+    while candidate.weekday() >= 5:   # 5=토, 6=일
+        candidate -= timedelta(days=1)
+    return candidate.strftime("%Y-%m-%d")
+
+
 def _fetch_yf(ticker: str, is_krx: bool = False):
     """
     FIX-MKT-11: yfinance가 당일 미개장(특히 미국장 개장 전) 구간에
@@ -104,16 +119,16 @@ def _fetch_yf(ticker: str, is_krx: bool = False):
     수집된 날짜를 로그로 출력해 오류 추적이 가능하도록 한다.
 
     is_krx=True: KRX 지수(KOSPI/KOSDAQ)용. Yahoo의 3rd-party 피드 지연으로
-    최신 봉이 기대 거래일보다 오래된 경우 실패 처리 → 네이버 폴백 유도.
+    최신 봉 날짜가 _expected_last_trading_date와 다르면 실패 처리 → 네이버 폴백.
     """
     if not _YF_AVAILABLE:
         return None, None
     try:
         # 오늘 KST 날짜 기준으로 최근 10 캘린더일 범위를 명시 지정
         # (주말/공휴일 고려해 여유 있게 10일 요청)
-        now_kst   = datetime.now(KST)
-        end_date  = (now_kst + timedelta(days=1)).strftime("%Y-%m-%d")   # 내일 (exclusive)
-        start_date = (now_kst - timedelta(days=10)).strftime("%Y-%m-%d") # 10일 전
+        now_kst    = datetime.now(KST)
+        end_date   = (now_kst + timedelta(days=1)).strftime("%Y-%m-%d")   # 내일 (exclusive)
+        start_date = (now_kst - timedelta(days=10)).strftime("%Y-%m-%d")  # 10일 전
 
         tk   = yf.Ticker(ticker)
         hist = tk.history(start=start_date, end=end_date)
@@ -129,17 +144,14 @@ def _fetch_yf(ticker: str, is_krx: bool = False):
         except Exception:
             latest_date_str = ""
 
-        # KRX 지수: 최신 봉이 3일 이상 오래됐으면 피드 지연으로 판단 → 실패 처리
+        # KRX 지수: 최신 봉이 기대 거래일과 정확히 일치해야 함
+        # 하루라도 오래됐으면 Yahoo 피드 지연으로 판단 → 실패 처리
         if is_krx and latest_date_str:
-            try:
-                latest_dt = datetime.strptime(latest_date_str, "%Y-%m-%d")
-                age_days  = (now_kst.date() - latest_dt.date()).days
-                if age_days > 3:
-                    print(f"  [yfinance] {ticker} KRX 피드 지연 의심 "
-                          f"(최신봉={latest_date_str}, {age_days}일 전) → 실패 처리")
-                    return None, None
-            except Exception:
-                pass
+            expected = _expected_last_trading_date(now_kst)
+            if latest_date_str < expected:
+                print(f"  [yfinance] {ticker} KRX 피드 지연 "
+                      f"(최신봉={latest_date_str}, 기대={expected}) → 네이버 폴백")
+                return None, None
 
         close_prev = float(hist["Close"].iloc[-2])
         close_now  = float(hist["Close"].iloc[-1])
