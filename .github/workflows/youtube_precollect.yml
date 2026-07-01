@@ -37,7 +37,7 @@ jobs:
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           GEMINI_API_KEY:  ${{ secrets.GEMINI_API_KEY }}
-        run: python collectors/youtube_precollect.py
+        run: python -m collectors.youtube_precollect
 
       - name: 💾 결과 커밋
         run: |
