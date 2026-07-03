@@ -18,9 +18,6 @@ import re
 import json
 import urllib.request
 import urllib.parse
-from datetime import datetime, timezone, timedelta
-
-KST = timezone(timedelta(hours=9))
 
 HEADERS = {
     "User-Agent": (
@@ -188,27 +185,12 @@ def _extract_price_from_api(data: dict) -> tuple:
 
 def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
     """
-    종목 현재가(또는 전일종가)를 조회한다.
-
-    FIX-PRICE-5:
-      한국 주식시장은 프리마켓이 없다.
-      - 09:00 이전: Naver API closePrice = 전일 종가
-      - 09:00 이후: closePrice = 정규장 현재가
-      price_label 결정은 ai_analyzer.py(호출부)에서 담당.
-      이 함수는 가격 값만 올바르게 반환한다.
-
-    FIX-PRICE-7:
-      6/17에 HTML 파싱 → JSON API(api.stock.naver.com) 방식으로 전면 교체된
-      이후 가격이 계속 미수집되는 회귀(regression)가 발견됨
-      (6/16까지는 정상, 6/17~ 계속 실패 — git 히스토리로 확인).
-      원인이 무엇이든(엔드포인트 변경/응답 구조 변경/차단 등) 안전하게
-      대응하기 위해, 과거 6/16까지 실제로 동작이 확인됐던 HTML 직접 파싱
-      방식을 3순위 폴백으로 복원한다.
+    전일 종가 + 전전일 대비 변동폭을 반환한다.
 
     우선순위:
-      1) api.stock.naver.com/stock/{code}/basic  (JSON, 1차)
-      2) sise_day 일별 데이터의 최신 종가          (2차 폴백)
-      3) finance.naver.com/item/main.naver HTML 직접 파싱 (3차 폴백, 과거 검증된 방식)
+      1) m.stock.naver.com/api/stock/{code}/basic  (모바일 JSON API)
+         closePrice(전일 종가) + fluctuationsRatio(전전일 대비 등락률)
+      2) sise_day 최근 2일치 종가로 직접 계산
 
     반환:
       {"name": str, "code": str, "price": int,
@@ -227,37 +209,8 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
 
     naver_url = f"https://finance.naver.com/item/main.naver?code={code}"
 
-    # FIX-PRICE-8: 09:00 이전(브리핑 생성 시각)에는 Naver API fluctuationsRatio=0
-    # → sise_day에서 전일·전전일 종가 2개를 가져와 전전일 대비 변동폭 직접 계산
-    now_kst        = datetime.now(KST)
-    is_before_open = (now_kst.hour < 9)
-
-    if is_before_open:
-        print(f"[naver_finance] {stock_name}: 장 전 → sise_day로 전전일 대비 변동폭 계산")
-        daily = fetch_naver_daily_prices(code, days=2)
-        if daily and len(daily) >= 1:
-            price      = daily[0].get("close", 0)
-            prev_price = daily[1].get("close", 0) if len(daily) >= 2 else 0
-            if price > 0:
-                change     = price - prev_price if prev_price > 0 else 0
-                change_pct = round(change / prev_price * 100, 2) if prev_price > 0 else 0.0
-                print(
-                    f"[naver_finance] {stock_name}({code}): "
-                    f"{price:,}원 ({change_pct:+.2f}%) [sise_day 전전일비]"
-                )
-                return {
-                    "name":       stock_name,
-                    "code":       code,
-                    "price":      price,
-                    "change":     change,
-                    "change_pct": change_pct,
-                    "url":        naver_url,
-                }
-        # sise_day 실패 시 API 폴백 (변동폭은 0이지만 가격은 표시)
-        print(f"[naver_finance] {stock_name}: sise_day 실패 → API 폴백 (변동폭 0)")
-
-    # 2. [1순위] Naver Stock API (JSON) — 09:00 이후 또는 sise_day 실패 시
-    api_url = f"https://api.stock.naver.com/stock/{code}/basic"
+    # [1순위] 모바일 API
+    api_url = f"https://m.stock.naver.com/api/stock/{code}/basic"
     data    = _get_json(api_url)
 
     if data:
@@ -266,7 +219,7 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
             if price > 0:
                 print(
                     f"[naver_finance] {stock_name}({code}): "
-                    f"{price:,}원 ({change_pct:+.2f}%) [API]"
+                    f"{price:,}원 ({change_pct:+.2f}%) [전일종가]"
                 )
                 return {
                     "name":       stock_name,
@@ -277,10 +230,10 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
                     "url":        naver_url,
                 }
         except Exception as e:
-            print(f"[naver_finance] API 파싱 오류 ({stock_name}): {e}")
+            print(f"[naver_finance] 모바일 API 파싱 오류 ({stock_name}): {e}")
 
-    # 3. [2순위] sise_day 일별 데이터 최신 종가 (09:00 이후 폴백)
-    print(f"[naver_finance] {stock_name}: API 폴백 → sise_day 사용")
+    # [2순위] sise_day 최근 2일치 종가로 직접 계산
+    print(f"[naver_finance] {stock_name}: 모바일 API 실패 → sise_day 폴백")
     daily = fetch_naver_daily_prices(code, days=2)
     if daily:
         price = daily[0].get("close", 0)
@@ -290,7 +243,7 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
             change_pct = round(change / prev_price * 100, 2) if prev_price > 0 else 0.0
             print(
                 f"[naver_finance] {stock_name}({code}): "
-                f"{price:,}원 ({change_pct:+.2f}%) [sise_day]"
+                f"{price:,}원 ({change_pct:+.2f}%) [전일종가-sise]"
             )
             return {
                 "name":       stock_name,
@@ -300,50 +253,6 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
                 "change_pct": change_pct,
                 "url":        naver_url,
             }
-
-    # 4. [3순위] FIX-PRICE-7: HTML 직접 파싱 (과거 6/16까지 검증된 방식)
-    print(f"[naver_finance] {stock_name}: sise_day 폴백 → HTML 직접 파싱 사용")
-    try:
-        text = _get(naver_url)
-        if text:
-            price_int = None
-            patterns = [
-                r'<p[^>]+class="[^"]*no_today[^"]*"[^>]*>.*?<span[^>]+class="[^"]*blind[^"]*"[^>]*>([\d,]+)',
-                r'<strong[^>]+id="stock_price"[^>]*>([\d,]+)',
-                r'<dd[^>]*>\s*현재가\s*</dd>\s*<dd[^>]*>([\d,]+)',
-            ]
-            for pattern in patterns:
-                m = re.search(pattern, text, re.DOTALL)
-                if m:
-                    raw = m.group(1).replace(",", "")
-                    if raw.isdigit() and int(raw) > 0:
-                        price_int = int(raw)
-                        break
-
-            if price_int:
-                pct = 0.0
-                m_pct = re.search(
-                    r'<span[^>]+class="[^"]*rate[^"]*"[^>]*>.*?([\d.]+)%',
-                    text, re.DOTALL,
-                )
-                if m_pct:
-                    pct = _parse_float(m_pct.group(1))
-                    if re.search(r'class="[^"]*(dn|down)[^"]*"', text):
-                        pct = -abs(pct)
-                print(
-                    f"[naver_finance] {stock_name}({code}): "
-                    f"{price_int:,}원 [HTML 폴백]"
-                )
-                return {
-                    "name":       stock_name,
-                    "code":       code,
-                    "price":      price_int,
-                    "change":     0,
-                    "change_pct": pct,
-                    "url":        naver_url,
-                }
-    except Exception as e:
-        print(f"[naver_finance] HTML 폴백 오류 ({stock_name}): {e}")
 
     print(f"[naver_finance] 현재가 조회 최종 실패: {stock_name}({code})")
     return None
