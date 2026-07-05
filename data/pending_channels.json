@@ -1,33 +1,5 @@
 [
   {
-    "channel_name": "MBC 라디오 시사",
-    "channel_id": "",
-    "count": 1,
-    "first_seen": "2026-07-02",
-    "last_seen": "2026-07-02",
-    "expert_appeared": [
-      "곽상준"
-    ],
-    "sample_videos": [
-      "[뉴스하이킥] 국민연금 리밸런싱과 매도 폭탄설•주가하락설...그 공포의 진실은? - 곽상준, MBC 2607"
-    ],
-    "status": "pending"
-  },
-  {
-    "channel_name": "연합뉴스TV",
-    "channel_id": "",
-    "count": 1,
-    "first_seen": "2026-07-03",
-    "last_seen": "2026-07-03",
-    "expert_appeared": [
-      "염승환"
-    ],
-    "sample_videos": [
-      "[🔴속보] 반도체주 차익실현에 뉴욕증시 약세 마감…마이크론 10% 급락｜뉴욕증시 전문가분석(염승환 LS증권 "
-    ],
-    "status": "pending"
-  },
-  {
     "channel_name": "삼프로TV 3PROTV",
     "channel_id": "",
     "count": 3,
@@ -45,6 +17,40 @@
       "코스피의 착시효과...찐 바닥 오면 &#39;이 주식&#39;부터 당장 정리ㅣ정프로, 명민준, 박가영, 유창",
       "[7월 2일 마감시황] 메타 쇼크보다 무서운 투자심리…반도체 급락장, 지금은 ‘참을 인’이 필요한 이유ㅣ홍선",
       "반도체 급락에도 AI는 끝나지 않았다 | 박병창 MP파트너스 대표 [마켓 인사이드]"
+    ],
+    "status": "pending"
+  },
+  {
+    "channel_name": "삼프로TV 3PROTV",
+    "channel_id": "",
+    "count": 1,
+    "first_seen": "2026-07-06",
+    "last_seen": "2026-07-06",
+    "expert_appeared": [
+      "이권희",
+      "박병창",
+      "이선엽",
+      "김장열",
+      "장우진",
+      "박명석"
+    ],
+    "sample_videos": [
+      "&quot;수십조 매도 폭탄...!&quot; 과연 그럴까? 계산해 봤습니다 | 빈센트 하나증권 애널리스트 "
+    ],
+    "status": "pending"
+  },
+  {
+    "channel_name": "최경영TV",
+    "channel_id": "",
+    "count": 1,
+    "first_seen": "2026-07-06",
+    "last_seen": "2026-07-06",
+    "expert_appeared": [
+      "최경영",
+      "곽상준"
+    ],
+    "sample_videos": [
+      "드디어 싼 종목이 보이기 시작합니다! 변동성이 쓸고간 장, 반도체-조방원-소부장-바이오-로봇... 증시각도기"
     ],
     "status": "pending"
   }
