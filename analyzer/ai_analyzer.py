@@ -882,6 +882,43 @@ def _restore_source_url(item: dict, all_data: list) -> None:
                         break
 
 
+# ── 증권사 리포트 요약 (영상 내레이션용) ─────────────────────────────────
+# collectors/analyst_collector.py가 all_data에 태그해 둔 analyst_category
+# (simultaneous/new_coverage/single_broker)를 그대로 재사용해, 영상 파이프라인이
+# briefing_data.json 하나만 보고도 "동시언급/신규커버리지/유의미 단독언급"을
+# 재구성할 수 있도록 정리해 저장한다. (기존에는 all_data에만 존재하고
+# briefing_data.json에는 저장되지 않아, 영상 스크립트 생성 단계에서
+# 증권사 리포트 내용이 통째로 유실되고 있었다.)
+
+def build_brokerage_reports(all_data: list) -> dict:
+    reports = [d for d in all_data if d.get("source_type") == "애널리스트"]
+
+    def _pick(items: list) -> list:
+        out = []
+        for r in items:
+            brokers = r.get("simultaneous_brokers") or [r.get("source_name", "")]
+            out.append({
+                "stock_name": r.get("stock_name", ""),
+                "brokers":    [b for b in brokers if b],
+                "title":      r.get("report_title") or r.get("title", ""),
+                "opinion":    r.get("opinion", ""),
+                "target_price": r.get("target_price", ""),
+                "ai_summary": r.get("ai_summary", ""),
+                "date":       r.get("date", ""),
+                "report_day": r.get("report_day", "today"),
+            })
+        return out
+
+    return {
+        "simultaneous":  _pick([r for r in reports if r.get("analyst_category") == "simultaneous"]),
+        "new_coverage":  _pick([r for r in reports if r.get("analyst_category") == "new_coverage"]),
+        "single_significant": _pick([
+            r for r in reports
+            if r.get("analyst_category") == "single_broker" and r.get("significance_reason")
+        ]),
+    }
+
+
 # ── fallback HTML ───────────────────────────────────────────────────────
 
 def _fallback_html(error_msg: str, briefing_date: str) -> str:
@@ -1137,6 +1174,7 @@ def analyze_and_generate_html(
     # ── 결과 저장 ──────────────────────────────────────────────────────────
     if market_overview:
         result["market_data"] = market_overview
+    result["brokerage_reports"] = build_brokerage_reports(all_data)
     os.makedirs("data", exist_ok=True)
     try:
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:

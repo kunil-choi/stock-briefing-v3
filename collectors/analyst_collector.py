@@ -521,6 +521,12 @@ def collect_analyst(api_key: str = "") -> list:
     for r in today_classified["single_broker"]:
         r["analyst_category"] = "single_broker"
         r["report_day"] = "today"
+        # 웹 브리핑의 "단독 언급" 섹션은 오늘자 전체를 그대로 노출하지만,
+        # 영상 내레이션(build_brokerage_reports)은 유의미한 단독언급만 골라 써야
+        # 하므로 제거하지 않고 significance_reason만 태깅해 둔다.
+        significant, reason = _is_significant_single(r)
+        if significant:
+            r["significance_reason"] = reason
 
     today_all = (
         today_classified["simultaneous"]
