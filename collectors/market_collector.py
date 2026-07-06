@@ -123,8 +123,9 @@ def _fetch_yf(ticker: str, is_krx: bool = False):
             print(f"  [yfinance] {ticker} 데이터 부족 (행수={len(hist)})")
             return None, None
 
-        # 주말 행 제외: weekday < 5인 행만 필터링
-        valid_hist = hist[hist.index.map(lambda x: x.weekday() < 5)]
+        # 주말 행 제외: 날짜 문자열(YYYY-MM-DD) 기준으로 weekday 판단 (timezone 무관)
+        import pandas as pd
+        valid_hist = hist[hist.index.map(lambda x: pd.Timestamp(str(x)[:10]).weekday() < 5)]
         if len(valid_hist) < 2:
             print(f"  [yfinance] {ticker} 유효 거래일 데이터 부족 (행수={len(valid_hist)})")
             return None, None
