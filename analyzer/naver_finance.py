@@ -221,7 +221,7 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
                 if change_pct == 0.0:
                     print(f"[naver_finance] {stock_name}: 모바일 API change_pct=0 → sise_day 재계산")
                     daily = fetch_naver_daily_prices(code, days=5)
-                    if daily and len(daily) >= 2:
+                    if daily and len(daily) >= 2 and daily[1]["close"] > 0:
                         sise_change = round((daily[0]["close"] - daily[1]["close"]) / daily[1]["close"] * 100, 2)
                         if sise_change != 0.0:
                             change_pct = sise_change

@@ -634,7 +634,7 @@ async function loadBriefingForCorrection() {
 function _renderSummaryBlocks() {
   const container = document.getElementById("correct-summary-blocks");
   // summary-block 내부 텍스트 추출
-  const re = /<div class="summary-block">[\s\S]*?<div class="summary-title">([^<]*)<\/div>[\s\S]*?<p class="summary-text">([^<]*)<\/p>[\s\S]*?<\/div>/g;
+  const re = /<div class="summary-block">[\s\S]*?<div class="summary-title">([^<]*)<\/div>[\s\S]*?<p class="summary-text">([\s\S]*?)<\/p>[\s\S]*?<\/div>/g;
   let m, html = "", idx = 0;
   while ((m = re.exec(_briefingHtml)) !== null) {
     const title = m[1];
@@ -656,7 +656,7 @@ async function saveSummaryEdits() {
   if (!_briefingHtml) { showToast("먼저 브리핑을 불러오세요", "error"); return; }
   const count = parseInt(document.getElementById("correct-summary-blocks").dataset.count || 0);
   let updated = _briefingHtml;
-  const re = /(<div class="summary-block">[\s\S]*?<div class="summary-title">[^<]*<\/div>[\s\S]*?<p class="summary-text">)([^<]*)(<\/p>[\s\S]*?<\/div>)/g;
+  const re = /(<div class="summary-block">[\s\S]*?<div class="summary-title">[^<]*<\/div>[\s\S]*?<p class="summary-text">)([\s\S]*?)(<\/p>[\s\S]*?<\/div>)/g;
   let idx = 0, result = "";
   let lastIndex = 0;
   let m;
@@ -683,13 +683,13 @@ async function saveSummaryEdits() {
 
 function _renderStockList() {
   const container = document.getElementById("correct-stock-list");
-  // stock-card 내부 종목명 추출 (stock-name 클래스)
-  const re = /<div class="stock-card[^"]*">([\s\S]*?)<\/div>\s*<\/div>\s*<\/div>/g;
-  const nameRe = /class="stock-name[^"]*">([^<]+)</;
-  let m, html = "", found = 0;
+  // stock-name 클래스를 가진 요소에서 직접 종목명 추출 (카드 중첩 구조 무관)
+  const re = /class="stock-name[^"]*">([^<]+)</g;
+  let m, html = "", found = 0, seen = new Set();
   while ((m = re.exec(_briefingHtml)) !== null) {
-    const nm = nameRe.exec(m[0]);
-    const stockName = nm ? nm[1].trim() : `종목 #${found+1}`;
+    const stockName = m[1].trim();
+    if (!stockName || seen.has(stockName)) continue;
+    seen.add(stockName);
     const safeKey = encodeURIComponent(stockName);
     html += `
       <div id="sc-${safeKey}" style="display:flex;align-items:center;gap:.75rem;
@@ -704,17 +704,40 @@ function _renderStockList() {
     : '<div style="color:var(--muted);font-size:.82rem;">종목 카드를 찾을 수 없습니다.</div>';
 }
 
+function _findStockCardBounds(html, stockName) {
+  // stock-name 앵커에서 역방향으로 stock-card 시작을 찾고
+  // div 중첩 깊이를 추적해 정확한 종료 위치를 반환
+  const anchor = `>${stockName}<`;
+  const anchorIdx = html.indexOf(anchor);
+  if (anchorIdx === -1) return null;
+  const cardStart = html.lastIndexOf('<div class="stock-card', anchorIdx);
+  if (cardStart === -1) return null;
+  let depth = 0, i = cardStart;
+  while (i < html.length) {
+    if (html[i] !== '<') { i++; continue; }
+    if (html.slice(i, i + 4) === '<div') {
+      depth++;
+      i = html.indexOf('>', i) + 1;
+    } else if (html.slice(i, i + 4) === '</di') {
+      depth--;
+      const end = html.indexOf('>', i) + 1;
+      if (depth === 0) return { start: cardStart, end };
+      i = end;
+    } else {
+      i = html.indexOf('>', i) + 1;
+    }
+    if (i <= 0) break;
+  }
+  return null;
+}
+
 async function deleteStockCard(stockName) {
   if (!_briefingHtml) { showToast("먼저 브리핑을 불러오세요", "error"); return; }
   if (!confirm(`"${stockName}" 종목 카드를 삭제할까요?`)) return;
 
-  // stock-name이 포함된 stock-card 블록 제거 (greedy하지 않게)
-  const escapedName = stockName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  // stock-card div 전체를 찾아 제거
-  const cardRe = new RegExp(
-    `<div class="stock-card[^"]*">[\\s\\S]*?${escapedName}[\\s\\S]*?<\\/div>\\s*<\\/div>\\s*<\\/div>`, "g"
-  );
-  const updated = _briefingHtml.replace(cardRe, "");
+  const bounds = _findStockCardBounds(_briefingHtml, stockName);
+  if (!bounds) { showToast("해당 종목 카드를 찾을 수 없습니다", "error"); return; }
+  const updated = _briefingHtml.slice(0, bounds.start) + _briefingHtml.slice(bounds.end);
   if (updated === _briefingHtml) {
     showToast("해당 종목 카드를 찾을 수 없습니다", "error"); return;
   }
