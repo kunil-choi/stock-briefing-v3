@@ -41,7 +41,7 @@
   },
   {
     "channel_name": "최경영TV",
-    "channel_id": "",
+    "channel_id": "UCE-94tymU-LjuglJ_wqzhHA",
     "count": 1,
     "first_seen": "2026-07-06",
     "last_seen": "2026-07-06",
@@ -52,6 +52,6 @@
     "sample_videos": [
       "드디어 싼 종목이 보이기 시작합니다! 변동성이 쓸고간 장, 반도체-조방원-소부장-바이오-로봇... 증시각도기"
     ],
-    "status": "pending"
+    "status": "approved"
   }
 ]
