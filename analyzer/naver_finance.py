@@ -217,6 +217,15 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
         try:
             price, change, change_pct = _extract_price_from_api(data)
             if price > 0:
+                # change_pct가 0.0이면 sise_day로 재계산 (월요일 등 주말 직후 API 이슈 대응)
+                if change_pct == 0.0:
+                    print(f"[naver_finance] {stock_name}: 모바일 API change_pct=0 → sise_day 재계산")
+                    daily = fetch_naver_daily_prices(code, days=5)
+                    if daily and len(daily) >= 2:
+                        sise_change = round((daily[0]["close"] - daily[1]["close"]) / daily[1]["close"] * 100, 2)
+                        if sise_change != 0.0:
+                            change_pct = sise_change
+                            change = daily[0]["close"] - daily[1]["close"]
                 print(
                     f"[naver_finance] {stock_name}({code}): "
                     f"{price:,}원 ({change_pct:+.2f}%) [전일종가]"
@@ -232,9 +241,9 @@ def fetch_naver_stock_price(stock_name: str, code_override: str = "") -> dict:
         except Exception as e:
             print(f"[naver_finance] 모바일 API 파싱 오류 ({stock_name}): {e}")
 
-    # [2순위] sise_day 최근 2일치 종가로 직접 계산
+    # [2순위] sise_day 최근 5일치 종가로 직접 계산 (주말 건너뛴 전거래일 확보)
     print(f"[naver_finance] {stock_name}: 모바일 API 실패 → sise_day 폴백")
-    daily = fetch_naver_daily_prices(code, days=2)
+    daily = fetch_naver_daily_prices(code, days=5)
     if daily:
         price = daily[0].get("close", 0)
         if price > 0:

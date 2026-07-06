@@ -123,9 +123,15 @@ def _fetch_yf(ticker: str, is_krx: bool = False):
             print(f"  [yfinance] {ticker} 데이터 부족 (행수={len(hist)})")
             return None, None
 
+        # 주말 행 제외: weekday < 5인 행만 필터링
+        valid_hist = hist[hist.index.map(lambda x: x.weekday() < 5)]
+        if len(valid_hist) < 2:
+            print(f"  [yfinance] {ticker} 유효 거래일 데이터 부족 (행수={len(valid_hist)})")
+            return None, None
+
         # 날짜 인덱스를 문자열로 변환해 로그 출력 (날짜 오류 추적용)
         try:
-            dates = [str(d)[:10] for d in hist.index]
+            dates = [str(d)[:10] for d in valid_hist.index]
             latest_date_str = dates[-1]
             print(f"  [yfinance] {ticker} 수집 날짜: {dates[-2]} → {latest_date_str}")
         except Exception:
@@ -140,8 +146,8 @@ def _fetch_yf(ticker: str, is_krx: bool = False):
                       f"(최신봉={latest_date_str}, 기대={expected}) → 네이버 폴백")
                 return None, None
 
-        close_prev = float(hist["Close"].iloc[-2])
-        close_now  = float(hist["Close"].iloc[-1])
+        close_prev = float(valid_hist["Close"].iloc[-2])
+        close_now  = float(valid_hist["Close"].iloc[-1])
         if math.isnan(close_prev) or math.isnan(close_now):
             print(f"  [yfinance] {ticker} NaN 감지 → 수집 실패 처리")
             return None, None
