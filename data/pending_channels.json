@@ -2,27 +2,6 @@
   {
     "channel_name": "삼프로TV 3PROTV",
     "channel_id": "",
-    "count": 3,
-    "first_seen": "2026-07-03",
-    "last_seen": "2026-07-03",
-    "expert_appeared": [
-      "박병창",
-      "이선엽",
-      "김장열",
-      "이권희",
-      "장우진",
-      "박명석"
-    ],
-    "sample_videos": [
-      "코스피의 착시효과...찐 바닥 오면 &#39;이 주식&#39;부터 당장 정리ㅣ정프로, 명민준, 박가영, 유창",
-      "[7월 2일 마감시황] 메타 쇼크보다 무서운 투자심리…반도체 급락장, 지금은 ‘참을 인’이 필요한 이유ㅣ홍선",
-      "반도체 급락에도 AI는 끝나지 않았다 | 박병창 MP파트너스 대표 [마켓 인사이드]"
-    ],
-    "status": "rejected"
-  },
-  {
-    "channel_name": "삼프로TV 3PROTV",
-    "channel_id": "",
     "count": 1,
     "first_seen": "2026-07-06",
     "last_seen": "2026-07-06",
@@ -53,5 +32,49 @@
       "드디어 싼 종목이 보이기 시작합니다! 변동성이 쓸고간 장, 반도체-조방원-소부장-바이오-로봇... 증시각도기"
     ],
     "status": "approved"
+  },
+  {
+    "channel_name": "교보증권 머니텐 Money10",
+    "channel_id": "",
+    "count": 1,
+    "first_seen": "2026-07-06",
+    "last_seen": "2026-07-06",
+    "expert_appeared": [
+      "박병창"
+    ],
+    "sample_videos": [
+      "코스피와 코스닥의 극단적인 디커플링, 이제 M7는 지고 P7이 온다 | 박병창의 증시연구소"
+    ],
+    "status": "pending"
+  },
+  {
+    "channel_name": "스마트튜브(스튜TV)",
+    "channel_id": "",
+    "count": 1,
+    "first_seen": "2026-07-06",
+    "last_seen": "2026-07-06",
+    "expert_appeared": [
+      "박세익"
+    ],
+    "sample_videos": [
+      "하반기 주식투자는 이렇게 하셔야 합니다! (체슬리투자자문 박세익 대표)"
+    ],
+    "status": "pending"
+  },
+  {
+    "channel_name": "삼프로TV 3PROTV",
+    "channel_id": "",
+    "count": 2,
+    "first_seen": "2026-07-06",
+    "last_seen": "2026-07-06",
+    "expert_appeared": [
+      "박병창",
+      "김동환"
+    ],
+    "sample_videos": [
+      "삼성전자·SK하이닉스 이번 주가 진짜 중요하다 | 박병창 MP파트너스 대표 [마켓 인사이드]",
+      "트럼프, &#39;크립토는 큰 산업이며, AI처럼 주도권이 중요&#39;···밈 코인으로 14억 달러 수익 "
+    ],
+    "status": "pending"
   }
 ]
