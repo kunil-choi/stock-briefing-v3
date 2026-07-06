@@ -21,7 +21,7 @@ import html as _he
 from datetime import datetime, timedelta, timezone
 
 KST         = timezone(timedelta(hours=9))
-PARA_TITLES = ["📌 시장 개요", "📊 주요 이슈", "🔍 핵심 포인트", "💡 전망"]
+PARA_TITLES = ["📌 최근 흐름", "📊 주요 이슈", "🔍 핵심 포인트", "💡 전망"]
 # FIX-PARA-1: "투자 포인트" + "리스크 요인" 두 단락을 "핵심 포인트" 하나로 통합.
 # 기존 5단락 구조에서 긍정/부정 내용이 제목과 뒤집혀 표출되던 문제 해결.
 # 프롬프트도 4단락으로 맞춰 수정 (ai_analyzer.py FIX-PARA-1 연동).
@@ -1058,7 +1058,7 @@ a:hover { text-decoration: underline; }
   </div>
 
   <div class="section">
-    <div class="section-title">🗞 오늘의 시장 요약</div>
+    <div class="section-title">🗞 최근 시장 흐름</div>
     {market_summary_html}
   </div>
 
