@@ -1,17 +1,15 @@
 [
   {
-    "channel_name": "삼프로TV 3PROTV",
+    "channel_name": "SBS 뉴스",
     "channel_id": "",
-    "count": 2,
-    "first_seen": "2026-07-06",
-    "last_seen": "2026-07-06",
+    "count": 1,
+    "first_seen": "2026-07-07",
+    "last_seen": "2026-07-07",
     "expert_appeared": [
-      "박병창",
-      "김동환"
+      "윤지호"
     ],
     "sample_videos": [
-      "삼성전자·SK하이닉스 이번 주가 진짜 중요하다 | 박병창 MP파트너스 대표 [마켓 인사이드]",
-      "트럼프, &#39;크립토는 큰 산업이며, AI처럼 주도권이 중요&#39;···밈 코인으로 14억 달러 수익 "
+      "삼성전자 &#39;최대 실적&#39;에도 7% 급락 &quot;왜 이래요?&quot;.. 윤지호 경제평론가가"
     ],
     "status": "pending"
   },
@@ -31,25 +29,11 @@
     "status": "approved"
   },
   {
-    "channel_name": "동아일보",
-    "channel_id": "",
-    "count": 1,
-    "first_seen": "2026-07-07",
-    "last_seen": "2026-07-07",
-    "expert_appeared": [
-      "오건영"
-    ],
-    "sample_videos": [
-      "달러 넘친다는데 환율은 왜 이래? 우리가 알던 공식 다 깨졌다 [머니가이드 for 영올드 Ep.35 오건영]"
-    ],
-    "status": "pending"
-  },
-  {
     "channel_name": "표영호 tv  / 경제적 자유와 행복을 위하여",
     "channel_id": "",
     "count": 1,
-    "first_seen": "2026-07-07",
-    "last_seen": "2026-07-07",
+    "first_seen": "2026-07-08",
+    "last_seen": "2026-07-08",
     "expert_appeared": [
       "염승환"
     ],
@@ -62,8 +46,8 @@
     "channel_name": "SBS Biz 뉴스",
     "channel_id": "",
     "count": 1,
-    "first_seen": "2026-07-07",
-    "last_seen": "2026-07-07",
+    "first_seen": "2026-07-08",
+    "last_seen": "2026-07-08",
     "expert_appeared": [
       "염승환"
     ],
@@ -76,8 +60,8 @@
     "channel_name": "연합뉴스TV",
     "channel_id": "",
     "count": 1,
-    "first_seen": "2026-07-07",
-    "last_seen": "2026-07-07",
+    "first_seen": "2026-07-08",
+    "last_seen": "2026-07-08",
     "expert_appeared": [
       "염승환"
     ],
@@ -90,8 +74,8 @@
     "channel_name": "스마트튜브(스튜TV)",
     "channel_id": "",
     "count": 1,
-    "first_seen": "2026-07-07",
-    "last_seen": "2026-07-07",
+    "first_seen": "2026-07-08",
+    "last_seen": "2026-07-08",
     "expert_appeared": [
       "이선엽"
     ],
@@ -104,8 +88,8 @@
     "channel_name": "와이스트릿 - 지식과 자산의 복리효과",
     "channel_id": "",
     "count": 1,
-    "first_seen": "2026-07-07",
-    "last_seen": "2026-07-07",
+    "first_seen": "2026-07-08",
+    "last_seen": "2026-07-08",
     "expert_appeared": [
       "이선엽"
     ],
@@ -118,8 +102,8 @@
     "channel_name": "SBS 시사교양 라디오 - 시교라",
     "channel_id": "",
     "count": 2,
-    "first_seen": "2026-07-07",
-    "last_seen": "2026-07-07",
+    "first_seen": "2026-07-08",
+    "last_seen": "2026-07-08",
     "expert_appeared": [
       "이선엽",
       "송이라"
@@ -134,8 +118,8 @@
     "channel_name": "삼프로TV 3PROTV",
     "channel_id": "",
     "count": 1,
-    "first_seen": "2026-07-07",
-    "last_seen": "2026-07-07",
+    "first_seen": "2026-07-08",
+    "last_seen": "2026-07-08",
     "expert_appeared": [
       "박병창",
       "이선엽",
@@ -153,8 +137,8 @@
     "channel_name": "SBS 뉴스",
     "channel_id": "",
     "count": 1,
-    "first_seen": "2026-07-07",
-    "last_seen": "2026-07-07",
+    "first_seen": "2026-07-08",
+    "last_seen": "2026-07-08",
     "expert_appeared": [
       "윤지호"
     ],
