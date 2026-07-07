@@ -50,7 +50,9 @@ jobs:
           KST = timezone(timedelta(hours=9))
           today = datetime.now(KST).strftime("%Y-%m-%d")
           current_run_id = os.getenv("GITHUB_RUN_ID", "")
-          token = os.getenv("GH_TOKEN", "")
+          # GH_TOKEN 시크릿에 트레일링 개행이 섞여 있으면 Authorization 헤더가
+          # 깨지므로(Invalid header value) 공백/개행을 제거한다.
+          token = os.getenv("GH_TOKEN", "").strip()
           repo = os.getenv("GITHUB_REPOSITORY", "")
 
           url = f"https://api.github.com/repos/{repo}/actions/workflows/daily_briefing.yml/runs?status=success&per_page=10"
@@ -206,8 +208,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
+          # GH_TOKEN 시크릿에 트레일링 개행/공백이 섞여 있으면 Authorization 헤더가
+          # 깨져 그 뒤 헤더·JSON 바디까지 오염되므로("Problems parsing JSON") 제거한다.
+          CLEAN_TOKEN="$(printf '%s' "${GH_TOKEN}" | tr -d '\n\r ')"
           response=$(curl -sS -o /tmp/dispatch_resp.txt -w "%{http_code}" -X POST \
-            -H "Authorization: token ${GH_TOKEN}" \
+            -H "Authorization: token ${CLEAN_TOKEN}" \
             -H "Accept: application/vnd.github.v3+json" \
             -H "Content-Type: application/json" \
             https://api.github.com/repos/kunil-choi/stock-briefing-video/actions/workflows/daily_broadcast.yml/dispatches \
