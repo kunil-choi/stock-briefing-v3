@@ -2,21 +2,18 @@
   {
     "channel_name": "삼프로TV 3PROTV",
     "channel_id": "",
-    "count": 1,
+    "count": 2,
     "first_seen": "2026-07-06",
     "last_seen": "2026-07-06",
     "expert_appeared": [
-      "이권희",
       "박병창",
-      "이선엽",
-      "김장열",
-      "장우진",
-      "박명석"
+      "김동환"
     ],
     "sample_videos": [
-      "&quot;수십조 매도 폭탄...!&quot; 과연 그럴까? 계산해 봤습니다 | 빈센트 하나증권 애널리스트 "
+      "삼성전자·SK하이닉스 이번 주가 진짜 중요하다 | 박병창 MP파트너스 대표 [마켓 인사이드]",
+      "트럼프, &#39;크립토는 큰 산업이며, AI처럼 주도권이 중요&#39;···밈 코인으로 14억 달러 수익 "
     ],
-    "status": "rejected"
+    "status": "pending"
   },
   {
     "channel_name": "최경영TV",
@@ -34,16 +31,58 @@
     "status": "approved"
   },
   {
-    "channel_name": "교보증권 머니텐 Money10",
+    "channel_name": "동아일보",
     "channel_id": "",
     "count": 1,
-    "first_seen": "2026-07-06",
-    "last_seen": "2026-07-06",
+    "first_seen": "2026-07-07",
+    "last_seen": "2026-07-07",
     "expert_appeared": [
-      "박병창"
+      "오건영"
     ],
     "sample_videos": [
-      "코스피와 코스닥의 극단적인 디커플링, 이제 M7는 지고 P7이 온다 | 박병창의 증시연구소"
+      "달러 넘친다는데 환율은 왜 이래? 우리가 알던 공식 다 깨졌다 [머니가이드 for 영올드 Ep.35 오건영]"
+    ],
+    "status": "pending"
+  },
+  {
+    "channel_name": "표영호 tv  / 경제적 자유와 행복을 위하여",
+    "channel_id": "",
+    "count": 1,
+    "first_seen": "2026-07-07",
+    "last_seen": "2026-07-07",
+    "expert_appeared": [
+      "염승환"
+    ],
+    "sample_videos": [
+      "지금 손절 할까? 아니면 매수 기회일까?(염승환 이사)"
+    ],
+    "status": "pending"
+  },
+  {
+    "channel_name": "SBS Biz 뉴스",
+    "channel_id": "",
+    "count": 1,
+    "first_seen": "2026-07-07",
+    "last_seen": "2026-07-07",
+    "expert_appeared": [
+      "염승환"
+    ],
+    "sample_videos": [
+      "거래 대금도 꺾였다? 삼전 역대급 실적에도 급락 [증시타임]"
+    ],
+    "status": "pending"
+  },
+  {
+    "channel_name": "연합뉴스TV",
+    "channel_id": "",
+    "count": 1,
+    "first_seen": "2026-07-07",
+    "last_seen": "2026-07-07",
+    "expert_appeared": [
+      "염승환"
+    ],
+    "sample_videos": [
+      "[🔴속보] &#39;AI주 반등&#39; 다우 53,000 첫 돌파…삼성전자 실적·하이닉스 ADR 상장 기대"
     ],
     "status": "pending"
   },
@@ -51,29 +90,76 @@
     "channel_name": "스마트튜브(스튜TV)",
     "channel_id": "",
     "count": 1,
-    "first_seen": "2026-07-06",
-    "last_seen": "2026-07-06",
+    "first_seen": "2026-07-07",
+    "last_seen": "2026-07-07",
     "expert_appeared": [
-      "박세익"
+      "이선엽"
     ],
     "sample_videos": [
-      "하반기 주식투자는 이렇게 하셔야 합니다! (체슬리투자자문 박세익 대표)"
+      "주식 시장 변동을 못 견디겠다면 &#39;이 기업&#39;이 답입니다!(AFW파트너스 이선엽 대표)"
+    ],
+    "status": "pending"
+  },
+  {
+    "channel_name": "와이스트릿 - 지식과 자산의 복리효과",
+    "channel_id": "",
+    "count": 1,
+    "first_seen": "2026-07-07",
+    "last_seen": "2026-07-07",
+    "expert_appeared": [
+      "이선엽"
+    ],
+    "sample_videos": [
+      "89조원 실적에도 폭락장 죄 없는 주식에게 기회 온다 / 월간 이선엽 26년 7월호 (풀버전)"
+    ],
+    "status": "pending"
+  },
+  {
+    "channel_name": "SBS 시사교양 라디오 - 시교라",
+    "channel_id": "",
+    "count": 2,
+    "first_seen": "2026-07-07",
+    "last_seen": "2026-07-07",
+    "expert_appeared": [
+      "이선엽",
+      "송이라"
+    ],
+    "sample_videos": [
+      "[목돈연구소] 투자 심리의 변곡점은 빅테크 실적발표 I 돈터뷰 260707(화)",
+      "[목돈연구소]  삼성전자 영업이익이 코스피 하반기 장세를 결정한다? 外 260707(화)"
     ],
     "status": "pending"
   },
   {
     "channel_name": "삼프로TV 3PROTV",
     "channel_id": "",
-    "count": 2,
-    "first_seen": "2026-07-06",
-    "last_seen": "2026-07-06",
+    "count": 1,
+    "first_seen": "2026-07-07",
+    "last_seen": "2026-07-07",
     "expert_appeared": [
       "박병창",
-      "김동환"
+      "이선엽",
+      "김장열",
+      "이권희",
+      "장우진",
+      "박명석"
     ],
     "sample_videos": [
-      "삼성전자·SK하이닉스 이번 주가 진짜 중요하다 | 박병창 MP파트너스 대표 [마켓 인사이드]",
-      "트럼프, &#39;크립토는 큰 산업이며, AI처럼 주도권이 중요&#39;···밈 코인으로 14억 달러 수익 "
+      "삼성전자 &#39;86조&#39; 실적보다 중요한 변수…반도체 주가가 못 오르는 진짜 이유 | 김장열 유니스"
+    ],
+    "status": "pending"
+  },
+  {
+    "channel_name": "SBS 뉴스",
+    "channel_id": "",
+    "count": 1,
+    "first_seen": "2026-07-07",
+    "last_seen": "2026-07-07",
+    "expert_appeared": [
+      "윤지호"
+    ],
+    "sample_videos": [
+      "삼성전자 &#39;최대 실적&#39;에도 7% 급락 &quot;왜 이래요?&quot;.. 윤지호 경제평론가가"
     ],
     "status": "pending"
   }
