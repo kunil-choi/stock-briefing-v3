@@ -25,6 +25,8 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from collections import defaultdict
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 KST = timezone(timedelta(hours=9))
 
@@ -290,10 +292,14 @@ def collect_naver_research(days: int = REPORT_DAYS) -> list:
     """
     results = []
 
+    session = requests.Session()
+    adapter = HTTPAdapter(max_retries=Retry(total=0))
+    session.mount("https://", adapter)
+
     for page in range(1, 6):
         url = f"https://finance.naver.com/research/company_list.naver?&page={page}"
         try:
-            resp = requests.get(url, headers=_HEADERS, timeout=10)
+            resp = session.get(url, headers=_HEADERS, timeout=10)
             resp.encoding = "euc-kr"
             soup = BeautifulSoup(resp.text, "html.parser")
             rows = soup.select("table.type_1 tr")
@@ -365,6 +371,7 @@ def collect_naver_research(days: int = REPORT_DAYS) -> list:
 
         except Exception as e:
             print(f"  [리서치 페이지 {page}] 오류: {e}")
+            break
 
     return results
 
