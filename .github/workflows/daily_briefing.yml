@@ -180,6 +180,7 @@ jobs:
           echo "📚 아카이브 파일 수: ${ARCHIVE_COUNT}"
 
       - name: 🚀 변경사항 커밋 및 푸시
+        id: commit_push
         if: steps.duplicate_check.outputs.duplicate != 'true'
         run: |
           git config --local user.email "action@github.com"
@@ -187,6 +188,7 @@ jobs:
           git add docs/ data/ || true
           if git diff --quiet && git diff --staged --quiet; then
             echo "ℹ️  변경사항 없음 → 커밋 스킵"
+            echo "committed=false" >> "$GITHUB_OUTPUT"
           else
             git commit -m "📊 브리핑 자동 업데이트: $(TZ='Asia/Seoul' date +'%Y-%m-%d %H:%M KST')"
             for i in 1 2 3; do
@@ -196,7 +198,25 @@ jobs:
                 git pull --rebase origin main || true
               }
             done
+            echo "committed=true" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: 📡 영상 생성 파이프라인 트리거 (stock-briefing-video)
+        if: steps.duplicate_check.outputs.duplicate != 'true' && steps.commit_push.outputs.committed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          response=$(curl -sS -o /tmp/dispatch_resp.txt -w "%{http_code}" -X POST \
+            -H "Authorization: token ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/kunil-choi/stock-briefing-video/actions/workflows/generate_script.yml/dispatches \
+            -d '{"ref":"main"}')
+          if [ "$response" != "204" ]; then
+            echo "❌ stock-briefing-video dispatch 실패 (HTTP ${response})"
+            cat /tmp/dispatch_resp.txt
+            exit 1
+          fi
+          echo "✅ stock-briefing-video의 generate_script.yml 트리거 완료"
 
       - name: 📋 실행 요약 (항상 출력)
         if: always()
