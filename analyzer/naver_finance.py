@@ -287,38 +287,64 @@ def fetch_naver_company_info(code: str) -> dict:
     return {"sector": sector, "peers": peers}
 
 
+_ROW_RE        = re.compile(r'<tr[^>]*>((?:(?!</tr>).)*?)</tr>', re.DOTALL)
+_CELL_RE       = re.compile(r'<td[^>]*>(.*?)</td>', re.DOTALL)
+_TAG_RE        = re.compile(r'<[^>]+>')
+_NUM_RE        = re.compile(r'(\d[\d,]*)')
+_DATE_RE       = re.compile(r'(\d{4}\.\d{2}\.\d{2})')
+
+
 def fetch_naver_daily_prices(code: str, days: int = 14) -> list:
     """
     sise_day에서 일별 OHLCV 데이터 반환 (최신순).
 
     네이버 sise_day 컬럼 순서: 날짜 / 종가 / 전일비 / 시가 / 고가 / 저가 / 거래량
-    정규식 그룹 인덱스:          [0]    [1]    [2]     [3]   [4]   [5]   [6]
 
-    FIX-SISE-1: 전일비([2])가 부호 문자(▲▼)를 포함할 수 있어
-                숫자만 추출하도록 느슨한 패턴 사용.
+    FIX-SISE-2: 이전 구현은 <td> 바로 뒤에 숫자가 온다고 가정했으나(예:
+    r'<td[^>]*>\s*([\d,]+)\s*</td>'), 실제 페이지는 각 셀 값을
+    <span class="tah p11">296,000</span> 처럼 <span>으로 감싸 렌더링해
+    매 행이 매칭에 실패했다. 그 결과 fetch_naver_stock_price()의
+    "API change_pct=0 → sise_day 재계산" 폴백도 항상 빈 리스트를 받아
+    등락률이 계속 0.0%로 표시되는 문제가 있었다.
+    <tr> 단위로 행을 분리한 뒤, 각 <td>...</td> 셀 내부에서(중첩 태그와
+    무관하게) 첫 숫자 토큰만 추출하는 방식으로 견고하게 재작성한다.
     """
     url  = f"https://finance.naver.com/item/sise_day.naver?code={code}&page=1"
     html = _get(url)
     rows = []
     try:
-        pattern = (
-            r'<td[^>]*>\s*(\d{4}\.\d{2}\.\d{2})\s*</td>'   # [0] 날짜
-            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'              # [1] 종가
-            r'.*?<td[^>]*>[^<]*?([\d,]+)[^<]*</td>'         # [2] 전일비 (숫자만)
-            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'              # [3] 시가
-            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'              # [4] 고가
-            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'              # [5] 저가
-            r'.*?<td[^>]*>\s*([\d,]+)\s*</td>'              # [6] 거래량
-        )
-        matches = re.findall(pattern, html, re.DOTALL)
-        for m in matches[:days]:
+        for row_match in _ROW_RE.finditer(html):
+            if len(rows) >= days:
+                break
+            row_html = row_match.group(1)
+            cells = _CELL_RE.findall(row_html)
+            if len(cells) < 7:
+                continue
+
+            date_m = _DATE_RE.search(_TAG_RE.sub("", cells[0]))
+            if not date_m:
+                continue
+
+            # 컬럼: [0]날짜 [1]종가 [2]전일비 [3]시가 [4]고가 [5]저가 [6]거래량
+            # 태그를 먼저 제거한 뒤 숫자를 찾는다 — class="tah p11" 같은 속성에도
+            # 숫자가 섞여 있어 태그를 남긴 채로 찾으면 엉뚱한 값을 집을 수 있다.
+            nums = []
+            for cell in cells[1:7]:
+                num_m = _NUM_RE.search(_TAG_RE.sub("", cell))
+                if not num_m:
+                    nums = None
+                    break
+                nums.append(int(num_m.group(1).replace(",", "")))
+            if nums is None:
+                continue
+
             rows.append({
-                "date":   m[0],
-                "close":  int(m[1].replace(",", "")),
-                "open":   int(m[3].replace(",", "")),
-                "high":   int(m[4].replace(",", "")),
-                "low":    int(m[5].replace(",", "")),
-                "volume": int(m[6].replace(",", "")),
+                "date":   date_m.group(1),
+                "close":  nums[0],
+                "open":   nums[2],
+                "high":   nums[3],
+                "low":    nums[4],
+                "volume": nums[5],
             })
     except Exception as e:
         print(f"[naver_finance] sise_day 파싱 오류 ({code}): {e}")
