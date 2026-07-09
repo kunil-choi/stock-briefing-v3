@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI 주식 브리핑 — 2026년 07월 08일</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:         #0d1117;
+  --surface:    #161b22;
+  --surface2:   #21262d;
+  --border:     #30363d;
+  --text:       #e6edf3;
+  --text-muted: #8b949e;
+  --accent:     #58a6ff;
+  --up:         #ff6b6b;
+  --down:       #74c0fc;
+  --flat:       #adb5bd;
+}
+html { font-size: 16px; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Pretendard', 'Apple SD Gothic Neo', 'Malgun Gothic', sans-serif;
+  line-height: 1.6;
+  padding: 0 0 4rem;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.container { max-width: 900px; margin: 0 auto; padding: 0 1rem; }
+.briefing-header {
+  text-align: center;
+  padding: 2.5rem 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2rem;
+}
+.briefing-header h1 { font-size: 1.8rem; font-weight: 700; }
+.subtitle { color: var(--text-muted); font-size: .9rem; margin-top: .4rem; }
+.section { margin-bottom: 2.5rem; }
+.market-leader-card {
+  border-left: 3px solid #ffd43b;
+}
+.market-leader-card .stock-rank {
+  color: #ffd43b;
+}
+.section-title {
+  font-size: 1.15rem; font-weight: 700; color: var(--text);
+  border-left: 4px solid var(--accent);
+  padding-left: .75rem; margin-bottom: 1rem;
+}
+.market-indicators { display: flex; flex-wrap: wrap; gap: .6rem; }
+.indicator-badge {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 8px; padding: .5rem .9rem;
+  display: flex; flex-direction: column; align-items: center; min-width: 100px;
+}
+.ind-label { font-size: .75rem; color: var(--text-muted); margin-bottom: .15rem; }
+.ind-value { font-size: .95rem; font-weight: 600; }
+.ind-pct   { font-size: .8rem;  margin-top: .1rem; }
+.summary-block { margin-bottom: 1.2rem; }
+.summary-title {
+  font-size: .85rem; font-weight: 700; color: var(--accent);
+  margin-bottom: .35rem; text-transform: uppercase; letter-spacing: .04em;
+}
+.summary-text { font-size: .93rem; color: var(--text-muted); line-height: 1.65; }
+.sector-badges { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+.sector-badge {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 20px; padding: .3rem .85rem;
+  font-size: .82rem; color: var(--accent); cursor: default;
+}
+.stock-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; margin-bottom: 1rem; overflow: hidden;
+}
+.stock-card-header {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .85rem 1rem; border-bottom: 1px solid var(--border);
+  background: var(--surface2);
+}
+.stock-rank  { font-size: .8rem; font-weight: 700; color: var(--text-muted); min-width: 28px; }
+.stock-name-block { display: flex; align-items: center; gap: .5rem; flex: 1; }
+.stock-name  { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+.stock-name:hover { color: var(--accent); }
+.signal-badge {
+  font-size: .72rem; padding: .15rem .5rem;
+  border-radius: 4px; border: 1px solid; font-weight: 600;
+}
+.overlap-badge { font-size: .78rem; color: #ffa94d; font-weight: 600; white-space: nowrap; }
+.stock-card-body { padding: .85rem 1rem; }
+.source-tags { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .6rem; }
+.source-tag  { font-size: .72rem; padding: .15rem .5rem; border-radius: 4px; font-weight: 600; }
+.price-row   { display: flex; align-items: center; gap: .75rem; margin-bottom: .75rem; flex-wrap: wrap; }
+.price-value { font-size: 1.05rem; font-weight: 700; }
+.chart-btn {
+  font-size: .78rem; padding: .3rem .75rem; border-radius: 6px;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--accent); cursor: pointer; text-decoration: none;
+  transition: background .15s;
+}
+.chart-btn:hover { background: var(--border); text-decoration: none; }
+.stock-section { margin-bottom: .75rem; }
+.stock-section-label { font-size: .78rem; font-weight: 700; color: var(--accent); display: block; margin-bottom: .25rem; }
+.stock-section-text  { font-size: .88rem; color: var(--text-muted); line-height: 1.6; }
+.reasons-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: .4rem; }
+.reasons-list li { font-size: .85rem; line-height: 1.55; }
+.reason-source { font-size: .72rem; padding: .1rem .4rem; border-radius: 3px; font-weight: 600; margin-right: .3rem; }
+.hidden-pick-card {
+  background: linear-gradient(135deg, var(--surface) 0%, #1a1f2e 100%);
+  border: 1px solid #3d4f6e; border-radius: 12px;
+  margin-bottom: 1rem; overflow: hidden;
+}
+.hp-card-header {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .85rem 1rem; border-bottom: 1px solid #3d4f6e;
+  background: #1a2235; flex-wrap: wrap;
+}
+.hp-badges { display: flex; gap: .4rem; align-items: center; }
+.hp-source-badge {
+  font-size: .72rem; padding: .2rem .6rem; border-radius: 20px; font-weight: 700;
+}
+.hp-score-badge {
+  font-size: .72rem; padding: .2rem .6rem; border-radius: 20px;
+  background: #ffa94d22; color: #ffa94d; border: 1px solid #ffa94d55; font-weight: 700;
+}
+.hp-stock-name { font-size: 1.05rem; font-weight: 700; color: var(--text); flex: 1; }
+.hp-stock-name:hover { color: var(--accent); }
+.star-rating { font-size: 1rem; }
+.star.filled { color: #ffa94d; }
+.star.empty  { color: #444; }
+.hp-card-body { padding: .85rem 1rem; }
+.analyst-card {
+  background: var(--surface2); border: 1px solid var(--border);
+  border-left-width: 3px; border-left-color: var(--accent);
+  border-radius: 8px; padding: .75rem 1rem; margin-bottom: .6rem;
+  transition: border-color .15s;
+}
+.analyst-card-meta { display: flex; align-items: center; gap: .5rem; margin-bottom: .3rem; flex-wrap: wrap; }
+.analyst-stock  { font-weight: 700; font-size: .92rem; }
+.analyst-broker {
+  font-size: .76rem; font-weight: 600; padding: .12rem .5rem;
+  border-radius: 999px;
+}
+.analyst-cat-badge {
+  font-size: .68rem; padding: .1rem .45rem; border-radius: 4px;
+  font-weight: 700;
+}
+.analyst-title-link, .analyst-title-text { font-size: .88rem; color: var(--text-muted); line-height: 1.5; }
+.analyst-title-link:hover { color: var(--accent); }
+.analyst-category-title {
+  font-size: .85rem; font-weight: 700; color: var(--accent);
+  margin: 1rem 0 .5rem; padding-left: .5rem; border-left: 3px solid var(--accent);
+}
+.strat-section { margin-bottom: 1.2rem; }
+.strat-title { font-size: .9rem; font-weight: 700; color: var(--accent); margin-bottom: .4rem; }
+.strat-body  { font-size: .88rem; color: var(--text-muted); }
+.strat-text  { margin-bottom: .3rem; line-height: 1.6; }
+.strat-item  { margin-bottom: .25rem; line-height: 1.55; }
+.disclaimer {
+  margin-top: 2.5rem;
+  padding: 1rem 1.4rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid #58a6ff44;
+  border-radius: 8px;
+  font-size: .78rem;
+  color: #6e7681;
+  line-height: 1.8;
+  text-align: center;
+}
+.disclaimer strong {
+  display: block;
+  color: #8b949e;
+  font-weight: 600;
+  margin-bottom: .35rem;
+  font-size: .82rem;
+}
+.modal-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.75); z-index: 1000;
+  align-items: center; justify-content: center;
+}
+.modal-overlay.active { display: flex; }
+.modal-box {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 1.5rem; max-width: 700px; width: 95%; position: relative;
+}
+.modal-title  { font-size: 1rem; font-weight: 700; margin-bottom: 1rem; color: var(--text); }
+.modal-close  {
+  position: absolute; top: .75rem; right: .75rem;
+  background: none; border: none; color: var(--text-muted); font-size: 1.2rem; cursor: pointer;
+}
+.modal-close:hover { color: var(--text); }
+#modal-chart-img { width: 100%; border-radius: 8px; }
+@media (max-width: 600px) {
+  .briefing-header h1 { font-size: 1.4rem; }
+  .stock-card-header  { flex-wrap: wrap; }
+  .stock-name         { font-size: .95rem; }
+}</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="briefing-header">
+    <h1>📈 AI 주식 브리핑</h1>
+    <div class="subtitle">2026년 07월 08일 · 생성 시각 08:48 KST</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">📊 시장 지표</div>
+    <div class="market-indicators"><div class="indicator-badge"><span class="ind-label">코스피 <span style="font-size:.65rem;color:#adb5bd;">(전일 종가)</span></span><span class="ind-value">7,656.31</span><span class="ind-pct" style="color:#74c0fc;">▼ -4.91%</span></div><div class="indicator-badge"><span class="ind-label">코스닥 <span style="font-size:.65rem;color:#adb5bd;">(전일 종가)</span></span><span class="ind-value">831.23</span><span class="ind-pct" style="color:#74c0fc;">▼ -1.87%</span></div><div class="indicator-badge"><span class="ind-label">나스닥</span><span class="ind-value">25,818.69</span><span class="ind-pct" style="color:#74c0fc;">▼ -1.16%</span></div><div class="indicator-badge"><span class="ind-label">S&P500</span><span class="ind-value">7,503.85</span><span class="ind-pct" style="color:#74c0fc;">▼ -0.45%</span></div><div class="indicator-badge"><span class="ind-label">다우존스</span><span class="ind-value">52,925.15</span><span class="ind-pct" style="color:#74c0fc;">▼ -0.25%</span></div><div class="indicator-badge"><span class="ind-label">달러/원</span><span class="ind-value">1,514.81</span><span class="ind-pct" style="color:#74c0fc;">▼ -0.91%</span></div></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">🗞 최근 시장 흐름</div>
+    <div class="summary-block"><div class="summary-title">📌 최근 흐름</div><p class="summary-text">전일(7월 7일) 국내 증시는 삼성전자의 2분기 어닝 서프라이즈(영업이익 89.4조 원, 전년비 +1,810%)에도 불구하고 주가가 오히려 하락하는 '셀 온 뉴스' 흐름이 나타났다. SK하이닉스를 비롯한 반도체 관련주 전반에서 차익 실현 매물이 출회되며 시장 주도주의 숨 고르기 양상이 연출됐다. 반면 K-뷰티, 바이오, 엔터 등 순환매 섹터는 상대적 강세를 보이며 지수 낙폭을 일부 방어했다.</p></div><div class="summary-block"><div class="summary-title">📊 주요 이슈</div><p class="summary-text">주요 이슈로는 한국은행이 발표한 5월 경상수지가 386억 달러로 역대 최대 흑자를 기록한 점이 부각됐다. 반도체 수출 증가세가 이어졌으나, 외국인의 국내 주식 순매도 규모도 역대 최대 수준을 기록해 수급 우려가 공존했다. 미국 USTR의 한국 대상 강제노동·과잉생산 관세 압박이 이어지는 가운데, 한국 정부가 공식 의견서를 통해 근거 부족을 반박했다. 최저임금 협상은 노사 간 입장 차(1만 1,450원 vs 1만 460원)가 여전히 좁혀지지 않은 채 진행 중이다.</p></div><div class="summary-block"><div class="summary-title">🔍 핵심 포인트</div><p class="summary-text">긍정 요인으로는 삼성전자의 영업이익이 성과급 제외 시 사실상 100조 원에 달하며 반도체 슈퍼사이클이 지속되고 있다는 점, 셀트리온·LG전자·LG에너지솔루션 등 다수 기업이 2분기 실적 서프라이즈를 기록하며 어닝 시즌의 기대감을 높이고 있다는 점이 꼽힌다. 반면 삼성전자 파운드리의 흑자전환 지속 여부, 모건스탠리 등 외국계의 셀 온 수급 압박, 미국發 관세 리스크, 환율 악화에 따른 현대차그룹 실적 하방 압력 등은 부정 요인으로 작용하고 있다.</p></div><div class="summary-block"><div class="summary-title">💡 전망</div><p class="summary-text">단기적으로는 반도체 대형주의 차익 실현 이후 저점 매수 여부가 핵심 관전 포인트가 될 전망이다. 2분기 어닝 시즌이 본격화되면서 실적이 검증된 K-뷰티·바이오·금융주 등으로의 순환매 흐름이 강화될 가능성이 있다. SK하이닉스의 나스닥 ADR 상장 이슈도 밸류에이션 재평가 기대를 자극하는 요인으로 작용할 수 있어, 향후 반도체 투톱의 매수 타이밍 논의가 시장의 중심 화두가 될 것으로 보인다.</p></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">🔥 오늘의 핫 섹터</div>
+    <div class="sector-badges"><div class="sector-badge" title="어닝 서프라이즈">반도체</div><div class="sector-badge" title="수출 호조">K-뷰티</div><div class="sector-badge" title="순환매 유입">바이오</div><div class="sector-badge" title="실적 개선">금융</div><div class="sector-badge" title="현대차그룹 관심">로봇</div></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">🏆 오늘의 대형 주도주</div>
+    
+<div class="stock-card market-leader-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#1</div>
+    <div class="stock-name-block">
+      <a href="" target="_blank" rel="noopener"
+         class="stock-name">삼성전자</a>
+      <span class="signal-badge signal-positive"
+            style="border-color:#51cf66;color:#51cf66;">긍정</span>
+    </div>
+    <div class="overlap-badge" title="비뉴스 채널 중복 언급 수">🔥 4개</div>
+  </div>
+  <div class="stock-card-body">
+    <div class="source-tags"><span class="source-tag" style="background:#3a2d1a;color:#ffa94d;">경제방송</span><span class="source-tag" style="background:#2d1a3a;color:#cc5de8;">유튜브</span><span class="source-tag" style="background:#2d1a3a;color:#cc5de8;">증권사</span><span class="source-tag" style="background:#1a3a2d;color:#51cf66;">애널리스트</span></div>
+    <div class="price-row"><span class="price-value">296,000원</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.3rem;">(전일종가)</span><span style="font-size:.82rem;color:#adb5bd;margin-left:.35rem;">━ +0.00%</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.2rem;">(전전일 대비)</span></div>
+    <div class="stock-section"><span class="stock-section-label">📋 종목 요약</span><p class="stock-section-text">2분기 영업이익 89.4조 원(성과급 제외 시 사실상 100조 원)을 기록하며 역대급 어닝 서프라이즈를 달성했다. 파운드리 부문도 6월 월간 기준 흑자전환에 성공하며 구조적 회복 신호를 보냈다. 다만 실적 발표 이후 주가는 &#x27;셀 온 뉴스&#x27; 흐름으로 조정을 받아 단기 변동성이 확대됐다.</p></div><div class="stock-section"><span class="stock-section-label">🚀 상승 촉매</span><p class="stock-section-text">반도체 슈퍼사이클 지속과 AI 수요 급증으로 메모리·파운드리 전 부문 실적이 개선됐다. 파운드리 흑자전환과 HBM 공급 확대 기대감이 하반기 실적 지속 가능성을 높이는 요인으로 작용한다. 자사주 매입 및 주주환원 정책도 주가 하방을 지지하는 중장기 촉매로 평가된다.</p></div><div class="stock-section"><span class="stock-section-label">⚠️ 리스크</span><p class="stock-section-text">어닝 서프라이즈에도 외국계 매도 수급(모건스탠리 등 셀 온)이 지속되며 단기 주가 조정 압력이 남아 있다. 포워드 가이던스 부재와 AI 반도체 피크아웃 우려가 투자 심리를 제약할 수 있다.</p></div><div class="stock-section"><span class="stock-section-label">📢 채널별 언급 내용</span><ul class="reasons-list"><li><span style="color:#ffa94d;font-weight:600;">이데일리TV</span> <a href="https://www.youtube.com/watch?v=SincHTgfcX8" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">삼성전자 2분기 영업이익 89조 원 신기록 달성, 파운드리도 6월 월간 기준 흑자전환 성공.</a></li><li><span style="color:#ffa94d;font-weight:600;">이데일리TV</span> <a href="https://www.youtube.com/watch?v=5yTqTEUJn3Q" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">삼성전자 어닝 서프라이즈에도 주가 조정, 매수 기회인지 여부와 반도체 투자 전략 총정리.</a></li><li><span style="color:#ffa94d;font-weight:600;">TomatoTV</span> <a href="https://www.youtube.com/watch?v=krxxGCRZ7ow" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">삼성전자 역대급 실적에도 폭락한 이유 분석, 반도체 피크아웃 공포와 셀 온 효과 점검.</a></li><li><span style="color:#ffa94d;font-weight:600;">TomatoTV</span> <a href="https://www.youtube.com/watch?v=YkAJrqJHGMA" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">삼성전자 호실적 이후 차익 실현 매물 쏟아져, 저평가 종목으로의 순환매 주목.</a></li></ul></div>
+  </div>
+</div>
+<div class="stock-card market-leader-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#2</div>
+    <div class="stock-name-block">
+      <a href="" target="_blank" rel="noopener"
+         class="stock-name">SK하이닉스</a>
+      <span class="signal-badge signal-positive"
+            style="border-color:#51cf66;color:#51cf66;">긍정</span>
+    </div>
+    <div class="overlap-badge" title="비뉴스 채널 중복 언급 수">🔥 4개</div>
+  </div>
+  <div class="stock-card-body">
+    <div class="source-tags"><span class="source-tag" style="background:#2d3a4a;color:#74c0fc;">뉴스</span><span class="source-tag" style="background:#3a2d1a;color:#ffa94d;">경제방송</span><span class="source-tag" style="background:#2d1a3a;color:#cc5de8;">유튜브</span><span class="source-tag" style="background:#2d1a3a;color:#cc5de8;">증권사</span><span class="source-tag" style="background:#1a3a2d;color:#51cf66;">애널리스트</span></div>
+    <div class="price-row"><span class="price-value">2,201,000원</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.3rem;">(전일종가)</span><span style="font-size:.82rem;color:#adb5bd;margin-left:.35rem;">━ +0.00%</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.2rem;">(전전일 대비)</span></div>
+    <div class="stock-section"><span class="stock-section-label">📋 종목 요약</span><p class="stock-section-text">HBM 수요가 지속 폭증하며 2분기 어닝 서프라이즈가 예상되는 가운데, 나스닥 ADR 상장 이슈가 밸류에이션 재평가 기대를 자극하고 있다. AI 데이터센터향 HBM 공급 확대가 하반기에도 이어질 전망으로 업황 호조가 지속되는 흐름이다. ADR 발행 총액이 45조 원에서 43조 원으로 정정 발표됐다.</p></div><div class="stock-section"><span class="stock-section-label">🚀 상승 촉매</span><p class="stock-section-text">AI 반도체 수요 급증에 따른 HBM 품귀 현상이 SK하이닉스의 수주 증가로 직결되고 있다. 나스닥 ADR 상장을 통한 글로벌 투자자 접근성 확대와 기업 밸류에이션 재평가 가능성이 중장기 주가 상승 동력으로 꼽힌다.</p></div><div class="stock-section"><span class="stock-section-label">⚠️ 리스크</span><p class="stock-section-text">삼성전자 주가 조정에 연동된 반도체 섹터 전반의 차익 실현 압력이 단기 부담으로 작용할 수 있다. ADR 발행 총액 하향 정정이 시장 기대치를 일부 낮출 수 있다.</p></div><div class="stock-section"><span class="stock-section-label">📢 채널별 언급 내용</span><ul class="reasons-list"><li><span style="color:#ffa94d;font-weight:600;">이데일리TV</span> <a href="https://www.youtube.com/watch?v=CQQWg4qnqEA" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">SK하이닉스 나스닥 ADR 상장으로 밸류 재평가 기대, 반도체 투자 전략 총정리.</a></li><li><span style="color:#ffa94d;font-weight:600;">TomatoTV</span> <a href="https://www.youtube.com/watch?v=4zoLhQYIYHY" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">SK하이닉스 HBM 수요 여전히 폭증, 2분기 어닝 서프라이즈와 업황 호조 속 매수 타점 분석.</a></li><li><span style="color:#ffa94d;font-weight:600;">TomatoTV</span> <a href="https://www.youtube.com/watch?v=lPCPKpW6Fyo" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">SK하이닉스 ADR 발행 총액 45조 원에서 43조 원으로 정정, AI용 MLCC 품귀로 수주 증가.</a></li><li><span style="color:#ffa94d;font-weight:600;">이데일리TV</span> <a href="https://www.youtube.com/watch?v=OYBJDZDI6VU" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">반도체 투톱 삼성전자·SK하이닉스 매수 타이밍과 변동성 장세 대응 전략 논의.</a></li></ul></div>
+  </div>
+</div>
+    <div class="section-title">👀 오늘의 관심종목</div>
+    
+<div class="stock-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#1</div>
+    <div class="stock-name-block">
+      <a href="https://finance.naver.com/item/main.naver?code=005380" target="_blank" rel="noopener"
+         class="stock-name">현대차</a>
+      <span class="signal-badge signal-positive"
+            style="border-color:#51cf66;color:#51cf66;">긍정</span>
+    </div>
+    <div class="overlap-badge" title="비뉴스 채널 중복 언급 수">🔥 3개</div>
+  </div>
+  <div class="stock-card-body">
+    <div class="source-tags"><span class="source-tag" style="background:#3a2d1a;color:#ffa94d;">경제방송 4</span><span class="source-tag" style="background:#2d1a3a;color:#cc5de8;">유튜브 6</span><span class="source-tag" style="background:#1a3a2d;color:#51cf66;">애널리스트 1</span></div>
+    <div class="price-row"><span class="price-value">479,500원</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.3rem;">(전일종가)</span><span style="font-size:.82rem;color:#adb5bd;margin-left:.35rem;">━ +0.00%</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.2rem;">(전전일 대비)</span><a href="https://finance.naver.com/item/main.naver?code=005380" target="_blank" rel="noopener" class="chart-btn">🔗 Naver 차트</a></div>
+    <div class="stock-section"><span class="stock-section-label">📋 종목 요약</span><p class="stock-section-text">환율 악화와 글로벌 판매 감소로 2Q26 실적이 컨센서스를 하회할 전망이지만, 펀더멘털 회복 가능성에 주목해야 한다는 애널리스트 의견이 제시됐다. 보스턴 다이내믹스 상장 이슈가 재부각되며 로봇 모멘텀이 주가에 긍정적으로 작용하는 흐름이다. 젠슨 황의 언급으로 현대차에 대한 시장 관심이 고조되고 있다.</p></div><div class="stock-section"><span class="stock-section-label">🚀 상승 촉매</span><p class="stock-section-text">보스턴 다이내믹스 상장 추진과 로봇 사업 확장이 기업 가치 재평가의 핵심 촉매로 작용하고 있다. 과거 로봇 인수 이슈 당시 주가가 20만 원에서 70만 원까지 급등한 선례가 있어 추가 상승 기대감이 높다. 키움증권·한화투자증권이 펀더멘털 회복 가능성에 주목하며 긍정적 시각을 유지하고 있다.</p></div><div class="stock-section"><span class="stock-section-label">⚠️ 리스크</span><p class="stock-section-text">환율 악화와 글로벌 판매 감소로 2Q26 실적이 시장 기대치를 하회할 가능성이 있다. 보스턴 다이내믹스 상장을 위한 주주 동의 절차가 예상치 못한 변수로 작용할 수 있다.</p></div><div class="stock-section"><span class="stock-section-label">📢 채널별 언급 내용</span><ul class="reasons-list"><li><span style="color:#51cf66;font-weight:600;">키움증권/한화투자증권</span> <a href="https://finance.naver.com/research/company_read.naver?nid=93958&page=1" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">현대차 2Q26 실적이 컨센서스를 하회할 전망이나 펀더멘털 회복 가능성에 주목해야 한다.</a></li><li><span style="color:#ffa94d;font-weight:600;">이데일리TV</span> <a href="https://www.youtube.com/watch?v=aJvPypGensY" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">엔터·현대차그룹 탑픽 분석, 현대차·현대제철·현대모비스 섹터 전략 논의.</a></li><li><span style="color:#cc5de8;font-weight:600;">신사임당</span> <a href="https://www.youtube.com/watch?v=dBLCZPGuUZA" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">젠슨 황이 현대차를 직접 언급하며 시장 분위기가 달아오르고 있다는 분석.</a></li><li><span style="color:#cc5de8;font-weight:600;">웅달 책방</span> <a href="https://www.youtube.com/watch?v=_oSDVp7g6xs" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">현대차 보스턴 다이내믹스 상장 이슈와 로봇주 투자 전략, 지금 안 팔면 이렇게 된다는 전망 제시.</a></li></ul></div>
+  </div>
+</div>
+<div class="stock-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#2</div>
+    <div class="stock-name-block">
+      <a href="https://finance.naver.com/item/main.naver?code=009150" target="_blank" rel="noopener"
+         class="stock-name">삼성전기</a>
+      <span class="signal-badge signal-positive"
+            style="border-color:#51cf66;color:#51cf66;">긍정</span>
+    </div>
+    <div class="overlap-badge" title="비뉴스 채널 중복 언급 수">🔥 3개</div>
+  </div>
+  <div class="stock-card-body">
+    <div class="source-tags"><span class="source-tag" style="background:#3a2d1a;color:#ffa94d;">경제방송 2</span><span class="source-tag" style="background:#2d1a3a;color:#cc5de8;">유튜브 4</span><span class="source-tag" style="background:#1a3a2d;color:#51cf66;">애널리스트 1</span></div>
+    <div class="price-row"><span class="price-value">1,648,000원</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.3rem;">(전일종가)</span><span style="font-size:.82rem;color:#adb5bd;margin-left:.35rem;">━ +0.00%</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.2rem;">(전전일 대비)</span><a href="https://finance.naver.com/item/main.naver?code=009150" target="_blank" rel="noopener" class="chart-btn">🔗 Naver 차트</a></div>
+    <div class="stock-section"><span class="stock-section-label">📋 종목 요약</span><p class="stock-section-text">대신증권·교보증권·미래에셋증권 3사가 동시에 목표주가 280만 원으로 상향하며 2026년 영업이익 사상 최고치를 전망했다. AI용 MLCC 품귀 현상으로 수주가 증가하고 있어 실적 상향 추세가 이어질 전망이다. 작년 10만 원 초반에서 200만 원까지 10배 이상 상승한 이력이 있어 시장의 지속적인 관심을 받고 있다.</p></div><div class="stock-section"><span class="stock-section-label">🚀 상승 촉매</span><p class="stock-section-text">AI 데이터센터 확산에 따른 MLCC 수요 급증이 삼성전기의 핵심 성장 동력으로 작용하고 있다. 3개 증권사 동시 목표주가 상향과 2026년 영업이익 사상 최고치 전망이 긍정적 모멘텀을 제공한다.</p></div><div class="stock-section"><span class="stock-section-label">⚠️ 리스크</span><p class="stock-section-text">현재 PER이 60~70배로 코스피 평균 대비 고평가 상태라는 지적이 있어 신규 매수 부담이 존재한다. 이미 10배 이상 상승한 만큼 추가 상승 여력에 대한 시장의 시각이 엇갈린다.</p></div><div class="stock-section"><span class="stock-section-label">📢 채널별 언급 내용</span><ul class="reasons-list"><li><span style="color:#51cf66;font-weight:600;">대신증권/교보증권/미래에셋증권</span> <a href="https://finance.naver.com/research/company_read.naver?nid=93935&page=2" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">삼성전기 목표주가 280만 원으로 상향, 2026년 영업이익 사상 최고치 전망.</a></li><li><span style="color:#ffa94d;font-weight:600;">이데일리TV</span> <a href="https://www.youtube.com/watch?v=9zonA__pdsQ" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">삼성전기 실적은 이제부터라며 한 번 더 매수 가능성 언급, AI용 MLCC 품귀로 수주 증가.</a></li><li><span style="color:#ffa94d;font-weight:600;">TomatoTV</span> <a href="https://www.youtube.com/watch?v=lPCPKpW6Fyo" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">AI용 MLCC 품귀 현상으로 삼성전기·무라타 수주 증가 추세 지속.</a></li><li><span style="color:#cc5de8;font-weight:600;">김재원TV</span> <a href="https://www.youtube.com/watch?v=4lfJjwT3pOU" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">삼성전기 주가가 10만 원에서 200만 원까지 10배 이상 상승했으나 현재 PER 60~70배로 고평가 상태라는 분석.</a></li></ul></div>
+  </div>
+</div>
+<div class="stock-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#3</div>
+    <div class="stock-name-block">
+      <a href="https://finance.naver.com/item/main.naver?code=035720" target="_blank" rel="noopener"
+         class="stock-name">카카오</a>
+      <span class="signal-badge signal-neutral"
+            style="border-color:#adb5bd;color:#adb5bd;">중립</span>
+    </div>
+    <div class="overlap-badge" title="비뉴스 채널 중복 언급 수">🔥 3개</div>
+  </div>
+  <div class="stock-card-body">
+    <div class="source-tags"><span class="source-tag" style="background:#3a2d1a;color:#ffa94d;">경제방송 1</span><span class="source-tag" style="background:#2d1a3a;color:#cc5de8;">유튜브 3</span><span class="source-tag" style="background:#1a3a2d;color:#51cf66;">애널리스트 1</span></div>
+    <div class="price-row"><span class="price-value">35,400원</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.3rem;">(전일종가)</span><span style="font-size:.82rem;color:#adb5bd;margin-left:.35rem;">━ +0.00%</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.2rem;">(전전일 대비)</span><a href="https://finance.naver.com/item/main.naver?code=035720" target="_blank" rel="noopener" class="chart-btn">🔗 Naver 차트</a></div>
+    <div class="stock-section"><span class="stock-section-label">📋 종목 요약</span><p class="stock-section-text">한화투자증권은 2Q26 카카오의 매출 2.07조 원, 영업이익 2,237억 원으로 시장 기대에 부합할 것으로 전망했다. 다만 하반기 강력한 트리거가 필요하다는 조건부 평가를 내놓아 주가 상승의 촉매 부재가 과제로 남아 있다. 경제방송과 유튜브 다수 채널에서 관심 종목으로 언급됐다.</p></div><div class="stock-section"><span class="stock-section-label">🚀 상승 촉매</span><p class="stock-section-text">2Q26 실적이 시장 컨센서스에 부합하며 어닝 시즌에서 안정적인 실적을 보여줄 가능성이 있다. AI·클라우드 서비스 확장과 플랫폼 광고 회복이 하반기 성장 동력이 될 수 있다.</p></div><div class="stock-section"><span class="stock-section-label">⚠️ 리스크</span><p class="stock-section-text">하반기 강력한 주가 상승 트리거가 없을 경우 박스권 횡보 가능성이 높다는 애널리스트 판단이 제시됐다. 카카오페이·카카오엔터 등 계열사 실적 불확실성이 지속될 수 있다.</p></div><div class="stock-section"><span class="stock-section-label">📢 채널별 언급 내용</span><ul class="reasons-list"><li><span style="color:#51cf66;font-weight:600;">한화투자증권</span> <a href="https://finance.naver.com/research/company_read.naver?nid=93948&page=1" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">2Q26 카카오 매출 2.07조 원, 영업이익 2,237억 원으로 시장 기대 부합 전망, 하반기 강력한 트리거 필요.</a></li><li><span style="color:#ffa94d;font-weight:600;">TomatoTV</span> <a href="https://www.youtube.com/watch?v=AHUe5HW54b0" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">모건스탠리 수급 vs 삼성전자 셀 온 효과 분석 중 카카오 관심 종목으로 언급.</a></li><li><span style="color:#cc5de8;font-weight:600;">전인구경제연구소</span> <a href="https://www.youtube.com/watch?v=tpWWgzFGalk" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">카카오를 포함한 주요 종목 시장 흐름 점검.</a></li><li><span style="color:#cc5de8;font-weight:600;">경제 원탑</span> <a href="https://www.youtube.com/watch?v=6qTt9OJ7oy8" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">전일(7월 7일) 촬영 기준 카카오 관련 투자 전략 분석 내용 언급.</a></li></ul></div>
+  </div>
+</div>
+<div class="stock-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#4</div>
+    <div class="stock-name-block">
+      <a href="https://finance.naver.com/item/main.naver?code=012330" target="_blank" rel="noopener"
+         class="stock-name">현대모비스</a>
+      <span class="signal-badge signal-neutral"
+            style="border-color:#adb5bd;color:#adb5bd;">중립</span>
+    </div>
+    <div class="overlap-badge" title="비뉴스 채널 중복 언급 수">🔥 2개</div>
+  </div>
+  <div class="stock-card-body">
+    <div class="source-tags"><span class="source-tag" style="background:#3a2d1a;color:#ffa94d;">경제방송 2</span><span class="source-tag" style="background:#2d1a3a;color:#cc5de8;">유튜브 1</span></div>
+    <div class="price-row"><span class="price-value">495,000원</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.3rem;">(전일종가)</span><span style="font-size:.82rem;color:#adb5bd;margin-left:.35rem;">━ +0.00%</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.2rem;">(전전일 대비)</span><a href="https://finance.naver.com/item/main.naver?code=012330" target="_blank" rel="noopener" class="chart-btn">🔗 Naver 차트</a></div>
+    <div class="stock-section"><span class="stock-section-label">📋 종목 요약</span><p class="stock-section-text">현대차그룹 내 로봇·전동화 부품 공급망의 핵심으로 현대차·보스턴 다이내믹스 관련 로봇 모멘텀의 수혜를 받고 있다. 이데일리TV와 TomatoTV 등 경제방송에서 현대차그룹 탑픽의 일환으로 지속 언급되고 있다. 별도의 애널리스트 리포트는 수집되지 않아 중립 신호를 유지한다.</p></div><div class="stock-section"><span class="stock-section-label">🚀 상승 촉매</span><p class="stock-section-text">현대차그룹의 로봇·전동화 투자 확대에 따른 부품 수요 증가가 현대모비스의 중장기 성장 동력으로 작용할 수 있다. 현대차 보스턴 다이내믹스 상장 이슈와 연계된 로봇 섹터 관심 확대가 주가에 긍정적 영향을 미칠 수 있다.</p></div><div class="stock-section"><span class="stock-section-label">⚠️ 리스크</span><p class="stock-section-text">현대차 본사의 실적 하방 압력이 부품사인 현대모비스에도 연쇄 영향을 미칠 수 있다. 독립적인 애널리스트 커버리지 및 매수 의견이 현재 수집 데이터에서 확인되지 않는다.</p></div><div class="stock-section"><span class="stock-section-label">📢 채널별 언급 내용</span><ul class="reasons-list"><li><span style="color:#ffa94d;font-weight:600;">이데일리TV</span> <a href="https://www.youtube.com/watch?v=aJvPypGensY" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">현대차그룹 탑픽 분석에서 현대모비스 언급, 엔터·현대차그룹 섹터 전략 논의.</a></li><li><span style="color:#ffa94d;font-weight:600;">TomatoTV</span> <a href="https://www.youtube.com/watch?v=AHUe5HW54b0" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">모건스탠리 수급 이슈 관련 관심 종목으로 현대모비스 언급.</a></li><li><span style="color:#cc5de8;font-weight:600;">웅달 책방</span> <a href="https://www.youtube.com/watch?v=_oSDVp7g6xs" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">현대차 보스턴 다이내믹스 관련 로봇주 분석에서 현대모비스 연계 수혜 가능성 언급.</a></li></ul></div>
+  </div>
+</div>
+<div class="stock-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#5</div>
+    <div class="stock-name-block">
+      <a href="https://finance.naver.com/item/main.naver?code=068270" target="_blank" rel="noopener"
+         class="stock-name">셀트리온</a>
+      <span class="signal-badge signal-positive"
+            style="border-color:#51cf66;color:#51cf66;">긍정</span>
+    </div>
+    <div class="overlap-badge" title="비뉴스 채널 중복 언급 수">🔥 2개</div>
+  </div>
+  <div class="stock-card-body">
+    <div class="source-tags"><span class="source-tag" style="background:#2d1a3a;color:#cc5de8;">유튜브 1</span><span class="source-tag" style="background:#1a3a2d;color:#51cf66;">애널리스트 1</span></div>
+    <div class="price-row"><span class="price-value">178,200원</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.3rem;">(전일종가)</span><span style="font-size:.82rem;color:#adb5bd;margin-left:.35rem;">━ +0.00%</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.2rem;">(전전일 대비)</span><a href="https://finance.naver.com/item/main.naver?code=068270" target="_blank" rel="noopener" class="chart-btn">🔗 Naver 차트</a></div>
+    <div class="stock-section"><span class="stock-section-label">📋 종목 요약</span><p class="stock-section-text">2분기 매출액과 영업이익이 컨센서스를 각각 4.5%, 7.3% 상회하며 신규 바이오시밀러가 이익 체력을 증명했다. IBK투자증권·키움증권 2개사가 동시에 긍정적 리포트를 발표하며 시장의 주목을 받고 있다. 바이오 섹터 순환매 국면에서 실적 기반의 안정적 상승 흐름이 기대된다.</p></div><div class="stock-section"><span class="stock-section-label">🚀 상승 촉매</span><p class="stock-section-text">신규 바이오시밀러 출시와 글로벌 판매 확대가 이익 체력 강화의 핵심 요인이다. 컨센서스를 상회하는 2분기 실적이 하반기 추가 실적 개선 기대감을 높이고 있다.</p></div><div class="stock-section"><span class="stock-section-label">⚠️ 리스크</span><p class="stock-section-text">글로벌 바이오시밀러 경쟁 심화와 환율 영향에 따른 수출 매출 변동성이 리스크 요인으로 존재한다.</p></div><div class="stock-section"><span class="stock-section-label">📢 채널별 언급 내용</span><ul class="reasons-list"><li><span style="color:#51cf66;font-weight:600;">IBK투자증권/키움증권</span> <a href="https://finance.naver.com/research/company_read.naver?nid=93889&page=3" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">셀트리온 2Q26 매출·영업이익이 컨센서스를 각각 4.5%, 7.3% 상회, 신규 바이오시밀러가 이익 체력 증명.</a></li><li><span style="color:#cc5de8;font-weight:600;">슈퍼개미 이세무사TV</span> <a href="https://www.youtube.com/watch?v=2OfbZaGI90E" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">모닝브리핑에서 셀트리온을 로봇·스피어와 함께 주요 관심 종목으로 선정 및 분석.</a></li></ul></div>
+  </div>
+</div>
+<div class="stock-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#6</div>
+    <div class="stock-name-block">
+      <a href="https://finance.naver.com/item/main.naver?code=086790" target="_blank" rel="noopener"
+         class="stock-name">하나금융지주</a>
+      <span class="signal-badge signal-positive"
+            style="border-color:#51cf66;color:#51cf66;">긍정</span>
+    </div>
+    <div class="overlap-badge" title="비뉴스 채널 중복 언급 수">🔥 2개</div>
+  </div>
+  <div class="stock-card-body">
+    <div class="source-tags"><span class="source-tag" style="background:#3a2d1a;color:#ffa94d;">경제방송 1</span><span class="source-tag" style="background:#1a3a2d;color:#51cf66;">애널리스트 1</span></div>
+    <div class="price-row"><span class="price-value">126,900원</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.3rem;">(전일종가)</span><span style="font-size:.82rem;color:#adb5bd;margin-left:.35rem;">━ +0.00%</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.2rem;">(전전일 대비)</span><a href="https://finance.naver.com/item/main.naver?code=086790" target="_blank" rel="noopener" class="chart-btn">🔗 Naver 차트</a></div>
+    <div class="stock-section"><span class="stock-section-label">📋 종목 요약</span><p class="stock-section-text">하나증권은 2분기 NIM 5bp 상승과 그룹 순이자이익 QoQ 3.2% 증가로 은행 중 가장 높은 실적 개선을 전망했다. 1분기에 이어 2분기에도 은행 섹터 내 최고 실적 개선 기대감이 유지되고 있다. 이데일리TV 경제방송에서도 주요 관심 종목으로 언급됐다.</p></div><div class="stock-section"><span class="stock-section-label">🚀 상승 촉매</span><p class="stock-section-text">NIM 상승과 순이자이익 개선이 지속되며 은행 섹터 내 상대적 우위를 보이고 있다. 증시 활황에 따른 IB·WM 부문 수익 증가도 실적 개선에 기여할 것으로 예상된다.</p></div><div class="stock-section"><span class="stock-section-label">⚠️ 리스크</span><p class="stock-section-text">가계부채 증가와 주담대 금리 상승에 따른 건전성 우려가 중장기 리스크로 작용할 수 있다.</p></div><div class="stock-section"><span class="stock-section-label">📢 채널별 언급 내용</span><ul class="reasons-list"><li><span style="color:#51cf66;font-weight:600;">하나증권</span> <a href="https://finance.naver.com/research/company_read.naver?nid=93938&page=1" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">하나금융지주 2분기 NIM 5bp 상승, 순이자이익 QoQ 3.2% 증가로 은행 중 가장 높은 실적 개선 전망.</a></li><li><span style="color:#ffa94d;font-weight:600;">이데일리TV</span> <a href="https://www.youtube.com/watch?v=9zonA__pdsQ" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">삼성SDI 적자탈출 신호 분석 방송에서 하나금융지주를 주요 관심 종목으로 함께 언급.</a></li></ul></div>
+  </div>
+</div>
+<div class="stock-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#7</div>
+    <div class="stock-name-block">
+      <a href="https://finance.naver.com/item/main.naver?code=051910" target="_blank" rel="noopener"
+         class="stock-name">LG전자</a>
+      <span class="signal-badge signal-positive"
+            style="border-color:#51cf66;color:#51cf66;">긍정</span>
+    </div>
+    <div class="overlap-badge" title="비뉴스 채널 중복 언급 수">🔥 2개</div>
+  </div>
+  <div class="stock-card-body">
+    <div class="source-tags"><span class="source-tag" style="background:#3a2d1a;color:#ffa94d;">경제방송 2</span><span class="source-tag" style="background:#2d1a3a;color:#cc5de8;">유튜브 2</span></div>
+    <div class="price-row"><span class="price-value">265,500원</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.3rem;">(전일종가)</span><span style="font-size:.82rem;color:#adb5bd;margin-left:.35rem;">━ +0.00%</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.2rem;">(전전일 대비)</span><a href="https://finance.naver.com/item/main.naver?code=051910" target="_blank" rel="noopener" class="chart-btn">🔗 Naver 차트</a></div>
+    <div class="stock-section"><span class="stock-section-label">📋 종목 요약</span><p class="stock-section-text">2분기 연속 영업이익 1조 원을 돌파하는 깜짝 실적을 기록하며 어닝 시즌 긍정적 분위기를 이어가고 있다. 로봇 사업 확장과 관련해 현대차그룹과의 협업 모멘텀도 시장의 관심을 받고 있다. 경제방송과 유튜브 채널 다수에서 언급됐다.</p></div><div class="stock-section"><span class="stock-section-label">🚀 상승 촉매</span><p class="stock-section-text">2분기 연속 영업이익 1조 원 돌파라는 실적 모멘텀이 주가 상승의 핵심 촉매다. 피지컬 AI·로봇 사업 진출 가능성이 중장기 성장 스토리를 강화하고 있다.</p></div><div class="stock-section"><span class="stock-section-label">⚠️ 리스크</span><p class="stock-section-text">가전·TV 등 전통 사업 부문의 글로벌 수요 둔화와 환율 변동성이 실적 변수로 작용할 수 있다.</p></div><div class="stock-section"><span class="stock-section-label">📢 채널별 언급 내용</span><ul class="reasons-list"><li><span style="color:#ffa94d;font-weight:600;">TomatoTV</span> <a href="https://www.youtube.com/watch?v=WyZazZH-bKE" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">LG전자 2분기 연속 영업이익 1조 원 돌파, 깜짝 실적 달성.</a></li><li><span style="color:#ffa94d;font-weight:600;">TomatoTV</span> <a href="https://www.youtube.com/watch?v=yG1mvmovmAc" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">삼성전자 역대급 실적 발표 이후 대응 전략 분석에서 LG전자 언급.</a></li><li><span style="color:#cc5de8;font-weight:600;">웅달 책방</span> <a href="https://www.youtube.com/watch?v=_2vh6vL0LlE" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">로봇주 특집에서 LG전자와 현대차의 협업 가능성과 로봇 사업 전망 분석.</a></li></ul></div>
+  </div>
+</div>
+<div class="stock-card">
+  <div class="stock-card-header">
+    <div class="stock-rank">#8</div>
+    <div class="stock-name-block">
+      <a href="https://finance.naver.com/item/main.naver?code=004020" target="_blank" rel="noopener"
+         class="stock-name">현대제철</a>
+      <span class="signal-badge signal-positive"
+            style="border-color:#51cf66;color:#51cf66;">긍정</span>
+    </div>
+    <div class="overlap-badge" title="비뉴스 채널 중복 언급 수">🔥 2개</div>
+  </div>
+  <div class="stock-card-body">
+    <div class="source-tags"><span class="source-tag" style="background:#3a2d1a;color:#ffa94d;">경제방송 1</span><span class="source-tag" style="background:#1a3a2d;color:#51cf66;">애널리스트 1</span></div>
+    <div class="price-row"><span class="price-value">27,750원</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.3rem;">(전일종가)</span><span style="font-size:.82rem;color:#adb5bd;margin-left:.35rem;">━ +0.00%</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.2rem;">(전전일 대비)</span><a href="https://finance.naver.com/item/main.naver?code=004020" target="_blank" rel="noopener" class="chart-btn">🔗 Naver 차트</a></div>
+    <div class="stock-section"><span class="stock-section-label">📋 종목 요약</span><p class="stock-section-text">하나증권은 2분기 철강 판매 회복과 원가 절감으로 영업이익이 전분기 대비 큰 폭 개선될 것으로 전망했다. 현대차그룹 내 섹터 테마 흐름과 연계되며 이데일리TV 경제방송에서도 탑픽 후보로 언급됐다. 조금씩 회복 중이라는 애널리스트 평가가 긍정적 신호를 제공한다.</p></div><div class="stock-section"><span class="stock-section-label">🚀 상승 촉매</span><p class="stock-section-text">철강 판매 회복 추세와 원가 절감 효과가 2분기 영업이익 개선의 핵심 요인으로 작용하고 있다. 현대차그룹의 전동화 투자 확대에 따른 고부가 강재 수요 증가 가능성이 중장기 성장 동력이다.</p></div><div class="stock-section"><span class="stock-section-label">⚠️ 리스크</span><p class="stock-section-text">글로벌 철강 공급 과잉과 중국발 저가 수출 경쟁이 지속적인 업황 리스크로 남아 있다.</p></div><div class="stock-section"><span class="stock-section-label">📢 채널별 언급 내용</span><ul class="reasons-list"><li><span style="color:#51cf66;font-weight:600;">하나증권</span> <a href="https://finance.naver.com/research/company_read.naver?nid=93906&page=3" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">현대제철 2Q26 철강 판매 회복과 원가 절감으로 영업이익이 전분기 대비 큰 폭 개선될 전망.</a></li><li><span style="color:#ffa94d;font-weight:600;">이데일리TV</span> <a href="https://www.youtube.com/watch?v=aJvPypGensY" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">현대차그룹 탑픽 분석에서 현대제철 언급, 섹터 내 투자 전략 논의.</a></li></ul></div>
+  </div>
+</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">💎 오늘의 픽</div>
+    
+<div class="hidden-pick-card">
+  <div class="hp-card-header">
+    <div class="hp-badges"><span class="hp-source-badge" style="background:#74c0fc22;color:#74c0fc;border:1px solid #74c0fc55;">📡 경제방송</span><span class="hp-score-badge">Pick #1</span></div>
+    <a href="https://finance.naver.com/item/main.naver?code=006400" target="_blank" rel="noopener"
+       class="hp-stock-name">삼성SDI</a>
+    <span class="star-rating"><span class="star filled">★</span><span class="star empty">☆☆☆☆</span></span>
+  </div>
+  <div class="hp-card-body">
+    <div class="price-row"><span class="price-value">445,000원</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.3rem;">(전일종가)</span><span style="font-size:.82rem;color:#adb5bd;margin-left:.35rem;">━ +0.00%</span><span style="font-size:.7rem;color:#adb5bd;margin-left:.2rem;">(전전일 대비)</span><a href="https://finance.naver.com/item/main.naver?code=006400" target="_blank" rel="noopener" class="chart-btn">🔗 Naver 차트</a></div>
+    <div class="stock-section"><span class="stock-section-label">📋 종목 요약</span><p class="stock-section-text">이데일리TV 경제방송에서 적자탈출 신호가 나왔다는 분석이 제시되며 시장의 관심을 받고 있다. TomatoTV에서는 에코프로비엠 초과 청약 흐름과 연계하여 삼성SDI·포스코퓨처엠 등 2차전지 섹터의 반등 가능성이 언급됐다. 뚜렷한 매수 의견의 애널리스트 리포트는 수집되지 않아 중립 신호를 유지한다.</p></div><div class="stock-section"><span class="stock-section-label">🚀 상승 촉매</span><p class="stock-section-text">2차전지 섹터 순환매 유입과 에코프로비엠 초과 청약에 따른 섹터 전반의 관심 고조가 긍정적 모멘텀을 제공한다. ESS 수요 확대와 전기차 시장 회복 시 실적 개선 여력이 존재한다.</p></div><div class="stock-section"><span class="stock-section-label">⚠️ 리스크</span><p class="stock-section-text">전기차 수요 둔화 및 배터리 가격 하락 지속이 실적 회복 속도를 제약할 수 있다.</p></div>
+    <ul class="reasons-list"><li><span class="reason-source" style="background:#3a2d1a;color:#ffa94d;">이데일리TV</span> <a href="https://www.youtube.com/watch?v=9zonA__pdsQ" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">삼성SDI 적자탈출 신호 출현 분석, 반도체·2차전지 투자 전략 방송에서 주요 언급.</a></li><li><span class="reason-source" style="background:#3a2d1a;color:#ffa94d;">TomatoTV</span> <a href="https://www.youtube.com/watch?v=XgTUvkoKQw0" target="_blank" rel="noopener" style="color:#adb5bd;text-decoration:none;">에코프로비엠 초과 청약 이슈와 함께 삼성SDI·포스코퓨처엠의 2차전지 섹터 반등 가능성 제시.</a></li></ul>
+  </div>
+</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">📋 오늘의 증권사 리포트</div>
+    <div class="analyst-category-title" style="border-left-color:#ff922b;color:#ff922b;">🔥 복수 증권사 동시 언급</div><div class="analyst-card" style="border-left-color:#ff922b;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#ff922b;">GS피앤엘</span><span class="analyst-broker" style="background:#ff922b1a;color:#ff922b;">🏦 키움증권 / IBK투자증권</span><span class="analyst-cat-badge" style="background:#ff922b22;color:#ff922b;border:1px solid #ff922b55;">🔥 동시언급</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.08</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93967&page=1" target="_blank" rel="noopener" class="analyst-title-link">예상보다 빠른 웨스틴 회복, 컨센 상회 전망</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 웨스틴 OCC 80% 달성과 ADR 상승으로 2분기 실적이 컨센서스를 상회할 전망이다.</p></div><div class="analyst-card" style="border-left-color:#ff922b;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#ff922b;">LG에너지솔루션</span><span class="analyst-broker" style="background:#ff922b1a;color:#ff922b;">🏦 신한투자증권 / IBK투자증권</span><span class="analyst-cat-badge" style="background:#ff922b22;color:#ff922b;border:1px solid #ff922b55;">🔥 동시언급</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.08</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93963&page=1" target="_blank" rel="noopener" class="analyst-title-link">LG에너지솔루션 2Q26 잠정실적 발표</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 LG에너지솔루션 2Q26 실적은 AMPC 2,410억원에도 불구하고 영업이익이 시장 기대치를 하회했다.</p></div><div class="analyst-card" style="border-left-color:#ff922b;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#ff922b;">삼성전자</span><span class="analyst-broker" style="background:#ff922b1a;color:#ff922b;">🏦 IBK투자증권 / 키움증권 / 미래에셋증권 / 한화투자증권 / 유진투자증권</span><span class="analyst-cat-badge" style="background:#ff922b22;color:#ff922b;border:1px solid #ff922b55;">🔥 동시언급</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.08</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93962&page=1" target="_blank" rel="noopener" class="analyst-title-link">외풍을 극복하고도 남을 실적</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 26년 2분기 DS부문 영업이익이 전분기 대비 56.2% 증가한 89.4조원으로 예상된다.</p></div><div class="analyst-card" style="border-left-color:#ff922b;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#ff922b;">KT</span><span class="analyst-broker" style="background:#ff922b1a;color:#ff922b;">🏦 SK증권 / 신한투자증권</span><span class="analyst-cat-badge" style="background:#ff922b22;color:#ff922b;border:1px solid #ff922b55;">🔥 동시언급</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.08</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93960&page=1" target="_blank" rel="noopener" class="analyst-title-link">안정적 대안으로의 존재감</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 KT 2Q26 영업이익은 5,622억원으로 감소하나, 2H26 회복이 전망된다.</p></div><div class="analyst-card" style="border-left-color:#ff922b;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#ff922b;">현대차</span><span class="analyst-broker" style="background:#ff922b1a;color:#ff922b;">🏦 키움증권 / 한화투자증권</span><span class="analyst-cat-badge" style="background:#ff922b22;color:#ff922b;border:1px solid #ff922b55;">🔥 동시언급</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.08</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93958&page=1" target="_blank" rel="noopener" class="analyst-title-link">내러티브보다는 펀더멘털 회복 가능성에 주목</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 환율 악화와 글로벌 판매 감소로 2Q26 실적이 컨센서스를 하회할 전망이나 펀더멘털 회복 가능성에 주목해야 한다.</p></div><div class="analyst-card" style="border-left-color:#ff922b;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#ff922b;">POSCO홀딩스</span><span class="analyst-broker" style="background:#ff922b1a;color:#ff922b;">🏦 한화투자증권 / 하나증권</span><span class="analyst-cat-badge" style="background:#ff922b22;color:#ff922b;border:1px solid #ff922b55;">🔥 동시언급</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.07</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93947&page=1" target="_blank" rel="noopener" class="analyst-title-link">2Q26 Preview: 실적 부담은 반영, 회복 경로..</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 POSCO홀딩스 2Q26 영업이익은 전분기 대비 약 9% 회복이 예상된다.</p></div><div class="analyst-card" style="border-left-color:#ff922b;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#ff922b;">삼성에스디에스</span><span class="analyst-broker" style="background:#ff922b1a;color:#ff922b;">🏦 한화투자증권 / 하나증권 / iM증권</span><span class="analyst-cat-badge" style="background:#ff922b22;color:#ff922b;border:1px solid #ff922b55;">🔥 동시언급</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.07</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93946&page=1" target="_blank" rel="noopener" class="analyst-title-link">컨센서스 상회 추정</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 삼성SDS의 2Q26 실적은 매출과 영업이익이 컨센서스를 각각 6%, 9% 상회할 것으로 추정된다.</p></div><div class="analyst-card" style="border-left-color:#ff922b;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#ff922b;">LG이노텍</span><span class="analyst-broker" style="background:#ff922b1a;color:#ff922b;">🏦 DS투자증권 / iM증권</span><span class="analyst-cat-badge" style="background:#ff922b22;color:#ff922b;border:1px solid #ff922b55;">🔥 동시언급</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.07</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93945&page=1" target="_blank" rel="noopener" class="analyst-title-link">과도한 우려는 매수 기회</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 LG이노텍의 2Q26F 영업이익은 1,912억원으로 전년 대비 큰 폭 회복이 예상된다.</p></div><div class="analyst-card" style="border-left-color:#ff922b;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#ff922b;">코스맥스</span><span class="analyst-broker" style="background:#ff922b1a;color:#ff922b;">🏦 교보증권 / 한화투자증권 / 하나증권 / 유안타증권</span><span class="analyst-cat-badge" style="background:#ff922b22;color:#ff922b;border:1px solid #ff922b55;">🔥 동시언급</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.07</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93944&page=1" target="_blank" rel="noopener" class="analyst-title-link">해외 Good + 좋아질 일만 남은 한국</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 코스맥스 2Q25 매출액 7.3천억(YoY 18%), 영업이익 682억(YoY 12%) 예상되며 해외 전 법인 고성장 지속.</p></div><div class="analyst-card" style="border-left-color:#ff922b;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#ff922b;">한국콜마</span><span class="analyst-broker" style="background:#ff922b1a;color:#ff922b;">🏦 하나증권 / 유안타증권</span><span class="analyst-cat-badge" style="background:#ff922b22;color:#ff922b;border:1px solid #ff922b55;">🔥 동시언급</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.07</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93941&page=1" target="_blank" rel="noopener" class="analyst-title-link">계속 올라가는 실적 전망</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 2분기 매출 8,315억원, 영업이익 944억원으로 YoY 28% 성장이 전망된다.</p></div><div class="analyst-category-title" style="border-left-color:#51cf66;color:#51cf66;">🆕 신규 커버리지 개시</div><div class="analyst-card" style="border-left-color:#51cf66;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#51cf66;">SK스퀘어</span><span class="analyst-broker" style="background:#51cf661a;color:#51cf66;">🏦 유안타증권</span><span class="analyst-cat-badge" style="background:#51cf6622;color:#51cf66;border:1px solid #51cf6655;">🆕 신규 커버리지</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.07</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93928&page=2" target="_blank" rel="noopener" class="analyst-title-link">[NDR 후기] 명확한 방향성 확인</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 SK스퀘어에 대해 BUY 의견과 목표주가 2,100,000원을 유지한다.</p></div><div class="analyst-card" style="border-left-color:#51cf66;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#51cf66;">도우인시스</span><span class="analyst-broker" style="background:#51cf661a;color:#51cf66;">🏦 SK증권</span><span class="analyst-cat-badge" style="background:#51cf6622;color:#51cf66;border:1px solid #51cf6655;">🆕 신규 커버리지</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.07</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93920&page=2" target="_blank" rel="noopener" class="analyst-title-link">글로벌 UTG 선도 공급사, 관건은 신규 매출처</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 도우인시스는 UTG 매출 97%를 차지하는 글로벌 UTG 선도 공급사로, 신규 매출처 확보가 관건이다.</p></div><div class="analyst-card" style="border-left-color:#51cf66;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#51cf66;">태웅</span><span class="analyst-broker" style="background:#51cf661a;color:#51cf66;">🏦 신한투자증권</span><span class="analyst-cat-badge" style="background:#51cf6622;color:#51cf66;border:1px solid #51cf6655;">🆕 신규 커버리지</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.06</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93886&page=3" target="_blank" rel="noopener" class="analyst-title-link">NDR 후기: 주기기 퍼즐의 첫 조각</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 태웅은 SMR 주기기 공급사로 확정되며 SMR, CASK, Oil &amp; Gas 중심의 수요 확대로 밸류에이션 매력이 부각된다.</p></div><div class="analyst-category-title" style="border-left-color:#74c0fc;color:#74c0fc;">📌 단독 언급</div><div class="analyst-card" style="border-left-color:#74c0fc;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#74c0fc;">에스티팜</span><span class="analyst-broker" style="background:#74c0fc1a;color:#74c0fc;">🏦 IBK투자증권</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.08</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93966&page=1" target="_blank" rel="noopener" class="analyst-title-link">2분기에도 이어지는 실적 모멘텀</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 에스티팜의 2026년 2분기 매출 1,079억 원(+58.1% YoY), 영업이익 236억 원(+82.7% YoY)으로 실적 모멘텀이 지속된다.</p></div><div class="analyst-card" style="border-left-color:#74c0fc;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#74c0fc;">신세계</span><span class="analyst-broker" style="background:#74c0fc1a;color:#74c0fc;">🏦 신한투자증권</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.08</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93965&page=1" target="_blank" rel="noopener" class="analyst-title-link">싸워, 높아진 눈높이와 싸워</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 주주환원 확대 정책에도 불구하고 자산가치 대비 저평가와 면세 사업 불확실성으로 투자매력 탐색이 필요하다.</p></div><div class="analyst-card" style="border-left-color:#74c0fc;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#74c0fc;">현대백화점</span><span class="analyst-broker" style="background:#74c0fc1a;color:#74c0fc;">🏦 신한투자증권</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.08</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93964&page=1" target="_blank" rel="noopener" class="analyst-title-link">주가는 이유없이 오르지 않는다</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 주주환원 정책 강화와 자산가치 상승으로 3Q25부터 본격적인 변화가 기대된다.</p></div><div class="analyst-card" style="border-left-color:#74c0fc;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#74c0fc;">GS건설</span><span class="analyst-broker" style="background:#74c0fc1a;color:#74c0fc;">🏦 IBK투자증권</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.08</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93961&page=1" target="_blank" rel="noopener" class="analyst-title-link">Top-pick으로 제시</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 GS건설은 2Q26 매출액 2.8조 원, 영업이익 1,140억 원이 예상되며 현재 주가 약 8,000원대는 저평가 매력이 있다.</p></div><div class="analyst-card" style="border-left-color:#74c0fc;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#74c0fc;">이상네트웍스</span><span class="analyst-broker" style="background:#74c0fc1a;color:#74c0fc;">🏦 한국IR협의회</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.08</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93956&page=1" target="_blank" rel="noopener" class="analyst-title-link">전시사업 수직계열화를 기반으로 실적 성장을..</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 전시사업 수직계열화를 기반으로 해외 전시회 확대 및 실적 성장을 추진한다.</p></div><div class="analyst-card" style="border-left-color:#74c0fc;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#74c0fc;">싸이맥스</span><span class="analyst-broker" style="background:#74c0fc1a;color:#74c0fc;">🏦 한국IR협의회</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.08</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93955&page=1" target="_blank" rel="noopener" class="analyst-title-link">전공정 재개, 후공정은 지속</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 2026년 삼성전자 P4·SK하이닉스 M15X 투자 재개로 실적 회복이 기대되며, 매출 2,321억원(+41.1% YoY)이 전망된다.</p></div><div class="analyst-card" style="border-left-color:#74c0fc;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#74c0fc;">이마트</span><span class="analyst-broker" style="background:#74c0fc1a;color:#74c0fc;">🏦 한화투자증권</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.07</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93952&page=1" target="_blank" rel="noopener" class="analyst-title-link">2Q26 Preview : 마지막 고비가 될 것</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 2Q26 이마트 영업이익은 198억원(-8% YoY)으로, SCK컴퍼니 부진이 실적 악화의 주요 원인이다.</p></div><div class="analyst-card" style="border-left-color:#74c0fc;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#74c0fc;">호텔신라</span><span class="analyst-broker" style="background:#74c0fc1a;color:#74c0fc;">🏦 한화투자증권</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.07</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93951&page=1" target="_blank" rel="noopener" class="analyst-title-link">2Q26 Preview : 면세점의 외형성장이 중요한 ..</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 2Q26 영업이익은 586억원(+573% YoY)으로 컨센서스를 상회할 전망이다.</p></div><div class="analyst-card" style="border-left-color:#74c0fc;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#74c0fc;">HD현대일렉트릭</span><span class="analyst-broker" style="background:#74c0fc1a;color:#74c0fc;">🏦 신한투자증권</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.07</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93949&page=1" target="_blank" rel="noopener" class="analyst-title-link">청주 배전공장 투어 후기: 초고압에서 배전까..</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 글로벌 배전기기 시장이 2024년 185억달러에서 2033년 312억달러로 성장이 전망된다.</p></div><div class="analyst-card" style="border-left-color:#74c0fc;"><div class="analyst-card-meta" style="display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;"><span class="analyst-stock" style="color:#74c0fc;">카카오</span><span class="analyst-broker" style="background:#74c0fc1a;color:#74c0fc;">🏦 한화투자증권</span><span style="font-size:.72rem;color:#868e96;margin-left:auto;">📅 26.07.07</span></div><div class="analyst-card-title"><a href="https://finance.naver.com/research/company_read.naver?nid=93948&page=1" target="_blank" rel="noopener" class="analyst-title-link">하반기 강력한 트리거 필요</a></div><p class="analyst-summary" style="color:#adb5bd;font-size:.88rem;margin-top:.4rem;font-style:italic;">💬 2Q26 카카오는 매출 2.07조 원, 영업이익 2,237억 원으로 시장 기대에 부합할 전망이다.</p></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">🤖 AI 투자 전략</div>
+    <div class="strat-section"><div class="strat-title">🎯 핵심 시나리오</div><div class="strat-body"><p class="strat-text">삼성전자의 2분기 영업이익 89.4조 원이라는 어닝 서프라이즈가 반도체 슈퍼사이클의 지속을 확인했으나, 셀 온 뉴스 효과로 단기 주가 조정이 발생했다. 2분기 어닝 시즌이 본격화되면서 실적이 검증된 종목 중심의 순환매 흐름이 강화될 것으로 예상되며, 반도체 대형주의 저점 확인 이후 재매수 타이밍이 핵심 전략 포인트가 될 것이다.</p></div></div><div class="strat-section"><div class="strat-title">🔄 섹터 로테이션</div><div class="strat-body"><p class="strat-text">반도체 대형주(삼성전자·SK하이닉스)에서 차익 실현 매물이 출회된 자금이 K-뷰티(에이피알·코스맥스 등), 바이오(셀트리온), 금융(하나금융지주), 현대차그룹(로봇 모멘텀) 등으로 순환되는 흐름이 관찰된다. 실적이 확인된 섹터로의 로테이션이 단기적으로 지속될 가능성이 높다.</p></div></div><div class="strat-section"><div class="strat-title">📌 오늘의 주목 포인트</div><div class="strat-body"><div class="strat-item">• 삼성전자·SK하이닉스의 셀 온 매물 소화 여부 및 외국인 순매수 전환 시점 확인</div><div class="strat-item">• SK하이닉스 나스닥 ADR 상장 관련 밸류에이션 재평가 진행 상황</div><div class="strat-item">• 현대차 보스턴 다이내믹스 상장 주주 동의 절차 및 로봇 섹터 추가 모멘텀 여부</div><div class="strat-item">• 미국 USTR 대한국 강제노동·과잉생산 관세 부과 확정 여부와 수출 기업 실적 영향</div></div></div><div class="strat-section"><div class="strat-title">⚠️ 리스크 시나리오</div><div class="strat-body"><div class="strat-item">• [보통] 반도체 피크아웃 공포 심화 → 삼성전자·SK하이닉스의 하반기 이익 지속 가능성 지표(HBM 수주 동향, 파운드리 가동률)를 모니터링하며 비중 조절, 실적 기반 K-뷰티·금융주로 분산 대응</div><div class="strat-item">• [보통] 미국 대한국 추가 관세 현실화 → 수출 의존도 높은 자동차·전자 섹터 익스포저 축소, 내수 방어주(금융·통신) 및 경상수지 흑자 수혜 업종으로 비중 이동</div><div class="strat-item">• [낮음] 2차전지 섹터 본격 반등 → 삼성SDI 적자탈출 신호 및 에코프로비엠 청약 흥행을 확인 후 소규모 선취매 접근, 실적 확인 전까지 비중 제한</div></div></div><div class="strat-section"><div class="strat-title">📊 애널리스트 종합 시각</div><div class="strat-body"><p class="strat-text">반도체 섹터는 삼성전자·삼성전기에 대한 3개사 이상 동시 목표주가 상향이 나오며 슈퍼사이클 지속 컨센서스가 형성됐다. 셀트리온은 컨센서스 상회 실적으로 바이오 섹터 내 긍정 의견이 강화됐고, 하나금융지주는 은행 중 최고 실적 개선 기대로 금융 섹터 탑픽으로 부상했다. 반면 LG에너지솔루션은 기대치 미달 실적으로 2차전지 섹터의 신중론이 유지되고 있으며, 현대차는 실적 하방 우려에도 로봇 모멘텀으로 펀더멘털 회복 가능성에 주목하는 의견이 제시됐다.</p></div></div>
+  </div>
+
+  <div class="disclaimer">
+    <strong>📌 투자 유의사항</strong>
+    본 브리핑은 뉴스·유튜브·애널리스트 리포트 등 공개 데이터를 AI가 수집·분석한 참고 자료입니다.
+    투자 권유 또는 종목 추천이 아니며, 수익을 보장하지 않습니다.
+    최종 투자 판단과 그에 따른 책임은 전적으로 본인에게 있습니다.
+  </div>
+
+</div>
+
+<div class="modal-overlay" id="chartModal">
+  <div class="modal-box">
+    <button class="modal-close" onclick="closeChart()">✕</button>
+    <div class="modal-title" id="modal-chart-title"></div>
+    <img id="modal-chart-img" src="" alt="차트">
+  </div>
+</div>
+
+<script>
+const chartDataMap = {};
+
+function showChart(key, name) {
+  const src = chartDataMap[key];
+  if (!src) return;
+  document.getElementById('modal-chart-title').textContent = name + ' 주가 차트';
+  document.getElementById('modal-chart-img').src = src;
+  document.getElementById('chartModal').classList.add('active');
+}
+
+function closeChart() {
+  document.getElementById('chartModal').classList.remove('active');
+  document.getElementById('modal-chart-img').src = '';
+}
+
+document.getElementById('chartModal').addEventListener('click', function(e) {
+  if (e.target === this) closeChart();
+});
+</script>
+
+</body>
+</html>
