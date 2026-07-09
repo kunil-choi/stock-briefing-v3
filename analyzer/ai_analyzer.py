@@ -1076,7 +1076,27 @@ def analyze_and_generate_html(
 
     result = _try_parse_json(response_text)
     if not result:
-        print("[Claude] JSON 파싱 실패 → fallback")
+        # FIX-JSON-PARSE-3: 파싱 실패 시 fallback으로 바로 넘어가지 않고 한 번 더
+        # 호출한다. max_tokens 잘림은 api_client의 자동 예산 확대로 대부분 해소되지만,
+        # 그 외 JSON 형식 오류는 비결정적 샘플링 특성상 재시도로 종종 해결된다.
+        print(
+            f"[Claude] JSON 파싱 실패 (응답 길이: {len(response_text)}자) → 재시도\n"
+            f"  응답 시작 200자: {response_text[:200]!r}\n"
+            f"  응답 끝 200자: {response_text[-200:]!r}"
+        )
+        try:
+            response_text = call_claude_with_retry(prompt, api_key=ANTHROPIC_API_KEY)
+            result = _try_parse_json(response_text)
+        except Exception as e:
+            print(f"[Claude] 재시도 API 호출 실패: {e}")
+            result = None
+
+    if not result:
+        print(
+            f"[Claude] JSON 파싱 최종 실패 (응답 길이: {len(response_text)}자) → fallback\n"
+            f"  응답 시작 200자: {response_text[:200]!r}\n"
+            f"  응답 끝 200자: {response_text[-200:]!r}"
+        )
         return _fallback_html("AI 응답 파싱 실패. 잠시 후 다시 시도하세요.", briefing_date)
 
     # ── FIX-JSON-NAME-1: name 필드 정규화 (종목명 공백 버그 수정) ─────────
