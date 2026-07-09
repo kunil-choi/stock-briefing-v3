@@ -10,7 +10,12 @@ import anthropic
 
 # 기본 모델명 상수 (최신 claude-sonnet-4-6 사용)
 DEFAULT_MODEL = "claude-sonnet-4-6"
-DEFAULT_MAX_TOKENS = 16000
+# FIX-MAXTOK-1: 16000 → 24000. 관심종목 10개+주도주2개+히든픽 항목이 많은 날은
+# 응답이 16000 토큰을 넘겨 JSON이 중간에 잘리고(stop_reason=max_tokens) 파싱이
+# 항상 실패하는 문제가 있었다. max_tokens>16000은 SDK가 non-streaming 요청을
+# 거부할 수 있어 streaming으로 전환한다.
+DEFAULT_MAX_TOKENS = 24000
+MAX_ALLOWED_TOKENS = 64000  # 잘림 감지 시 재시도에서 늘릴 수 있는 상한
 DEFAULT_RETRIES = 3
 DEFAULT_DELAY = 5  # 초
 
@@ -49,22 +54,43 @@ def call_claude_with_retry(
     messages = [{"role": "user", "content": prompt}]
 
     last_exception = None
+    # FIX-MAXTOK-1: 잘림(stop_reason=max_tokens) 감지 시 다음 시도에서 예산을 늘린다
+    current_max_tokens = max_tokens
 
     for attempt in range(1, retries + 1):
         try:
-            print(f"  [Claude API] 호출 시도 {attempt}/{retries} (model={model}, max_tokens={max_tokens})")
+            print(f"  [Claude API] 호출 시도 {attempt}/{retries} (model={model}, max_tokens={current_max_tokens})")
 
             kwargs = {
                 "model": model,
-                "max_tokens": max_tokens,
+                "max_tokens": current_max_tokens,
                 "messages": messages,
             }
             if system_prompt:
                 kwargs["system"] = system_prompt
 
-            response = client.messages.create(**kwargs)
+            # FIX-MAXTOK-1: max_tokens가 커질 수 있으므로 non-streaming HTTP 타임아웃을
+            # 피하기 위해 streaming으로 호출하고 get_final_message()로 전체 응답을 받는다.
+            with client.messages.stream(**kwargs) as stream:
+                response = stream.get_final_message()
             text = response.content[0].text
-            print(f"  [Claude API] 호출 성공 (응답 길이: {len(text)}자)")
+
+            if response.stop_reason == "max_tokens":
+                print(
+                    f"  [Claude API] 응답이 max_tokens({current_max_tokens}) 한도에서 잘림 "
+                    f"(응답 길이: {len(text)}자)"
+                )
+                if current_max_tokens < MAX_ALLOWED_TOKENS and attempt < retries:
+                    current_max_tokens = min(current_max_tokens * 2, MAX_ALLOWED_TOKENS)
+                    print(f"  [Claude API] max_tokens를 {current_max_tokens}로 늘려 재시도")
+                    last_exception = RuntimeError(
+                        f"응답이 max_tokens 한도에서 잘림 (attempt {attempt})"
+                    )
+                    continue
+                # 더 늘릴 수 없으면 잘린 텍스트라도 반환 — 호출부에서 파싱 실패로 처리
+                print("  [Claude API] max_tokens 상한 도달, 잘린 응답을 그대로 반환")
+
+            print(f"  [Claude API] 호출 성공 (응답 길이: {len(text)}자, stop_reason={response.stop_reason})")
             return text
 
         except anthropic.RateLimitError as e:
