@@ -484,22 +484,29 @@ async function loadChannels() {
         <ul class="sample-list">
           ${(ch.sample_videos||[]).map(renderSampleVideo).join("")}
         </ul>
-        <div class="btn-row" style="flex-wrap:wrap;">
+        <div class="btn-row" style="flex-wrap:wrap;align-items:center;">
           <select class="cat-select" id="cat-${encodeURIComponent(ch.channel_name)}">
             <option value="youtuber">유튜버</option>
             <option value="broadcast">경제방송</option>
             <option value="securities">증권사</option>
           </select>
-          <input class="channel-id-input" id="chid-${encodeURIComponent(ch.channel_name)}"
-            placeholder="채널 ID (UCxxxxx)" value="${ch.channel_id||''}">
+          ${ch.channel_id ? `
+            <span class="badge badge-green" title="${ch.channel_id}">✓ 채널 ID 자동 확인됨</span>
+            <input type="hidden" class="channel-id-input" id="chid-${encodeURIComponent(ch.channel_name)}"
+              value="${ch.channel_id}">
+          ` : `
+            <input class="channel-id-input" id="chid-${encodeURIComponent(ch.channel_name)}"
+              placeholder="채널 ID 자동확인 실패 — 직접 입력 (UCxxxxx)" value="">
+          `}
           <button class="btn btn-approve btn-sm"
             onclick="approveChannel('${ch.channel_name}')">✅ 승인</button>
           <button class="btn btn-reject btn-sm"
             onclick="rejectChannel('${ch.channel_name}')">❌ 거절</button>
         </div>
-        <div style="font-size:.74rem;color:var(--muted);margin-top:.4rem;">
-          💡 채널 ID는 YouTube 채널 페이지 URL에서 확인 (UC로 시작)
-        </div>
+        ${!ch.channel_id ? `
+          <div style="font-size:.74rem;color:var(--muted);margin-top:.4rem;">
+            💡 이 채널은 자동으로 ID를 찾지 못했습니다 — YouTube 채널 페이지 URL에서 확인해 직접 입력하세요 (UC로 시작)
+          </div>` : ""}
       </div>
     </div>`).join("");
 }
@@ -508,7 +515,7 @@ async function approveChannel(chName) {
   const key     = encodeURIComponent(chName);
   const cat     = document.getElementById(`cat-${key}`)?.value || "youtuber";
   const chId    = document.getElementById(`chid-${key}`)?.value?.trim() || "";
-  if (!chId) { showToast("채널 ID를 입력하세요", "error"); return; }
+  if (!chId) { showToast("채널 ID를 확인할 수 없습니다 — 직접 입력해주세요", "error"); return; }
   try {
     // channels.json 업데이트
     const cj = await ghGet("channels.json");

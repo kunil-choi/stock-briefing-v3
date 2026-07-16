@@ -127,15 +127,24 @@ def collect_pending_channels(
     """
     수집된 영상의 채널 중 미등록 채널을 후보로 저장
     Gemini 심층분석에서 전문가가 출연한 것으로 확인된 채널 우선
+
+    ★ channel_id는 관리자가 수동으로 찾아 입력할 필요 없이 자동으로 채운다.
+    youtube_collector.py가 이미 각 영상 항목에 channel_id(YouTube search/
+    playlist 응답의 snippet.channelId)를 담아 보내주므로, 여기서는 그 값을
+    그대로 받아쓰기만 하면 된다(과거엔 이 필드를 읽지 않고 항상 빈 문자열로
+    저장해 관리자가 매번 채널 페이지에서 직접 복사해야 했다).
     """
-    existing  = {item["channel_id"]: item for item in _load_json(PENDING_CHANNELS)}
+    # 예전에는 channel_id로 키를 만들면서 아래 루프는 channel_name으로 조회해
+    # 항상 어긋나(channel_id가 비어있는 경우가 대부분) 같은 채널이 실행마다
+    # 중복 추가되는 버그가 있었다 — 이제 일관되게 channel_name으로 키를 잡는다.
+    existing  = {item["channel_name"]: item for item in _load_json(PENDING_CHANNELS)}
     today_str = datetime.now(KST).strftime("%Y-%m-%d")
     gemini_speakers_by_channel = gemini_speakers_by_channel or {}
 
     for item in youtube_items:
         # 유튜브 링크에서 채널 정보 추출
         channel_name = item.get("source_name", "").strip()
-        # video link에서 channel_id 직접 얻기 어려우므로
+        channel_id   = item.get("channel_id", "").strip()
         # _panelist 태그나 gemini_speaker가 있는 영상 채널을 우선 수집
         has_expert = bool(
             item.get("_detected_names") or
@@ -146,11 +155,9 @@ def collect_pending_channels(
         if not channel_name or not has_expert:
             continue
 
-        # 채널명 기반으로 이미 등록된 채널인지 확인
-        # (channel_id가 없을 수 있어 채널명으로 대체)
         ch_key = channel_name
 
-        if ch_key in known_channel_ids:
+        if ch_key in known_channel_ids or channel_id in known_channel_ids:
             continue
 
         expert_names = (
@@ -161,7 +168,7 @@ def collect_pending_channels(
         if ch_key not in existing:
             existing[ch_key] = {
                 "channel_name":    channel_name,
-                "channel_id":      "",  # 관리자가 확인 후 입력 또는 자동 조회
+                "channel_id":      channel_id,  # 자동으로 채워짐
                 "count":           0,
                 "first_seen":      today_str,
                 "last_seen":       today_str,
@@ -169,6 +176,10 @@ def collect_pending_channels(
                 "sample_videos":   [],
                 "status":          "pending",
             }
+        elif channel_id and not existing[ch_key].get("channel_id"):
+            # 예전에(이 수정 이전에) channel_id 없이 만들어진 후보를 이번에
+            # 알게 된 값으로 백필한다.
+            existing[ch_key]["channel_id"] = channel_id
 
         existing[ch_key]["count"]    += 1
         existing[ch_key]["last_seen"] = today_str
