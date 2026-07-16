@@ -102,9 +102,15 @@ def collect_pending_names(
             existing[name]["count"]     += 1
             existing[name]["last_seen"]  = today_str
             vid_title = item.get("title", "")[:60]
-            if vid_title and vid_title not in existing[name]["sample_videos"]:
+            vid_url   = item.get("link", "")
+            sample_titles = [
+                (v.get("title") if isinstance(v, dict) else v)
+                for v in existing[name]["sample_videos"]
+            ]
+            if vid_title and vid_title not in sample_titles:
                 existing[name]["sample_videos"] = (
-                    existing[name]["sample_videos"][-4:] + [vid_title]
+                    existing[name]["sample_videos"][-4:]
+                    + [{"title": vid_title, "url": vid_url}]
                 )
 
     pending = [v for v in existing.values() if v["status"] == "pending"]
@@ -172,9 +178,15 @@ def collect_pending_channels(
                 existing[ch_key]["expert_appeared"].append(name)
 
         vid_title = item.get("title", "")[:60]
-        if vid_title and vid_title not in existing[ch_key]["sample_videos"]:
+        vid_url   = item.get("link", "")
+        sample_titles = [
+            (v.get("title") if isinstance(v, dict) else v)
+            for v in existing[ch_key]["sample_videos"]
+        ]
+        if vid_title and vid_title not in sample_titles:
             existing[ch_key]["sample_videos"] = (
-                existing[ch_key]["sample_videos"][-4:] + [vid_title]
+                existing[ch_key]["sample_videos"][-4:]
+                + [{"title": vid_title, "url": vid_url}]
             )
 
     pending = [v for v in existing.values() if v["status"] == "pending"]

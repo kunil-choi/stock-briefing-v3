@@ -325,8 +325,13 @@ async function addChannel() {
 
 // ── GitHub API ────────────────────────────────────────────────────
 async function ghGet(path) {
+  // cache: "no-store"가 없으면 브라우저가 동일 URL의 GET 응답을 캐시해서,
+  // 방금 ghUpdate()로 sha가 바뀐 직후에도 이전 sha를 그대로 돌려줄 수 있다.
+  // 그 상태로 다음 승인/거절이 그 sha로 PUT을 보내면 GitHub가 409(sha 불일치)로
+  // 거부한다 — "거절을 한 번 하고 나면 그다음부터 오류가 난다"는 증상의 원인.
   const r = await fetch(`https://api.github.com/repos/${REPO}/contents/${path}?ref=${BRANCH}`, {
-    headers: { Authorization: `token ${GH_TOKEN}`, Accept: "application/vnd.github.v3+json" }
+    headers: { Authorization: `token ${GH_TOKEN}`, Accept: "application/vnd.github.v3+json" },
+    cache: "no-store"
   });
   if (!r.ok) throw new Error(`GET ${path} → ${r.status}`);
   return r.json();
@@ -346,6 +351,23 @@ async function readJson(path) {
     const d = await ghGet(path);
     return { data: JSON.parse(decodeURIComponent(escape(atob(d.content)))), sha: d.sha };
   } catch(e) { return { data: [], sha: null }; }
+}
+
+// ── 출연 영상 목록 렌더링 (제목 클릭 → 새 창으로 영상 열기) ──────────────
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+function renderSampleVideo(v) {
+  // 신규 수집분: {title, url} 객체. 이 수정 이전에 이미 쌓인 후보는 제목
+  // 문자열만 있고 URL이 없으므로, 그런 경우엔 유튜브 검색 결과로 대신 연결한다
+  // (정확한 영상은 못 짚어줘도 클릭하면 최소한 찾아볼 수는 있도록).
+  const title = typeof v === "string" ? v : (v?.title || "");
+  const url   = (typeof v === "object" && v?.url) ? v.url
+    : `https://www.youtube.com/results?search_query=${encodeURIComponent(title)}`;
+  return `<li>▸ <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"
+    style="color:inherit;text-decoration:underline;">${escapeHtml(title)}</a></li>`;
 }
 
 // ── 토스트 ────────────────────────────────────────────────────────
@@ -387,7 +409,7 @@ async function loadPanelists() {
       <div class="card-body">
         <div style="font-size:.8rem;color:var(--muted);margin-bottom:.5rem;">등장 영상:</div>
         <ul class="sample-list">
-          ${(p.sample_videos||[]).map(v=>`<li>▸ ${v}</li>`).join("")}
+          ${(p.sample_videos||[]).map(renderSampleVideo).join("")}
         </ul>
         <div class="btn-row">
           <button class="btn btn-approve btn-sm" onclick="approvePanelist('${p.name}')">✅ 승인</button>
@@ -460,7 +482,7 @@ async function loadChannels() {
             ${ch.expert_appeared.map(e=>`<span class="expert-tag">${e}</span>`).join("")}
           </div>` : ""}
         <ul class="sample-list">
-          ${(ch.sample_videos||[]).map(v=>`<li>▸ ${v}</li>`).join("")}
+          ${(ch.sample_videos||[]).map(renderSampleVideo).join("")}
         </ul>
         <div class="btn-row" style="flex-wrap:wrap;">
           <select class="cat-select" id="cat-${encodeURIComponent(ch.channel_name)}">
