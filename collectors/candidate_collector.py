@@ -57,25 +57,36 @@ def collect_pending_names(
     existing  = {item["name"]: item for item in _load_json(PENDING_NAMES)}
     today_str = datetime.now(KST).strftime("%Y-%m-%d")
 
-    # Gemini가 발견한 speaker 이름도 후보에 포함
-    gemini_speakers = set()
+    # Gemini가 발견한 speaker 이름을 영상 URL별로 모은다.
+    # ★ 버그 수정: 예전에는 이 이름들을 영상 구분 없이 하나의 전역 집합으로
+    # 합쳐서, 그날 처리하는 모든 영상의 candidates에 똑같이 끼워 넣고 있었다.
+    # 그 결과 어느 한 영상에서만 실제로 발언한 사람이 그날 수집된 수백 개
+    # 영상 전부의 "등장 영상" 후보로 잘못 집계됐다(예: "발견 360회"인데 실제
+    # 링크를 열어보면 전혀 다른 사람이 나오는 사고). gemini_mentions의
+    # video_url로 원래 영상을 정확히 짚어 그 영상의 candidates에만 추가한다.
+    gemini_speakers_by_url: dict = {}
     if gemini_mentions:
         for m in gemini_mentions:
-            sp = m.get("speaker", "").strip()
-            if sp:
-                # "염승환 미래에셋자산운용 이사" → "염승환" 추출
-                name_match = _KR_NAME_PATTERN.match(sp)
-                if name_match:
-                    gemini_speakers.add(name_match.group())
+            sp = (m.get("speaker") or "").strip()
+            video_url = m.get("video_url", "") or m.get("link", "")
+            if not sp or not video_url:
+                continue
+            # "염승환 미래에셋자산운용 이사" → "염승환" 추출
+            name_match = _KR_NAME_PATTERN.match(sp)
+            if name_match:
+                gemini_speakers_by_url.setdefault(video_url, set()).add(name_match.group())
 
     # 영상 제목/description에서 이름 후보 추출
     for item in youtube_items:
         title = item.get("title", "") or ""
         desc  = item.get("description", "") or ""
         detected = item.get("_detected_names", []) or []
+        item_url = item.get("link", "")
 
-        # _detected_names (Gemini 스캔 결과) 우선 활용
-        candidates = set(detected) | gemini_speakers
+        # _detected_names(이 영상 자체의 Gemini 스캔 결과)와, 이 영상 URL에
+        # 매칭되는 gemini_mentions의 speaker만 후보로 쓴다(다른 영상 발언자를
+        # 섞지 않는다).
+        candidates = set(detected) | gemini_speakers_by_url.get(item_url, set())
 
         # 제목에서 추가 추출 (대괄호 안 이름 패턴)
         bracket_names = re.findall(r"[（(]([가-힣]{2,4})[）)]", title + desc)
