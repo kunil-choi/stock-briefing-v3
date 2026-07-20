@@ -360,14 +360,25 @@ function escapeHtml(s) {
   }[c]));
 }
 function renderSampleVideo(v) {
-  // 신규 수집분: {title, url} 객체. 이 수정 이전에 이미 쌓인 후보는 제목
-  // 문자열만 있고 URL이 없으므로, 그런 경우엔 유튜브 검색 결과로 대신 연결한다
-  // (정확한 영상은 못 짚어줘도 클릭하면 최소한 찾아볼 수는 있도록).
+  // 신규 수집분: {title, url, channel_name, channel_id} 객체. 이 수정 이전에
+  // 이미 쌓인 후보는 제목 문자열만 있거나 channel_name이 없을 수 있으므로,
+  // 그런 경우엔 유튜브 검색 결과로 대신 연결한다(정확한 영상/채널은 못 짚어줘도
+  // 클릭하면 최소한 찾아볼 수는 있도록).
   const title = typeof v === "string" ? v : (v?.title || "");
   const url   = (typeof v === "object" && v?.url) ? v.url
     : `https://www.youtube.com/results?search_query=${encodeURIComponent(title)}`;
+  const channelName = (typeof v === "object" && v?.channel_name) ? v.channel_name : "";
+  const channelId   = (typeof v === "object" && v?.channel_id)   ? v.channel_id   : "";
+  let channelLink = "";
+  if (channelName) {
+    const channelUrl = channelId
+      ? `https://www.youtube.com/channel/${channelId}`
+      : `https://www.youtube.com/results?search_query=${encodeURIComponent(channelName)}`;
+    channelLink = ` <a href="${escapeHtml(channelUrl)}" target="_blank" rel="noopener noreferrer"
+      style="color:var(--muted);text-decoration:underline;font-size:.85em;">(${escapeHtml(channelName)})</a>`;
+  }
   return `<li>▸ <a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"
-    style="color:inherit;text-decoration:underline;">${escapeHtml(title)}</a></li>`;
+    style="color:inherit;text-decoration:underline;">${escapeHtml(title)}</a>${channelLink}</li>`;
 }
 
 // ── 토스트 ────────────────────────────────────────────────────────

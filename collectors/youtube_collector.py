@@ -464,6 +464,7 @@ def collect_section1_youtube(youtube, channels: dict) -> list:
                 all_items.append({
                     "source_type":   source_type,
                     "source_name":   channel_name,
+                    "channel_id":    channel_id,
                     "title":         title,
                     "summary":       summary,
                     "description":   description,
@@ -690,6 +691,7 @@ def collect_panelist_youtube(youtube) -> list:
         all_items.append({
             "source_type":    "유튜브",
             "source_name":    name,
+            "channel_id":     cid,
             "title":          c["title"],
             "summary":        summary,
             "description":    c["description"],
